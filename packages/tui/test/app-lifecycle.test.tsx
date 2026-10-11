@@ -1289,7 +1289,7 @@ test("configured app binding opens settings", async () => {
   setup.mockInput.pressKey("F6")
   const settings = await setup.waitForFrame((frame) => frame.includes("Settings"))
   expect(settings).toContain("Color mode")
-  expect(settings).toContain("Animations")
+  expect(settings).toContain("Permissions")
 })
 
 test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {

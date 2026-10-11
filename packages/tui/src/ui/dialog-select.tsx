@@ -12,6 +12,7 @@ import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useConfig } from "../config"
 import { moveSelection, reconcileSelection } from "./select-controller"
+import { useT } from "../util/i18n"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -107,6 +108,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const config = useConfig().data
+  const t = useT()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const renderer = useRenderer()
 
@@ -705,7 +707,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   r.focus()
                 }, 1)
               }}
-              placeholder={props.placeholder ?? "Search"}
+              placeholder={props.placeholder ?? t("Search")}
               placeholderColor={theme.text.muted}
             />
           </box>

@@ -62,6 +62,7 @@ import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
+import { RegistryPanel } from "./component/devtools-registry"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair } from "./component/dialog-pair"
 import { DialogThemeList } from "./component/dialog-theme-list"
@@ -751,7 +752,7 @@ function App() {
         title: "New session",
         suggested: route.data.type === "session",
         category: "Session",
-        slash: { name: "new" },
+        slash: { name: "new", aliases: ["clear"] },
         run: () => {
           const model = local.model.current()
           const agent = local.agent.current()
@@ -777,7 +778,6 @@ function App() {
         name: "session.clear",
         title: "Clear session",
         category: "Session",
-        slash: { name: "clear" },
         run: () => {
           const model = local.model.current()
           const agent = local.agent.current()
@@ -811,7 +811,7 @@ function App() {
         name: "open.menu",
         title: "Open session or project",
         category: "Session",
-        slash: { name: "open", aliases: ["projects", "project"] },
+        slash: { name: "open" },
         run: () => {
           if (dialog.key === DialogOpenKey) return
           dialog.replace(() => <DialogOpen sessions={openSessions()} onLoad={setOpenSessions} />, undefined, {
@@ -1055,7 +1055,7 @@ function App() {
       {
         name: "server.pair",
         title: "Pair device",
-        slash: { name: "pair", aliases: ["web"] },
+        slash: { name: "pair" },
         run: () => {
           dialog.replace(() => <DialogPair />)
         },
@@ -1150,6 +1150,7 @@ function App() {
       {
         name: "docs.open",
         title: "Open docs",
+        slash: { name: "docs" },
         run: () => {
           openUrl("https://opencode.ai/docs").catch(() => {})
           dialog.clear()
@@ -1157,9 +1158,57 @@ function App() {
         category: "System",
       },
       {
+        name: "app.language",
+        title: "Switch language",
+        slash: { name: "language", aliases: ["lang"] },
+        run: () => {
+          void config
+            .update((draft) => {
+              draft.language = config.data.language === "ru" ? "en" : "ru"
+            })
+            .catch(toast.error)
+          dialog.clear()
+        },
+        category: "System",
+      },
+      {
+        name: "app.layout",
+        title: "Switch panel layout",
+        slash: { name: "layout" },
+        run: () => {
+          const order = ["auto", "compact", "full"] as const
+          void config
+            .update((draft) => {
+              draft.layout = order[(order.indexOf(config.data.layout ?? "auto") + 1) % order.length]
+            })
+            .catch(toast.error)
+          dialog.clear()
+        },
+        category: "System",
+      },
+      {
+        name: "registry.open",
+        title: "Open tool registry",
+        slash: { name: "registry", aliases: ["tools"] },
+        run: () => {
+          dialog.replace(
+            () => (
+              <RegistryPanel
+                onClose={() => dialog.clear()}
+                onShell={(shell) => void client.api.config.update({ shell }).catch(toast.error)}
+              />
+            ),
+            undefined,
+            { size: "large" },
+          )
+          dialog.setCentered(true)
+        },
+        category: "System",
+      },
+      {
         name: "app.exit",
         title: "Exit the app",
-        slash: { name: "exit", aliases: ["quit", "q"] },
+        slash: { name: "exit", aliases: ["quit"] },
         run: () => exit(),
         category: "System",
       },

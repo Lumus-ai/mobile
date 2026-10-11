@@ -4,7 +4,7 @@ import { open } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { monitorEventLoopDelay } from "node:perf_hooks"
-import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show, type ParentProps } from "solid-js"
+import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show, type JSX, type ParentProps } from "solid-js"
 import { useClient } from "../context/client"
 import { useConfig } from "../config"
 import { useData } from "../context/data"
@@ -12,6 +12,10 @@ import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
 import { Keymap } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
+import { useClipboard } from "../context/clipboard"
+import { useTuiPaths } from "../context/runtime"
+import { DialogHelp } from "../ui/dialog-help"
+import { CommandPaletteDialog } from "./command-palette"
 import { DevTools } from "../devtools"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
@@ -46,6 +50,8 @@ export function DevToolsBar() {
   const themes = useThemes()
   const keymap = Keymap.use()
   const t = useT()
+  const clipboard = useClipboard()
+  const paths = useTuiPaths()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const { current: theme, mode, supports, setMode } = themes
@@ -149,6 +155,34 @@ export function DevToolsBar() {
       eventLoop.disable()
     })
   })
+
+  // Everything a bug report or a shell next to opencode usually asks for, one click away.
+  const copies = createMemo(() =>
+    [
+      { label: "Session ID", value: route.data.type === "session" ? route.data.sessionID : undefined },
+      { label: "Directory", value: location.current?.directory },
+      { label: "Server address", value: server()?.health.urls[0] },
+      { label: "Config file", value: config.path },
+      { label: "State directory", value: paths.state },
+    ].filter((item): item is { label: string; value: string } => Boolean(item.value)),
+  )
+  const copy = (label: string, value: string) =>
+    clipboard
+      .write(value)
+      .then(() => toast.show({ message: t("{name} copied", { name: t(label) }), variant: "success" }))
+      .catch(toast.error)
+  const openDialog = (view: () => JSX.Element) => {
+    close()
+    dialog.replace(view)
+  }
+  const reload = () => {
+    close()
+    toast.show({ variant: "info", message: t("Reloading configuration…"), duration: 30000 })
+    void client.api.location
+      .reload()
+      .then(() => toast.show({ variant: "success", message: t("Configuration reloaded") }))
+      .catch(toast.error)
+  }
 
   async function dump() {
     setDumping(true)
@@ -368,9 +402,9 @@ export function DevToolsBar() {
             </Action>
             <Show when={dumpPath()}>
               {(file) => (
-                <text fg={elevatedTheme.text.muted} wrapMode="word">
-                  {file()}
-                </text>
+                <Action onClick={() => void copy("Snapshot path", file())} hoverBackground>
+                  {t("Copy {file}", { file: file() })}
+                </Action>
               )}
             </Show>
             <Show when={dumpError()}>
@@ -380,6 +414,36 @@ export function DevToolsBar() {
                 </text>
               )}
             </Show>
+            <Action onClick={reload} hoverBackground>
+              {t("Reload configuration")}
+            </Action>
+            <Action onClick={() => openDialog(() => <CommandPaletteDialog />)} hoverBackground>
+              {t("Command palette")}
+            </Action>
+            <Action onClick={() => openDialog(() => <DialogHelp />)} hoverBackground>
+              {t("Keyboard shortcuts")}
+            </Action>
+            <Action
+              onClick={() => {
+                close()
+                renderer.console.toggle()
+              }}
+              hoverBackground
+            >
+              {t("Toggle log console")}
+            </Action>
+            <box marginTop={1}>
+              <text fg={elevatedTheme.text.base} attributes={TextAttributes.BOLD}>
+                {t("Copy")}
+              </text>
+              <For each={copies()}>
+                {(item) => (
+                  <Action onClick={() => void copy(item.label, item.value)} hoverBackground>
+                    {t(item.label)}
+                  </Action>
+                )}
+              </For>
+            </box>
             <box marginTop={1}>
               <text fg={elevatedTheme.text.base} attributes={TextAttributes.BOLD}>
                 {t("Render")}

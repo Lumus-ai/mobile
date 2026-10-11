@@ -50,7 +50,7 @@ export const entries: Entry[] = [
     description: "Count rows per distinct value of a column",
     category: "data",
     requires: ["mlr"],
-    templates: { bash: "mlr --icsv --opprint then count-distinct -f {column} {file}" },
+    templates: { bash: "mlr --icsv --opprint count-distinct -f {column} {file}" },
   },
   {
     id: "data.csv-stats",
