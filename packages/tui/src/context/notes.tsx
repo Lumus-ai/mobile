@@ -129,14 +129,14 @@ export const { use: useNotes, provider: NotesProvider } = createSimpleContext({
       return result.data
     }
 
-    // The chat of a note is its canvas: it names the note in its metadata, and the
-    // rules below deny everything the note tool itself may do. Session rules are
-    // merged after the agent's and the last matching rule wins, so the allow at the
-    // end reopens exactly the note and nothing else.
-    const scoped: PermissionRuleset = [
-      { action: "*", resource: "*", effect: "deny" },
-      { action: "note", resource: "*", effect: "allow" },
-    ]
+    // The chat of a note is its canvas: it names the note in its metadata. The rules
+    // that restrict it to the note live on the `notes` agent itself, so the session
+    // carries none: a session-level `deny *` is redundant here and costs the chat its
+    // ability to talk to a free model at all. The opencode.ai free tier answers 403
+    // "can only be used from within OpenCode" to every request from a session whose
+    // permissions contain a deny-all, whatever the User-Agent says, and the retry hook
+    // then ping-pongs the pair of free models forever.
+    const scoped: PermissionRuleset = []
 
     const scope = async (sessionID: string, note: NoteInfo) => {
       const current = data.session.get(sessionID)
