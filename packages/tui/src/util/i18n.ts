@@ -83,7 +83,7 @@ const ru: Record<string, string> = {
   "Install missing ({count})": "Установить недостающие ({count})",
   "All installed on": "Включить все установленные",
   "All off": "Выключить все",
-  "Tools {page}/{pages}": "Инструменты {page}/{pages}",
+  "from the AUR: yay -S powershell-bin": "из AUR: yay -S powershell-bin",
   'Nothing matches "{query}".': "Ничего не найдено по «{query}».",
   "No catalog tools on this platform.": "Для этой платформы в каталоге нет инструментов.",
   "The package databases are outdated, so installs fail. Update the system, then install again.":

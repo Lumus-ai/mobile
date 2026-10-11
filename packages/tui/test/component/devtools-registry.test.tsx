@@ -36,7 +36,7 @@ async function render(options: RegistryPanelOptions & { onShell?: (shell: string
     { width: 90, height: 44, kittyKeyboard: true },
   )
   app.renderer.start()
-  await app.waitForFrame((frame) => frame.includes("Registry") && frame.includes("Tools"))
+  await app.waitForFrame((frame) => frame.includes("Registry") && frame.includes("Search"))
   return app
 }
 
@@ -78,7 +78,7 @@ test("registry panel shows readiness, terminals and a paged tool list", async ()
     expect(frame).toContain("AI terminal")
     expect(frame).toContain("bash")
     expect(frame).toContain(`${status.categories[0].name} `)
-    expect(frame).toContain("Tools")
+    expect(frame).toContain("Search")
     // the hint block is opt-in: a fresh state file advertises nothing
     expect(rowValue(frame, "For the model")).toBe(`0/${status.tools.length}`)
     expect(status.tools.length).toBeGreaterThan(10)
@@ -219,7 +219,7 @@ test("pager moves to the second page of tools", async () => {
     const status = hubRegistryStatus({ probe })
     const secondPage = status.tools[12].tool
     await app.waitForFrame((frame) => !frame.includes(secondPage))
-    const { x, y } = cell(app, "Tools", "›")
+    const { x, y } = cell(app, "Search", "›")
     await app.mockMouse.click(x, y)
     await app.waitForFrame((frame) => frame.includes(secondPage))
     expect(app.captureCharFrame()).toContain("2/")

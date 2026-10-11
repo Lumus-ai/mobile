@@ -281,7 +281,7 @@ export function RegistryPanel(props: {
                 </Button>
               </Match>
               <Match when={true}>
-                <text fg={theme.text.muted}>{`${item.name}: ${item.manual ?? t("no installer here")}`}</text>
+                <text fg={theme.text.muted}>{`${item.name}: ${t(item.manual ?? "no installer here")}`}</text>
               </Match>
             </Switch>
           )}
@@ -302,9 +302,13 @@ export function RegistryPanel(props: {
       </text>
 
       <box flexDirection="row" gap={1}>
-        <text fg={theme.text.muted}>{t("Search")}</text>
+        <text fg={theme.text.muted} flexShrink={0}>
+          {t("Search")}
+        </text>
         <input
           flexGrow={1}
+          flexShrink={1}
+          minWidth={0}
           onInput={(value) => {
             setQuery(value)
             setPage(0)
@@ -323,10 +327,14 @@ export function RegistryPanel(props: {
             }, 1)
           }}
         />
-        <text fg={theme.text.muted}>{`${visible().length}/${status().tools.length}`}</text>
+        <text fg={theme.text.muted} flexShrink={0}>{`${visible().length}/${status().tools.length}`}</text>
+        <Button onClick={() => turn(-1)}>‹</Button>
+        <text fg={theme.text.muted} flexShrink={0}>{`${current() + 1}/${pages()}`}</text>
+        <Button onClick={() => turn(1)}>›</Button>
       </box>
 
-      <box flexDirection="row" gap={1}>
+      {/* Wraps whole buttons onto the next line instead of breaking their labels on narrow windows. */}
+      <box flexDirection="row" flexWrap="wrap" columnGap={1}>
         <Button
           variant="primary"
           disabled={busy() !== undefined || missing().length === 0}
@@ -358,10 +366,6 @@ export function RegistryPanel(props: {
         >
           {t("All off")}
         </Button>
-        <box flexGrow={1} />
-        <Button onClick={() => turn(-1)}>‹</Button>
-        <text fg={theme.text.muted}>{t("Tools {page}/{pages}", { page: current() + 1, pages: pages() })}</text>
-        <Button onClick={() => turn(1)}>›</Button>
       </box>
 
       <box>
@@ -507,6 +511,7 @@ export function Button(props: {
   const state = () => (props.disabled ? "disabled" : hovered() ? "hovered" : primary() ? "focused" : "base")
   return (
     <box
+      flexShrink={0}
       paddingLeft={primary() ? 1 : 0}
       paddingRight={primary() ? 1 : 0}
       backgroundColor={
@@ -528,7 +533,7 @@ export function Button(props: {
         if (!props.disabled) props.onClick()
       }}
     >
-      <text fg={theme.text.action.primary[state()]}>{primary() ? props.children : `[ ${props.children} ]`}</text>
+      <text fg={theme.text.action.primary[state()]} wrapMode="none">{primary() ? props.children : `[ ${props.children} ]`}</text>
     </box>
   )
 }
