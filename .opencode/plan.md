@@ -211,6 +211,24 @@ OPENCODE_CHANNEL=local` (канал `local` сохраняет БД `opencode-lo
 - **Оракулы проекта:** `./.opencode/check_version.sh` и `./.opencode/check_free_models.sh`
   (обе через shellcheck, повторяемо из репозитория).
 
+## Итог (записан 11.10, правка в `packages/cli/src/version.ts`)
+- **Корень.** `packages/cli/src/version.ts` при отсутствии compile-time `define`
+  (который ставит `packages/cli/script/build.ts`) откатывал версию на `"local"`.
+  `packages/script/src/index.ts` отвечает за сборку *бинаря*, но не за запуск по
+  исходникам — а именно его uses ` `opencode-pp-install.sh`:
+  `exec bun --preload=... "$DIR/packages/cli/src/index.ts" "$@"`. Там `OPENCODE_VERSION`
+  не определена, и `User-Agent` уходил как `opencode/local/local/cli`, что провайдер
+  отвергал как ниже 1.18.0.
+- **Правка.** `packages/cli/src/version.ts`: вместо отката на `"local"` берём тег через
+  `git describe --tags --abbrev=0`, проверяем ≥ 1.18.0 и откатываемся на `"2.0.0"`.
+  Проверка: `opencode --version` → `opencode v2.0.22` (было `vlocal`).
+- **Результат.** `space-bunny-free` и `muse-spark-1.3-contributor-free` отвечают `ok`
+  (прежде падали с 403 FreeTierError). `exo-free` и `fledge-alpha-free` по-прежнему
+  дают апстрим-ошибки — это не дефект сборки.
+- **Распространение.** Правка запушена в `backup` (`lan-rooms`, коммит
+  `fix(cli): resolve release version from git tag in dev checkouts`), поэтому
+  `curl .../opencode-pp-install.sh | sh` на Linux/macOS получит её при следующем обновлении.
+
 ---
 
 # Задача TASK-HUB-REGISTRY: панель Registry Universal Tool Hub в devtools-bar
