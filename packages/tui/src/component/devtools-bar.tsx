@@ -423,15 +423,6 @@ export function DevToolsBar() {
             <Action onClick={() => openDialog(() => <DialogHelp />)} hoverBackground>
               {t("Keyboard shortcuts")}
             </Action>
-            <Action
-              onClick={() => {
-                close()
-                renderer.console.toggle()
-              }}
-              hoverBackground
-            >
-              {t("Toggle log console")}
-            </Action>
             <box marginTop={1}>
               <text fg={elevatedTheme.text.base} attributes={TextAttributes.BOLD}>
                 {t("Copy")}

@@ -568,7 +568,6 @@ const ru: Record<string, string> = {
   "Configuration reloaded": "Конфиг перезагружен",
   "Command palette": "Палитра команд",
   "Keyboard shortcuts": "Горячие клавиши",
-  "Toggle log console": "Консоль логов",
   // Commands
   "Switch language": "Сменить язык",
   "Switch panel layout": "Сменить раскладку панелей",
