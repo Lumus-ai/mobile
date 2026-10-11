@@ -294,6 +294,8 @@ import type {
   RoomDodGetOutput,
   RoomDodReleaseInput,
   RoomDodReleaseOutput,
+  RoomFeedInput,
+  RoomFeedOutput,
   RoomCodeInput,
   RoomCodeOutput,
   RoomPublicOutput,
@@ -316,6 +318,10 @@ import type {
   RoomGuestDodGetOutput,
   RoomGuestDodClaimInput,
   RoomGuestDodClaimOutput,
+  RoomGuestDodSubmitInput,
+  RoomGuestDodSubmitOutput,
+  RoomGuestFeedInput,
+  RoomGuestFeedOutput,
   RoomGuestLeaveInput,
   RoomGuestLeaveOutput,
   RoomGuestSessionListInput,
@@ -2557,6 +2563,18 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      feed: (input: RoomFeedInput, requestOptions?: RequestOptions) =>
+        request<RoomFeedOutput>(
+          {
+            method: "GET",
+            path: `/api/room/${encodeURIComponent(input.roomID)}/feed`,
+            query: { after: input["after"], wait: input["wait"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
       code: (input: RoomCodeInput, requestOptions?: RequestOptions) =>
         request<RoomCodeOutput>(
           {
@@ -2717,7 +2735,26 @@ export function make(options: ClientOptions) {
               {
                 method: "POST",
                 path: `/api/room/${encodeURIComponent(input.roomID)}/guest/dod`,
-                body: { id: input["id"], take: input["take"], sessionID: input["sessionID"], paths: input["paths"] },
+                body: {
+                  id: input["id"],
+                  next: input["next"],
+                  take: input["take"],
+                  handover: input["handover"],
+                  sessionID: input["sessionID"],
+                  paths: input["paths"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          submit: (input: RoomGuestDodSubmitInput, requestOptions?: RequestOptions) =>
+            request<RoomGuestDodSubmitOutput>(
+              {
+                method: "POST",
+                path: `/api/room/${encodeURIComponent(input.roomID)}/guest/dod/submit`,
+                body: { id: input["id"], handover: input["handover"] },
                 successStatus: 200,
                 declaredStatuses: [400, 401, 403, 404],
                 empty: false,
@@ -2725,6 +2762,18 @@ export function make(options: ClientOptions) {
               requestOptions,
             ),
         },
+        feed: (input: RoomGuestFeedInput, requestOptions?: RequestOptions) =>
+          request<RoomGuestFeedOutput>(
+            {
+              method: "GET",
+              path: `/api/room/${encodeURIComponent(input.roomID)}/guest/feed`,
+              query: { after: input["after"], wait: input["wait"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
         leave: (input: RoomGuestLeaveInput, requestOptions?: RequestOptions) =>
           request<RoomGuestLeaveOutput>(
             {

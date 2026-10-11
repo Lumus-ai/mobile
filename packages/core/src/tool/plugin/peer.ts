@@ -18,25 +18,42 @@ const description = [
   "create starts a new session in a project room, optionally with a first task sent the same way;",
   "passport describes the other computer: its system, shells, installed tools, the project's branch and commit, and the plots (участки) teams hold there, so you know what it can check that this computer cannot;",
   "run executes one command on the other computer in the project, for example its tests on another operating system; the host approves each run, you need the cohost role, and the output comes back directly.",
-  "dod shows the host project's Definition of Done as the room's shared work queue: every item, its stage, state, checked steps, and who in the room took it;",
-  "take claims a free DoD item for you (pass item, and paths the work will change to hold them as a plot), so nobody else in the room starts it; then do it, yourself or through send to the AI there;",
-  "release gives an item you took back when you stop working on it.",
+  "dod shows the host project's Definition of Done as the room's shared work queue: every item, its stage, state, checked steps, who in the room took it, what it waits for and its check;",
+  "take claims a DoD item for you so nobody else in the room starts it: pass item, or omit it to get the first item that is free and whose dependencies are done; pass paths the work will change to hold them as a plot. The answer includes the item's handover note from whoever worked on it before. Then do it, yourself or through send to the AI there;",
+  "submit hands an item you hold to the host's check: the host runs the item's verification.command in its project, and exit code 0 makes it DONE with evidence while anything else makes it FAILED with the output; pass text as a handover of what you did;",
+  "release gives an item you took back when you stop working on it; pass text as a handover: what is done, the dead ends, the next step;",
+  "feed shows what happened in the room lately: joins, items taken, given back, expired, passed or failed, commands run. If the host frees your item or someone takes it over, you hear of it as a <room-event>.",
   "Respect plots and owners: do not ask the other AI to change files inside a plot another team holds, and do not work on a DoD item someone else took.",
   "Pass room as the room ID from list, and sessionID to pick a session other than the room's own.",
   "Write to the other AI as to a capable colleague: say what you need, what you already know, and what the answer should contain.",
 ].join("\n")
 
 export const Input = Schema.Struct({
-  action: Schema.Literals(["list", "read", "send", "create", "passport", "run", "dod", "take", "release"]),
+  action: Schema.Literals([
+    "list",
+    "read",
+    "send",
+    "create",
+    "passport",
+    "run",
+    "dod",
+    "take",
+    "submit",
+    "release",
+    "feed",
+  ]),
   room: Schema.optionalKey(Schema.String).annotate({ description: "Room ID from list, for read, send and create" }),
   sessionID: Schema.optionalKey(Schema.String).annotate({
     description: "Session of the room for read and send; the room's own session when omitted",
   }),
   text: Schema.optionalKey(Schema.String).annotate({
-    description: "Message for send, the first task for create, or the command for run",
+    description:
+      "Message for send, the first task for create, the command for run, or the handover for submit and release",
   }),
   title: Schema.optionalKey(Schema.String).annotate({ description: "Title of the session to create" }),
-  item: Schema.optionalKey(Schema.String).annotate({ description: "DoD item ID for take and release, such as L-002" }),
+  item: Schema.optionalKey(Schema.String).annotate({
+    description: "DoD item ID for take, submit and release, such as L-002; take without it picks the next ready item",
+  }),
   paths: Schema.optionalKey(Schema.Array(Schema.String)).annotate({
     description: "Project files or folders the item's work changes, held as a plot for take",
   }),
@@ -158,29 +175,69 @@ export const Plugin = {
                   const dod = yield* peers.dod(link).pipe(Effect.mapError(failed))
                   return { output: describeDod(link, dod) }
                 }
-                case "take":
+                case "take": {
+                  const link = yield* linkOf(input.room)
+                  yield* ask(link.name)
+                  const item = input.item?.trim()
+                  const dod = yield* peers
+                    .claim({
+                      link,
+                      ...(item ? { id: item } : { next: true }),
+                      take: true,
+                      sessionID: input.sessionID,
+                      paths: input.paths,
+                      from: context.sessionID,
+                    })
+                    .pipe(Effect.mapError(failed))
+                  const taken = dod.taken ?? item
+                  return {
+                    output: [
+                      `${taken} is yours in ${link.name}${input.paths?.length ? `, with a plot over ${input.paths.join(", ")}` : ""}. Submit it when its check should pass; release it with a handover if you stop.`,
+                      dod.note
+                        ? `Handover note ${dod.note.name} from earlier work on it:\n${dod.note.text.trim()}`
+                        : "Nobody left a handover note on it.",
+                      describeDod(link, dod),
+                    ].join("\n\n"),
+                  }
+                }
+                case "submit": {
+                  const link = yield* linkOf(input.room)
+                  const item = input.item?.trim()
+                  if (!item) return yield* new ToolFailure({ message: "Pass item, the DoD item ID you hold" })
+                  yield* ask(link.name)
+                  const dod = yield* peers
+                    .submit({ link, id: item, handover: input.text?.trim() || undefined, from: context.sessionID })
+                    .pipe(Effect.mapError(failed))
+                  const check = dod.check
+                  return {
+                    output: [
+                      check?.exitCode === 0
+                        ? `${item} passed the host's check and is DONE in ${link.name}.`
+                        : `${item} failed the host's check (exit code ${check?.exitCode}) and is FAILED; fix it and submit again.`,
+                      check?.output.trim() || "(the check printed nothing)",
+                    ].join("\n\n"),
+                  }
+                }
                 case "release": {
                   const link = yield* linkOf(input.room)
                   const item = input.item?.trim()
                   if (!item) return yield* new ToolFailure({ message: "Pass item, the DoD item ID from dod" })
-                  if (input.action === "take") yield* ask(link.name)
                   const dod = yield* peers
                     .claim({
                       link,
                       id: item,
-                      take: input.action === "take",
+                      take: false,
                       sessionID: input.sessionID,
-                      paths: input.paths,
+                      handover: input.text?.trim() || undefined,
+                      from: context.sessionID,
                     })
                     .pipe(Effect.mapError(failed))
-                  return {
-                    output: [
-                      input.action === "take"
-                        ? `${item} is yours in ${link.name}${input.paths?.length ? `, with a plot over ${input.paths.join(", ")}` : ""}. Release it if you stop.`
-                        : `${item} is free again in ${link.name}.`,
-                      describeDod(link, dod),
-                    ].join("\n\n"),
-                  }
+                  return { output: [`${item} is free again in ${link.name}.`, describeDod(link, dod)].join("\n\n") }
+                }
+                case "feed": {
+                  const link = yield* linkOf(input.room)
+                  const feed = yield* peers.feed(link).pipe(Effect.mapError(failed))
+                  return { output: describeFeed(link, feed, input.limit ?? 20) }
                 }
                 case "create": {
                   const link = yield* linkOf(input.room)
@@ -272,9 +329,35 @@ function describeDod(link: Peer.Link, dod: Room.Dod) {
         .filter((item) => item.stage === stage)
         .map(
           (item) =>
-            `${DOD_MARK[item.state] ?? "·"} ${item.id} [${item.state}${item.total > 0 ? ` ${item.done}/${item.total}` : ""}] ${item.what}${item.owner ? ` — ${item.owner === link.guest ? "you" : item.owner}` : ""}`,
+            `${DOD_MARK[item.state] ?? "·"} ${item.id} [${item.state}${item.total > 0 ? ` ${item.done}/${item.total}` : ""}] ${item.what}${item.owner ? ` — ${item.mine ? "you" : item.owner}${item.stale ? " (lease ran out, free to take)" : ""}` : ""}${item.waits ? ` · waits for ${item.waits.join(", ")}` : ""}${item.verify ? ` · check: ${item.verify}` : ""}`,
         ),
     ]),
+  ].join("\n")
+}
+
+const FEED_VERB: Record<Room.EventKind, string> = {
+  join: "joined",
+  leave: "left",
+  remove: "was removed",
+  ban: "was banned",
+  take: "took",
+  release: "gave back",
+  expire: "lost by lease",
+  pass: "passed the check of",
+  fail: "failed the check of",
+  run: "ran",
+}
+
+function describeFeed(link: Peer.Link, feed: Room.Feed, limit: number) {
+  if (feed.events.length === 0) return `Nothing has happened in ${link.name} since its host started.`
+  return [
+    `Latest in ${link.name}:`,
+    ...feed.events
+      .slice(-limit)
+      .map(
+        (event) =>
+          `${new Date(event.at).toLocaleTimeString()} ${event.who === link.guest ? "you" : event.who} ${FEED_VERB[event.kind]}${event.item ? ` ${event.item}` : ""}${event.detail ? `: ${event.detail}` : ""}`,
+      ),
   ].join("\n")
 }
 

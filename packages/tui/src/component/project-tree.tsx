@@ -435,6 +435,7 @@ export function ProjectTree(props: { width: number }) {
                   setHover={setHover}
                   load={() => client.api.room.dod.get({ roomID: room.id })}
                   release={(id) => client.api.room.dod.release({ roomID: room.id, id })}
+                  feed={(after, wait) => client.api.room.feed({ roomID: room.id, after, wait })}
                 />
               </>
             )}
@@ -481,10 +482,15 @@ export function ProjectTree(props: { width: number }) {
                   id={roomKey(room)}
                   hover={hover}
                   setHover={setHover}
-                  me={room.guest}
                   load={() => roomClient(room).room.guest.dod.get({ roomID: room.roomID })}
-                  take={(id) => roomClient(room).room.guest.dod.claim({ roomID: room.roomID, id, take: true })}
+                  take={(id) =>
+                    roomClient(room).room.guest.dod.claim(
+                      id ? { roomID: room.roomID, id, take: true } : { roomID: room.roomID, next: true, take: true },
+                    )
+                  }
+                  submit={(id) => roomClient(room).room.guest.dod.submit({ roomID: room.roomID, id })}
                   release={(id) => roomClient(room).room.guest.dod.claim({ roomID: room.roomID, id, take: false })}
+                  feed={(after, wait) => roomClient(room).room.guest.feed({ roomID: room.roomID, after, wait })}
                 />
                 <RoomSessions
                   room={room}

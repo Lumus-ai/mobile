@@ -296,6 +296,8 @@ import type {
   RoomDodGetOutput,
   RoomDodReleaseInput,
   RoomDodReleaseOutput,
+  RoomFeedInput,
+  RoomFeedOutput,
   RoomCodeInput,
   RoomCodeOutput,
   RoomPublicOutput,
@@ -318,6 +320,10 @@ import type {
   RoomGuestDodGetOutput,
   RoomGuestDodClaimInput,
   RoomGuestDodClaimOutput,
+  RoomGuestDodSubmitInput,
+  RoomGuestDodSubmitOutput,
+  RoomGuestFeedInput,
+  RoomGuestFeedOutput,
   RoomGuestLeaveInput,
   RoomGuestLeaveOutput,
   RoomGuestSessionListInput,
@@ -1864,6 +1870,14 @@ const EndpointRoomDodRelease = (raw: RawClient["server.room"]) => (input: RoomDo
     ),
   )
 
+const EndpointRoomFeed = (raw: RawClient["server.room"]) => (input: RoomFeedInput) =>
+  preserveEffect<RoomFeedOutput>()(
+    raw["room.feed"]({
+      params: { roomID: input["roomID"] },
+      query: { after: input["after"], wait: input["wait"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointRoomCode = (raw: RawClient["server.room"]) => (input: RoomCodeInput) =>
   preserveEffect<RoomCodeOutput>()(
     raw["room.code"]({ params: { roomID: input["roomID"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1950,7 +1964,30 @@ const EndpointRoomGuestDodClaim = (raw: RawClient["server.room"]) => (input: Roo
   preserveEffect<RoomGuestDodClaimOutput>()(
     raw["room.guest.dod.claim"]({
       params: { roomID: input["roomID"] },
-      payload: { id: input["id"], take: input["take"], sessionID: input["sessionID"], paths: input["paths"] },
+      payload: {
+        id: input["id"],
+        next: input["next"],
+        take: input["take"],
+        handover: input["handover"],
+        sessionID: input["sessionID"],
+        paths: input["paths"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointRoomGuestDodSubmit = (raw: RawClient["server.room"]) => (input: RoomGuestDodSubmitInput) =>
+  preserveEffect<RoomGuestDodSubmitOutput>()(
+    raw["room.guest.dod.submit"]({
+      params: { roomID: input["roomID"] },
+      payload: { id: input["id"], handover: input["handover"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointRoomGuestFeed = (raw: RawClient["server.room"]) => (input: RoomGuestFeedInput) =>
+  preserveEffect<RoomGuestFeedOutput>()(
+    raw["room.guest.feed"]({
+      params: { roomID: input["roomID"] },
+      query: { after: input["after"], wait: input["wait"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -2136,6 +2173,7 @@ const adaptGroupRoom = (raw: RawClient["server.room"]) => ({
   update: EndpointRoomUpdate(raw),
   remove: EndpointRoomRemove(raw),
   dod: { get: EndpointRoomDodGet(raw), release: EndpointRoomDodRelease(raw) },
+  feed: EndpointRoomFeed(raw),
   code: EndpointRoomCode(raw),
   public: EndpointRoomPublic(raw),
   join: EndpointRoomJoin(raw),
@@ -2151,7 +2189,12 @@ const adaptGroupRoom = (raw: RawClient["server.room"]) => ({
     },
     passport: EndpointRoomGuestPassport(raw),
     run: EndpointRoomGuestRun(raw),
-    dod: { get: EndpointRoomGuestDodGet(raw), claim: EndpointRoomGuestDodClaim(raw) },
+    dod: {
+      get: EndpointRoomGuestDodGet(raw),
+      claim: EndpointRoomGuestDodClaim(raw),
+      submit: EndpointRoomGuestDodSubmit(raw),
+    },
+    feed: EndpointRoomGuestFeed(raw),
     leave: EndpointRoomGuestLeave(raw),
     model: { list: EndpointRoomGuestModelList(raw) },
     agent: { list: EndpointRoomGuestAgentList(raw) },

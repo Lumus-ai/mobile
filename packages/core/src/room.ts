@@ -20,6 +20,9 @@ export type Role = Room.Role
 
 export type Member = Room.Member
 export type Ban = Room.Ban
+export type Dod = Room.Dod
+export type DodNote = Room.DodNote
+export type EventKind = Room.EventKind
 
 export const CreateInput = Schema.Struct({
   sessionID: SessionID,

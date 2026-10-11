@@ -160,12 +160,70 @@ export const DodItem = Schema.Struct({
   // Steps checked and steps in all.
   done: Schema.Number,
   total: Schema.Number,
-  // The guest who took the item; absent while it is free or the host's own.
+  // The name of whoever took the item; absent while it is free.
   owner: Schema.String.pipe(Schema.optional),
+  // The room member who holds it; absent for items the host's own people or AIs marked.
+  ownerID: Schema.String.pipe(Schema.optional),
+  // The holder left the room or has been silent past the lease, so anyone may take it over.
+  stale: Schema.Boolean.pipe(Schema.optional),
+  // Set on a guest's own items in what that guest reads.
+  mine: Schema.Boolean.pipe(Schema.optional),
+  // Items this one depends on that are not finished yet; it cannot be taken before them.
+  waits: Schema.Array(Schema.String).pipe(Schema.optional),
+  // The item's verification.command, which the host runs when the holder submits the item.
+  verify: Schema.String.pipe(Schema.optional),
 }).annotate({ identifier: "Room.DodItem" })
 export interface DodItem extends Schema.Schema.Type<typeof DodItem> {}
 
+// The handover note of a DoD item, .opencode/notes/dod-<item>.md: what was done, the dead
+// ends and the next step, kept for whoever holds the item next.
+export const DodNote = Schema.Struct({
+  name: Schema.String,
+  text: Schema.String,
+}).annotate({ identifier: "Room.DodNote" })
+export interface DodNote extends Schema.Schema.Type<typeof DodNote> {}
+
 export const Dod = Schema.Struct({
   items: Schema.Array(DodItem),
+  // After a take: the item taken, and its handover note when one was written.
+  taken: Schema.String.pipe(Schema.optional),
+  note: DodNote.pipe(Schema.optional),
+  // After a submit: what the host's run of the item's check printed.
+  check: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }).pipe(Schema.optional),
 }).annotate({ identifier: "Room.Dod" })
 export interface Dod extends Schema.Schema.Type<typeof Dod> {}
+
+// What happened in a room, newest last: who came and went, who took, gave back, submitted
+// or ran what. The host keeps the latest events in memory; a restart starts the feed anew.
+export const EventKind = Schema.Literals([
+  "join",
+  "leave",
+  "remove",
+  "ban",
+  "take",
+  "release",
+  "expire",
+  "pass",
+  "fail",
+  "run",
+])
+export type EventKind = typeof EventKind.Type
+
+export const Event = Schema.Struct({
+  // Rises by one per event in the room, so a reader asks only for what came after the last it saw.
+  seq: Schema.Number,
+  at: Schema.Number,
+  kind: EventKind,
+  // The member's name, or "host".
+  who: Schema.String,
+  // The DoD item, for take, release, expire, pass and fail.
+  item: Schema.String.pipe(Schema.optional),
+  // A command for run; the first line of the check's output for fail.
+  detail: Schema.String.pipe(Schema.optional),
+}).annotate({ identifier: "Room.Event" })
+export interface Event extends Schema.Schema.Type<typeof Event> {}
+
+export const Feed = Schema.Struct({
+  events: Schema.Array(Event),
+}).annotate({ identifier: "Room.Feed" })
+export interface Feed extends Schema.Schema.Type<typeof Feed> {}

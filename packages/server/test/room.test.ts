@@ -35,6 +35,8 @@ const GUEST_PATHS = [
   "/api/room/room_1/guest/permission",
   "/api/room/room_1/guest/permission/per_1/reply",
   "/api/room/room_1/guest/dod",
+  "/api/room/room_1/guest/dod/submit",
+  "/api/room/room_1/guest/feed",
 ]
 
 // Host-only paths: the guest token is not a server credential, so none of these
@@ -53,6 +55,7 @@ const HOST_PATHS = [
   "/api/room/room_1/ban/ban_1",
   "/api/room/room_1/dod",
   "/api/room/room_1/dod/release",
+  "/api/room/room_1/feed",
 ]
 
 // Paths under /api/room/ that no endpoint registers, plus session paths. A broad
@@ -638,5 +641,103 @@ it.live("guests share the host project's DoD: one takes an item with a plot, the
     })
     expect((yield* call(`/api/room/${room.id}/guest/passport`, { headers: alex })).body.plots).toEqual([])
     expect((yield* claim(boHeaders, { id: "L-001", take: true })).body.items[0].owner).toBe("Bo")
+  }).pipe(Effect.scoped),
+)
+
+it.live("a guest takes the next ready item, hands it over, and the host's check decides it", () =>
+  Effect.gen(function* () {
+    const { call, room, code, directory } = yield* setup
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, ".opencode", "dod.yaml"),
+        [
+          "leaves:",
+          "  - id: L-001",
+          '    what: "Write the parser"',
+          "    task_state: NOT_STARTED",
+          "    verification:",
+          "      state: NOT_CHECKED",
+          '      command: "test -f parser.txt"',
+          "  - id: L-002",
+          '    what: "Ship it"',
+          "    task_state: NOT_STARTED",
+          "    depends_on: [L-001]",
+          "",
+        ].join("\n"),
+      ),
+    )
+    const join = (joinCode: string, name: string) =>
+      call("/api/room/join", { method: "POST", body: { code: joinCode, name } }).pipe(
+        Effect.map((response) => response.body),
+      )
+    const alex = yield* join(code, "Alex")
+    const alexHeaders = { authorization: `Bearer ${alex.token}` }
+    const second = (yield* call(`/api/room/${room.id}/code`, { method: "POST", headers: host })).body.code as string
+    const bo = yield* join(second, "Bo")
+    const boHeaders = { authorization: `Bearer ${bo.token}` }
+    const claim = (headers: Record<string, string>, body: Record<string, unknown>) =>
+      call(`/api/room/${room.id}/guest/dod`, { method: "POST", headers, body })
+    const submit = (headers: Record<string, string>, body: Record<string, unknown>) =>
+      call(`/api/room/${room.id}/guest/dod/submit`, { method: "POST", headers, body })
+
+    // L-002 waits for L-001, so next hands out L-001 and nothing to the second guest
+    expect((yield* claim(boHeaders, { id: "L-002", take: true })).body.message).toBe("L-002 waits for L-001")
+    const taken = yield* claim(alexHeaders, { next: true, take: true })
+    expect(taken.body.taken).toBe("L-001")
+    expect(taken.body.items[0]).toMatchObject({ owner: "Alex", ownerID: alex.guest.id, mine: true })
+    expect((yield* call(`/api/room/${room.id}/guest/dod`, { headers: boHeaders })).body.items[0].mine).toBeUndefined()
+    expect((yield* claim(boHeaders, { next: true, take: true })).body.message).toBe(
+      "No item is ready: the rest are finished, taken or wait for others",
+    )
+
+    // only the holder submits; a failing check makes the item FAILED and says why
+    expect((yield* submit(boHeaders, { id: "L-001" })).body.message).toBe(
+      "Take L-001 before submitting it; only its holder submits",
+    )
+    const failed = yield* submit(alexHeaders, { id: "L-001", handover: "Parser stub is in, the file is not yet." })
+    expect(failed.body.check.exitCode).not.toBe(0)
+    expect(failed.body.items[0].state).toBe("FAILED")
+
+    // Alex leaves: the item goes back to the room and Bo finds Alex's handover on taking it
+    expect((yield* call(`/api/room/${room.id}/guest`, { method: "DELETE", headers: alexHeaders })).status).toBe(204)
+    const handed = yield* claim(boHeaders, { id: "L-001", take: true })
+    expect(handed.body.items[0]).toMatchObject({ owner: "Bo", mine: true })
+    expect(handed.body.note.name).toBe("dod-l-001")
+    expect(handed.body.note.text).toContain("Parser stub is in, the file is not yet.")
+
+    yield* Effect.promise(() => Bun.write(path.join(directory, "parser.txt"), "done"))
+    const passed = yield* submit(boHeaders, { id: "L-001" })
+    expect(passed.body.check.exitCode).toBe(0)
+    expect(passed.body.items[0].state).toBe("DONE")
+    expect(passed.body.items[1].waits).toBeUndefined()
+    const text = yield* Effect.promise(() => Bun.file(path.join(directory, ".opencode", "dod.yaml")).text())
+    expect(text).toContain("      state: PASSED\n")
+    expect(text).toContain('        by: "Bo"\n')
+
+    // the feed tells the story in order, to guests and the host alike
+    const feed = (yield* call(`/api/room/${room.id}/guest/feed`, { headers: boHeaders })).body.events as {
+      seq: number
+      kind: string
+      who: string
+      item?: string
+    }[]
+    expect(feed.map((event) => [event.kind, event.who, event.item])).toEqual([
+      ["join", "Alex", undefined],
+      ["join", "Bo", undefined],
+      ["take", "Alex", "L-001"],
+      ["fail", "Alex", "L-001"],
+      ["leave", "Alex", undefined],
+      ["release", "Alex", "L-001"],
+      ["take", "Bo", "L-001"],
+      ["pass", "Bo", "L-001"],
+    ])
+    const last = feed.at(-1)!.seq
+    expect((yield* call(`/api/room/${room.id}/feed?after=${last}`, { headers: host })).body.events).toEqual([])
+    // a waiting reader hears of the next event as it happens
+    const waiting = yield* call(`/api/room/${room.id}/feed?after=${last}&wait=5000`, { headers: host }).pipe(
+      Effect.forkScoped,
+    )
+    yield* claim(boHeaders, { id: "L-002", take: true })
+    expect((yield* Fiber.join(waiting)).body.events).toMatchObject([{ kind: "take", who: "Bo", item: "L-002" }])
   }).pipe(Effect.scoped),
 )

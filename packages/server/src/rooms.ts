@@ -20,10 +20,22 @@ export interface Interface {
   // Presence lives in memory: every guest request marks its guest as seen.
   readonly touch: (guestID: string) => void
   readonly seen: (guestID: string) => number | undefined
+  // When this server started, standing in for the last sight of a guest it has not heard from since.
+  readonly started: number
+  readonly record: (roomID: Room.ID, event: Omit<Room.Event, "seq" | "at">) => void
+  // The room's events after seq. With wait, an empty answer waits up to that many
+  // milliseconds for the next event, so a reader learns of it at once without fast polling.
+  readonly feed: (roomID: Room.ID, after: number, wait?: number) => Effect.Effect<Room.Feed>
 }
 
 // Guests poll every couple of seconds, so a longer silence means they left.
 export const ONLINE_MS = 15_000
+// How long a DoD item stays with a guest the server has not heard from: long enough to
+// survive a closed laptop lid over lunch, short enough that a vanished guest frees it today.
+export const LEASE_MS = 30 * 60_000
+// The events a room keeps; older ones fall off the front.
+const FEED_LIMIT = 200
+export const FEED_WAIT_MS = 25_000
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ServerRooms") {}
 
@@ -34,9 +46,40 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const codes = yield* Cache.make<string, Room.ID>({ capacity: 1_000, lookup: noLookup, timeToLive: CODE_TTL })
     const presence = new Map<string, number>()
+    const feeds = new Map<Room.ID, Room.Event[]>()
+    const waiters = new Map<Room.ID, Set<() => void>>()
+    const after = (roomID: Room.ID, seq: number) => (feeds.get(roomID) ?? []).filter((event) => event.seq > seq)
     return Service.of({
       touch: (guestID) => void presence.set(guestID, Date.now()),
       seen: (guestID) => presence.get(guestID),
+      started: Date.now(),
+      record: (roomID, event) => {
+        const list = feeds.get(roomID) ?? []
+        feeds.set(roomID, [...list, { ...event, seq: (list.at(-1)?.seq ?? 0) + 1, at: Date.now() }].slice(-FEED_LIMIT))
+        const waiting = waiters.get(roomID)
+        waiters.delete(roomID)
+        waiting?.forEach((wake) => wake())
+      },
+      feed: Effect.fn("ServerRooms.feed")(function* (roomID, seq, wait) {
+        // A reader whose cursor is past the end saw a feed from before a restart; it starts over.
+        const last = feeds.get(roomID)?.at(-1)?.seq ?? 0
+        const from = seq > last ? 0 : seq
+        if (after(roomID, from).length > 0 || !wait) return { events: after(roomID, from) }
+        yield* Effect.callback<void>((resume) => {
+          const forget = () => {
+            clearTimeout(timer)
+            waiters.get(roomID)?.delete(wake)
+          }
+          const wake = () => {
+            forget()
+            resume(Effect.void)
+          }
+          const timer = setTimeout(wake, Math.min(wait, FEED_WAIT_MS))
+          waiters.set(roomID, (waiters.get(roomID) ?? new Set<() => void>()).add(wake))
+          return Effect.sync(forget)
+        })
+        return { events: after(roomID, from) }
+      }),
       issueCode: Effect.fn("ServerRooms.issueCode")(function* (roomID) {
         const code = Array.from({ length: CODE_LENGTH }, () => ALPHABET[randomInt(ALPHABET.length)]).join("")
         yield* Cache.set(codes, code, roomID)

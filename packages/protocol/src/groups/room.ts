@@ -73,7 +73,17 @@ const GUEST_PATHS = [
   /^\/api\/room\/[^/]+\/guest\/run$/,
   // room.guest.dod.get, room.guest.dod.claim
   /^\/api\/room\/[^/]+\/guest\/dod$/,
+  // room.guest.dod.submit
+  /^\/api\/room\/[^/]+\/guest\/dod\/submit$/,
+  // room.guest.feed
+  /^\/api\/room\/[^/]+\/guest\/feed$/,
 ]
+
+// Reading the feed: events after a seq, and how long an empty answer may wait for the next.
+const FeedQuery = {
+  after: Schema.NumberFromString.pipe(Schema.optional),
+  wait: Schema.NumberFromString.pipe(Schema.optional),
+}
 
 export function isRoomGuestURL(url: URL) {
   return GUEST_PATHS.some((path) => path.test(url.pathname))
@@ -179,6 +189,21 @@ export const RoomGroup = HttpApiGroup.make("server.room")
         identifier: "room.dod.release",
         summary: "Free a DoD item a guest took",
         description: "Give a guest's DoD item back to the room, for a guest who left or stopped working on it.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("room.feed", "/api/room/:roomID/feed", {
+      params: { roomID: Room.ID },
+      query: FeedQuery,
+      success: Room.Feed,
+      error: [RoomNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "room.feed",
+        summary: "Read a room's feed",
+        description:
+          "What happened in the room after a seq: joins and leaves, DoD items taken, given back, expired, passed or failed, and commands run. With wait, an empty answer waits that many milliseconds for the next event.",
       }),
     ),
   )
@@ -352,9 +377,13 @@ export const RoomGroup = HttpApiGroup.make("server.room")
     HttpApiEndpoint.post("room.guest.dod.claim", "/api/room/:roomID/guest/dod", {
       params: { roomID: Room.ID },
       payload: Schema.Struct({
-        id: Schema.String,
+        // The item; with next instead, the server picks the first one the guest may start.
+        id: Schema.String.pipe(Schema.optional),
+        next: Schema.Boolean.pipe(Schema.optional),
         // True takes the item for the calling guest, false gives it back.
         take: Schema.Boolean,
+        // On giving back: what was done, the dead ends and the next step, added to the item's handover note.
+        handover: Schema.String.pipe(Schema.optional),
         // The room session that will do the work; the room's own when omitted.
         sessionID: Session.ID.pipe(Schema.optional),
         // Files or folders of the project the work changes, taken as a plot for that session.
@@ -367,7 +396,41 @@ export const RoomGroup = HttpApiGroup.make("server.room")
         identifier: "room.guest.dod.claim",
         summary: "Take or give back a DoD item",
         description:
-          "Take a free item of the host project's DoD for the calling guest, optionally holding a plot over the paths it changes, or give back one the guest took; members and above.",
+          "Take a free item of the host project's DoD for the calling guest, or the first ready one with next, optionally holding a plot over the paths it changes, or give back one the guest took; members and above. An item waiting for unfinished items cannot be taken, and one whose holder's lease ran out can. A take answers with the item's handover note.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("room.guest.dod.submit", "/api/room/:roomID/guest/dod/submit", {
+      params: { roomID: Room.ID },
+      payload: Schema.Struct({
+        id: Schema.String,
+        // What was done, added to the item's handover note.
+        handover: Schema.String.pipe(Schema.optional),
+      }),
+      success: Room.Dod,
+      error: [UnauthorizedError, ForbiddenError, RoomNotFoundError, SessionNotFoundError, InvalidRequestError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "room.guest.dod.submit",
+        summary: "Submit a DoD item for the host's check",
+        description:
+          "The host runs the item's verification.command in its project and records the result: exit code 0 makes the item DONE with its evidence, anything else FAILED. Only the guest holding the item submits it.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("room.guest.feed", "/api/room/:roomID/guest/feed", {
+      params: { roomID: Room.ID },
+      query: FeedQuery,
+      success: Room.Feed,
+      error: [UnauthorizedError, RoomNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "room.guest.feed",
+        summary: "Read the room's feed",
+        description:
+          "What happened in the room after a seq. With wait, an empty answer waits that many milliseconds for the next event.",
       }),
     ),
   )

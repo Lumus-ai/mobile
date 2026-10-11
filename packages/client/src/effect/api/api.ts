@@ -2526,6 +2526,14 @@ export type RoomDodReleaseInput = { readonly roomID: Room.ID; readonly id: strin
 export type RoomDodReleaseOutput = Room.Dod
 export type RoomDodReleaseOperation<E = never> = (input: RoomDodReleaseInput) => Effect.Effect<RoomDodReleaseOutput, E>
 
+export type RoomFeedInput = {
+  readonly roomID: Room.ID
+  readonly after?: number | undefined
+  readonly wait?: number | undefined
+}
+export type RoomFeedOutput = Room.Feed
+export type RoomFeedOperation<E = never> = (input: RoomFeedInput) => Effect.Effect<RoomFeedOutput, E>
+
 export type RoomCodeInput = { readonly roomID: Room.ID }
 export type RoomCodeOutput = Room.JoinCode
 export type RoomCodeOperation<E = never> = (input: RoomCodeInput) => Effect.Effect<RoomCodeOutput, E>
@@ -2626,8 +2634,10 @@ export type RoomGuestDodGetOperation<E = never> = (
 
 export type RoomGuestDodClaimInput = {
   readonly roomID: Room.ID
-  readonly id: string
+  readonly id?: string | undefined
+  readonly next?: boolean | undefined
   readonly take: boolean
+  readonly handover?: string | undefined
   readonly sessionID?: Session.ID | undefined
   readonly paths?: ReadonlyArray<string> | undefined
 }
@@ -2635,6 +2645,24 @@ export type RoomGuestDodClaimOutput = Room.Dod
 export type RoomGuestDodClaimOperation<E = never> = (
   input: RoomGuestDodClaimInput,
 ) => Effect.Effect<RoomGuestDodClaimOutput, E>
+
+export type RoomGuestDodSubmitInput = {
+  readonly roomID: Room.ID
+  readonly id: string
+  readonly handover?: string | undefined
+}
+export type RoomGuestDodSubmitOutput = Room.Dod
+export type RoomGuestDodSubmitOperation<E = never> = (
+  input: RoomGuestDodSubmitInput,
+) => Effect.Effect<RoomGuestDodSubmitOutput, E>
+
+export type RoomGuestFeedInput = {
+  readonly roomID: Room.ID
+  readonly after?: number | undefined
+  readonly wait?: number | undefined
+}
+export type RoomGuestFeedOutput = Room.Feed
+export type RoomGuestFeedOperation<E = never> = (input: RoomGuestFeedInput) => Effect.Effect<RoomGuestFeedOutput, E>
 
 export type RoomGuestLeaveInput = { readonly roomID: Room.ID }
 export type RoomGuestLeaveOutput = void
@@ -3730,6 +3758,7 @@ export interface RoomApi<E = never> {
   readonly update: RoomUpdateOperation<E>
   readonly remove: RoomRemoveOperation<E>
   readonly dod: { readonly get: RoomDodGetOperation<E>; readonly release: RoomDodReleaseOperation<E> }
+  readonly feed: RoomFeedOperation<E>
   readonly code: RoomCodeOperation<E>
   readonly public: RoomPublicOperation<E>
   readonly join: RoomJoinOperation<E>
@@ -3745,7 +3774,12 @@ export interface RoomApi<E = never> {
     }
     readonly passport: RoomGuestPassportOperation<E>
     readonly run: RoomGuestRunOperation<E>
-    readonly dod: { readonly get: RoomGuestDodGetOperation<E>; readonly claim: RoomGuestDodClaimOperation<E> }
+    readonly dod: {
+      readonly get: RoomGuestDodGetOperation<E>
+      readonly claim: RoomGuestDodClaimOperation<E>
+      readonly submit: RoomGuestDodSubmitOperation<E>
+    }
+    readonly feed: RoomGuestFeedOperation<E>
     readonly leave: RoomGuestLeaveOperation<E>
     readonly model: { readonly list: RoomGuestModelListOperation<E> }
     readonly agent: { readonly list: RoomGuestAgentListOperation<E> }

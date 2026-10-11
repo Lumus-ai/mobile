@@ -51,14 +51,30 @@ export interface Interface {
   readonly passport: (link: Link) => Effect.Effect<Room.Passport, PeerError>
   // The host project's DoD, with who took each item.
   readonly dod: (link: Link) => Effect.Effect<Room.Dod, PeerError>
-  // Takes a DoD item for this guest, holding a plot over the paths the work changes, or gives one back.
+  // Takes a DoD item for this guest, or the first ready one with next, holding a plot over the
+  // paths the work changes, or gives one back with a handover for whoever takes it next.
+  // A take by `from` watches the item: if the host frees it or someone takes it over, `from`
+  // hears of it as a <room-event>.
   readonly claim: (input: {
     link: Link
-    id: string
+    id?: string
+    next?: boolean
     take: boolean
     sessionID?: string
     paths?: ReadonlyArray<string>
+    handover?: string
+    from?: SessionID
   }) => Effect.Effect<Room.Dod, PeerError>
+  // Hands a held item to the host's check: its verification.command runs there and decides DONE or FAILED.
+  // A passed check ends the watch `from` keeps on the item.
+  readonly submit: (input: {
+    link: Link
+    id: string
+    handover?: string
+    from?: SessionID
+  }) => Effect.Effect<Room.Dod, PeerError>
+  // What happened in the room after a seq.
+  readonly feed: (link: Link, after?: number) => Effect.Effect<Room.Feed, PeerError>
   // Runs a command on the host's computer once the host allows it; cohosts only.
   readonly run: (input: { link: Link; command: string; sessionID?: string }) => Effect.Effect<Room.RunResult, PeerError>
   // Posts a message from this computer's AI into a session of the room. When the AI
@@ -76,6 +92,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pe
 
 const LINK = "peer/link/"
 const TASK = "peer/task/"
+const WATCH = "peer/watch/"
 // A peer that has not answered after this long is reported as silent.
 const TASK_TTL = Duration.hours(2)
 const POLL = Duration.seconds(3)
@@ -100,7 +117,24 @@ const Task = Schema.Struct({
 })
 type Task = typeof Task.Type
 
+// A DoD item a session of this computer took in a room, followed through the room's feed.
+const Watch = Schema.Struct({
+  from: SessionID,
+  url: Schema.String,
+  roomID: Schema.String,
+  name: Schema.String,
+  guest: Schema.String,
+  item: Schema.String,
+  // The last feed event already looked at.
+  after: Schema.Number,
+})
+type Watch = typeof Watch.Type
+
+// What others do to a watched item that its taker must hear of.
+const LOST = new Set<Room.EventKind>(["release", "expire", "take"])
+
 const decodeLink = Schema.decodeUnknownOption(Link)
+const decodeWatch = Schema.decodeUnknownOption(Watch)
 const decodeTask = Schema.decodeUnknownOption(Task)
 
 export function linkKey(input: { url: string; roomID: string }) {
@@ -157,7 +191,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service> = Layer.e
         ),
       )
 
-    const room = (link: Link) => `/api/room/${encodeURIComponent(link.roomID)}/guest`
+    const room = (link: Pick<Link, "roomID">) => `/api/room/${encodeURIComponent(link.roomID)}/guest`
     const query = (sessionID?: string) => (sessionID ? `?sessionID=${encodeURIComponent(sessionID)}` : "")
 
     const chat = (link: Link, sessionID?: string) => call(link, `${room(link)}/message${query(sessionID)}`, Chat)
@@ -204,12 +238,61 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service> = Layer.e
         .pipe(Effect.ignore)
     })
 
+    const feed = (link: Pick<Link, "url" | "token" | "roomID">, after = 0) =>
+      call(link, `${room(link)}/feed?after=${after}`, Room.Feed)
+
+    const watchKey = (watch: Pick<Watch, "from" | "url" | "roomID" | "item">) =>
+      `${WATCH}${watch.from}/${linkKey(watch)}/${watch.item}`
+
+    // Others' moves on a watched item reach its taker as a <room-event> and end the watch;
+    // a room this computer left ends it quietly.
+    const follow = Effect.fnUntraced(function* (key: string, watch: Watch) {
+      const stored = Option.getOrUndefined(decodeLink(yield* kv.get(LINK + linkKey(watch))))
+      if (!stored) return yield* kv.remove(key)
+      const events = yield* feed(stored, watch.after).pipe(Effect.orElseSucceed(() => undefined))
+      if (!events || events.events.length === 0) return
+      const lost = events.events.find(
+        (event) =>
+          event.item === watch.item &&
+          LOST.has(event.kind) &&
+          // An expired lease names the holder who lost it, which is this guest.
+          (event.kind === "expire" || event.who !== watch.guest),
+      )
+      if (!lost) return yield* kv.set(key, Schema.encodeSync(Watch)({ ...watch, after: events.events.at(-1)!.seq }))
+      yield* kv.remove(key)
+      const what =
+        lost.kind === "take"
+          ? `${lost.who} took it over`
+          : lost.kind === "expire"
+            ? "your lease on it ran out"
+            : `${lost.who} gave it back to the room`
+      yield* sessions
+        .synthetic({
+          sessionID: watch.from,
+          description: `${watch.name}: ${watch.item} is no longer yours`,
+          text: [
+            `<room-event room="${watch.name}" roomID="${watch.roomID}" item="${watch.item}" kind="${lost.kind}">`,
+            `${watch.item} is no longer yours: ${what}. Stop working on it; check the DoD before taking another item.`,
+            "</room-event>",
+          ].join("\n"),
+          metadata: { source: "peer", roomID: watch.roomID, item: watch.item, kind: lost.kind },
+        })
+        .pipe(Effect.ignore)
+    })
+
     yield* Effect.gen(function* () {
       const result = yield* kv.scan({ prefix: TASK, limit: 1000 })
       yield* Effect.forEach(result.entries, (entry) =>
         Option.match(decodeTask(entry.value), {
           onNone: () => kv.remove(entry.key),
           onSome: (task) => check(entry.key, task),
+        }),
+      )
+      const watches = yield* kv.scan({ prefix: WATCH, limit: 1000 })
+      yield* Effect.forEach(watches.entries, (entry) =>
+        Option.match(decodeWatch(entry.value), {
+          onNone: () => kv.remove(entry.key),
+          onSome: (watch) => follow(entry.key, watch),
         }),
       )
     }).pipe(Effect.repeat(Schedule.spaced(POLL)), Effect.forkScoped({ startImmediately: true }))
@@ -224,11 +307,48 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service> = Layer.e
       chat,
       passport: (link) => call(link, `${room(link)}/passport`, Room.Passport),
       dod: (link) => call(link, `${room(link)}/dod`, Room.Dod),
-      claim: (input) =>
-        call(input.link, `${room(input.link)}/dod`, Room.Dod, {
+      claim: Effect.fn("Peer.claim")(function* (input) {
+        // The cursor is read before the take, so the watch starts at the take itself.
+        const after = input.take && input.from ? ((yield* feed(input.link)).events.at(-1)?.seq ?? 0) : 0
+        const dod = yield* call(input.link, `${room(input.link)}/dod`, Room.Dod, {
           method: "POST",
-          body: { id: input.id, take: input.take, sessionID: input.sessionID, paths: input.paths },
-        }),
+          body: {
+            id: input.id,
+            next: input.next,
+            take: input.take,
+            sessionID: input.sessionID,
+            paths: input.paths,
+            handover: input.handover,
+          },
+        })
+        const item = dod.taken ?? input.id
+        if (!input.from || !item) return dod
+        const watch = {
+          from: input.from,
+          url: input.link.url,
+          roomID: input.link.roomID,
+          name: input.link.name,
+          guest: input.link.guest,
+          item,
+          after,
+        }
+        if (input.take) yield* kv.set(watchKey(watch), Schema.encodeSync(Watch)(watch))
+        if (!input.take) yield* kv.remove(watchKey(watch))
+        return dod
+      }),
+      submit: Effect.fn("Peer.submit")(function* (input) {
+        const dod = yield* call(input.link, `${room(input.link)}/dod/submit`, Room.Dod, {
+          method: "POST",
+          body: { id: input.id, handover: input.handover },
+          timeout: RUN_TIMEOUT,
+        })
+        if (input.from && dod.check?.exitCode === 0)
+          yield* kv.remove(
+            watchKey({ from: input.from, url: input.link.url, roomID: input.link.roomID, item: input.id }),
+          )
+        return dod
+      }),
+      feed: (link, after) => feed(link, after),
       run: (input) =>
         call(input.link, `${room(input.link)}/run`, Room.RunResult, {
           method: "POST",

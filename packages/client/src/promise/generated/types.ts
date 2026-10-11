@@ -477,6 +477,22 @@ export type RoomDodItem = {
   done: number
   total: number
   owner?: string | undefined
+  ownerID?: string | undefined
+  stale?: boolean | undefined
+  mine?: boolean | undefined
+  waits?: Array<string> | undefined
+  verify?: string | undefined
+}
+
+export type RoomDodNote = { name: string; text: string }
+
+export type RoomEvent = {
+  seq: number
+  at: number
+  kind: "join" | "leave" | "remove" | "ban" | "take" | "release" | "expire" | "pass" | "fail" | "run"
+  who: string
+  item?: string | undefined
+  detail?: string | undefined
 }
 
 export type RoomJoinCode = { code: string; expires_in: number }
@@ -1826,7 +1842,14 @@ export type NoteFrontmatter = {
   updated: number
 }
 
-export type RoomDod = { items: Array<RoomDodItem> }
+export type RoomDod = {
+  items: Array<RoomDodItem>
+  taken?: string | undefined
+  note?: RoomDodNote | undefined
+  check?: { exitCode: number; output: string } | undefined
+}
+
+export type RoomFeed = { events: Array<RoomEvent> }
 
 export type RoomJoined = {
   token: string
@@ -7215,6 +7238,14 @@ export type RoomDodReleaseInput = {
 
 export type RoomDodReleaseOutput = RoomDod
 
+export type RoomFeedInput = {
+  readonly roomID: { readonly roomID: string }["roomID"]
+  readonly after?: { readonly after?: number | undefined; readonly wait?: number | undefined }["after"]
+  readonly wait?: { readonly after?: number | undefined; readonly wait?: number | undefined }["wait"]
+}
+
+export type RoomFeedOutput = RoomFeed
+
 export type RoomCodeInput = { readonly roomID: { readonly roomID: string }["roomID"] }
 
 export type RoomCodeOutput = RoomJoinCode
@@ -7428,33 +7459,73 @@ export type RoomGuestDodGetOutput = RoomDod
 
 export type RoomGuestDodClaimInput = {
   readonly roomID: { readonly roomID: string }["roomID"]
-  readonly id: {
-    readonly id: string
+  readonly id?: {
+    readonly id?: string | undefined
+    readonly next?: boolean | undefined
     readonly take: boolean
+    readonly handover?: string | undefined
     readonly sessionID?: string | undefined
     readonly paths?: ReadonlyArray<string> | undefined
   }["id"]
-  readonly take: {
-    readonly id: string
+  readonly next?: {
+    readonly id?: string | undefined
+    readonly next?: boolean | undefined
     readonly take: boolean
+    readonly handover?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly paths?: ReadonlyArray<string> | undefined
+  }["next"]
+  readonly take: {
+    readonly id?: string | undefined
+    readonly next?: boolean | undefined
+    readonly take: boolean
+    readonly handover?: string | undefined
     readonly sessionID?: string | undefined
     readonly paths?: ReadonlyArray<string> | undefined
   }["take"]
-  readonly sessionID?: {
-    readonly id: string
+  readonly handover?: {
+    readonly id?: string | undefined
+    readonly next?: boolean | undefined
     readonly take: boolean
+    readonly handover?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly paths?: ReadonlyArray<string> | undefined
+  }["handover"]
+  readonly sessionID?: {
+    readonly id?: string | undefined
+    readonly next?: boolean | undefined
+    readonly take: boolean
+    readonly handover?: string | undefined
     readonly sessionID?: string | undefined
     readonly paths?: ReadonlyArray<string> | undefined
   }["sessionID"]
   readonly paths?: {
-    readonly id: string
+    readonly id?: string | undefined
+    readonly next?: boolean | undefined
     readonly take: boolean
+    readonly handover?: string | undefined
     readonly sessionID?: string | undefined
     readonly paths?: ReadonlyArray<string> | undefined
   }["paths"]
 }
 
 export type RoomGuestDodClaimOutput = RoomDod
+
+export type RoomGuestDodSubmitInput = {
+  readonly roomID: { readonly roomID: string }["roomID"]
+  readonly id: { readonly id: string; readonly handover?: string | undefined }["id"]
+  readonly handover?: { readonly id: string; readonly handover?: string | undefined }["handover"]
+}
+
+export type RoomGuestDodSubmitOutput = RoomDod
+
+export type RoomGuestFeedInput = {
+  readonly roomID: { readonly roomID: string }["roomID"]
+  readonly after?: { readonly after?: number | undefined; readonly wait?: number | undefined }["after"]
+  readonly wait?: { readonly after?: number | undefined; readonly wait?: number | undefined }["wait"]
+}
+
+export type RoomGuestFeedOutput = RoomFeed
 
 export type RoomGuestLeaveInput = { readonly roomID: { readonly roomID: string }["roomID"] }
 

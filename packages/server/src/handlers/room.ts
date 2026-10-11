@@ -82,6 +82,25 @@ function dodPurpose(id: string, owner: string) {
   return `DoD ${id} for ${owner}`
 }
 
+// A guest reads its own items marked, so neither its client nor its AI matches by name.
+function forGuest(dod: Room.Dod, member: Room.Member): Room.Dod {
+  return { ...dod, items: dod.items.map((item) => (item.ownerID === member.id ? { ...item, mine: true } : item)) }
+}
+
+// The handover note of a DoD item: L-003 keeps its notes in dod-l-003.
+function handoverName(id: string) {
+  return `dod-${id
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")}`.slice(0, 60)
+}
+
+// The last lines of a check's output, short enough for one line of the DoD.
+function outputSummary(output: string, exitCode: number) {
+  const tail = output.trim().split("\n").slice(-3).join(" / ").slice(0, 300)
+  return tail || `exit code ${exitCode}, no output`
+}
+
 function missingRoom(error: Room.NotFoundError) {
   return Effect.fail(new RoomNotFoundError({ roomID: error.roomID, message: `Room not found: ${error.roomID}` }))
 }
@@ -170,6 +189,56 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
       return session.location.directory
     })
 
+    // A member keeps a DoD item while it stays in some room on this server and was heard
+    // from within the lease; a restart counts as hearing from everyone once.
+    const live = Effect.fnUntraced(function* () {
+      const ids = new Set(
+        (yield* Effect.forEach(yield* rooms.list(), (room) => rooms.members(room.id)))
+          .flat()
+          .map((member) => member.id),
+      )
+      const now = Date.now()
+      return (ownerID: string) =>
+        ids.has(ownerID) && now - (codes.seen(ownerID) ?? codes.started) < ServerRooms.LEASE_MS
+    })
+
+    const ownerOf = (member: Room.Member): Dod.Owner => ({ id: member.id, name: member.name })
+
+    const readHandover = (room: Room.Info, id: string) =>
+      atRoom(
+        room,
+        NoteStore.Service.use((notes) => notes.get(handoverName(id))).pipe(
+          Effect.map((note): Room.DodNote => ({ name: note.name, text: note.body })),
+          Effect.orElseSucceed(() => undefined),
+        ),
+      )
+
+    // Adds a dated entry to the item's handover note, starting the note on its first entry.
+    const writeHandover = (room: Room.Info, id: string, who: string, text: string) => {
+      const name = handoverName(id)
+      const entry = `\n## ${new Date().toISOString().slice(0, 16).replace("T", " ")} · ${who}\n\n${text.trim()}\n`
+      return atRoom(
+        room,
+        NoteStore.Service.use((notes) =>
+          notes.get(name).pipe(
+            Effect.flatMap((note) => notes.edit({ name, body: entry, mode: "append", expectedMtime: note.mtime })),
+            Effect.catchTag("NoteStore.NotFoundError", () =>
+              notes.create({ name, title: `DoD ${id}`, body: entry.trimStart(), tags: ["dod"] }),
+            ),
+          ),
+        ),
+      )
+    }
+
+    // A member who left or was removed gives back what it held, and the room hears of it.
+    const releaseMember = Effect.fnUntraced(function* (room: Room.Info, member: Room.Member) {
+      const directory = yield* roomDirectory(room).pipe(Effect.orElseSucceed(() => undefined))
+      if (directory === undefined) return
+      const freed = yield* Dod.releaseOwner({ directory, ownerID: member.id }).pipe(Effect.orElseSucceed(() => []))
+      yield* Effect.forEach(freed, (id) => freeDodPlots(directory, id))
+      freed.forEach((id) => codes.record(room.id, { kind: "release", who: member.name, item: id }))
+    })
+
     // Plots that were taken for a DoD item go with it, whichever session holds them.
     const freeDodPlots = Effect.fnUntraced(function* (directory: string, id: string) {
       const held = (yield* plots.list(directory)).filter((plot) => plot.purpose.startsWith(`DoD ${id} for `))
@@ -254,6 +323,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             address,
             joined: Date.now(),
           })
+          codes.record(room.id, { kind: "join", who: name })
           return { ...issued, role: member.role, room }
         }),
       )
@@ -280,8 +350,11 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
       .handle(
         "room.member.remove",
         Effect.fn(function* (ctx) {
-          yield* memberOf(ctx.params.roomID, ctx.params.guestID)
+          const member = yield* memberOf(ctx.params.roomID, ctx.params.guestID)
           yield* rooms.removeMember(ctx.params.roomID, ctx.params.guestID)
+          const room = yield* rooms.get(ctx.params.roomID).pipe(Effect.catchTag("Room.NotFoundError", missingRoom))
+          codes.record(room.id, { kind: "remove", who: member.name })
+          yield* releaseMember(room, member)
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -297,6 +370,9 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             created: Date.now(),
           })
           yield* rooms.removeMember(ctx.params.roomID, member.id)
+          const room = yield* rooms.get(ctx.params.roomID).pipe(Effect.catchTag("Room.NotFoundError", missingRoom))
+          codes.record(room.id, { kind: "ban", who: member.name })
+          yield* releaseMember(room, member)
           return { data: ban }
         }),
       )
@@ -464,6 +540,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             Effect.catchTag("LocationNotFoundError", Effect.die),
             Effect.catch(() => Effect.fail(new ForbiddenError({ message: "The host did not allow this command" }))),
           )
+          codes.record(joined.room.id, { kind: "run", who: joined.member.name, detail: command })
           return yield* Effect.tryPromise({
             try: (signal) => Passport.run(command, session.location.directory, signal),
             catch: (error) => new InvalidRequestError({ message: `Could not run the command: ${String(error)}` }),
@@ -474,7 +551,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
         "room.dod.get",
         Effect.fn(function* (ctx) {
           const room = yield* rooms.get(ctx.params.roomID).pipe(Effect.catchTag("Room.NotFoundError", missingRoom))
-          return yield* Dod.read(yield* roomDirectory(room)).pipe(Effect.mapError(invalidDod))
+          return yield* Dod.read(yield* roomDirectory(room), yield* live()).pipe(Effect.mapError(invalidDod))
         }),
       )
       .handle(
@@ -484,6 +561,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           const directory = yield* roomDirectory(room)
           const dod = yield* Dod.release({ directory, id: ctx.payload.id }).pipe(Effect.mapError(invalidDod))
           yield* freeDodPlots(directory, ctx.payload.id)
+          codes.record(room.id, { kind: "release", who: "host", item: ctx.payload.id })
           return dod
         }),
       )
@@ -491,7 +569,10 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
         "room.guest.dod.get",
         Effect.fn(function* (ctx) {
           const joined = yield* guestOf(ctx.params.roomID)
-          return yield* Dod.read(yield* roomDirectory(joined.room)).pipe(Effect.mapError(invalidDod))
+          const dod = yield* Dod.read(yield* roomDirectory(joined.room), yield* live()).pipe(
+            Effect.mapError(invalidDod),
+          )
+          return forGuest(dod, joined.member)
         }),
       )
       .handle(
@@ -500,28 +581,108 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           const joined = yield* guestWho(ctx.params.roomID, "member")
           const session = yield* inRoom(joined.room, ctx.payload.sessionID)
           const directory = yield* roomDirectory(joined.room)
-          const id = ctx.payload.id.trim()
-          const owner = joined.member.name
+          const owner = ownerOf(joined.member)
+          const record = (kind: Room.EventKind, item: string, who = owner.name) =>
+            codes.record(joined.room.id, { kind, who, item })
           if (!ctx.payload.take) {
+            const id = ctx.payload.id?.trim()
+            if (!id) return yield* new InvalidRequestError({ message: "Name the item to give back", field: "id" })
+            if (ctx.payload.handover?.trim()) yield* writeHandover(joined.room, id, owner.name, ctx.payload.handover)
             const dod = yield* Dod.release({ directory, id, owner }).pipe(Effect.mapError(invalidDod))
             yield* freeDodPlots(directory, id)
-            return dod
+            record("release", id)
+            return forGuest(dod, joined.member)
           }
-          const before = yield* Dod.read(directory).pipe(Effect.mapError(invalidDod))
-          const dod = yield* Dod.take({ directory, id, owner }).pipe(Effect.mapError(invalidDod))
+          const alive = yield* live()
+          const before = yield* Dod.read(directory, alive).pipe(Effect.mapError(invalidDod))
+          const taken = ctx.payload.next
+            ? yield* Dod.next({ directory, owner, live: alive }).pipe(Effect.mapError(invalidDod))
+            : yield* Effect.gen(function* () {
+                const id = ctx.payload.id?.trim()
+                if (!id)
+                  return yield* new InvalidRequestError({ message: "Name the item to take, or pass next", field: "id" })
+                return {
+                  id,
+                  dod: yield* Dod.take({ directory, id, owner, live: alive }).pipe(Effect.mapError(invalidDod)),
+                }
+              })
+          const previous = before.items.find((item) => item.id === taken.id)
+          // An item taken over from a holder whose lease ran out drops that holder's plots too.
+          if (previous?.stale && previous.ownerID !== owner.id) {
+            yield* freeDodPlots(directory, taken.id)
+            record("expire", taken.id, previous.owner ?? "?")
+          }
+          if (previous?.ownerID !== owner.id) record("take", taken.id)
+          const result = {
+            ...forGuest(taken.dod, joined.member),
+            taken: taken.id,
+            note: yield* readHandover(joined.room, taken.id),
+          }
           const paths = ctx.payload.paths ?? []
-          if (paths.length === 0) return dod
+          if (paths.length === 0) return result
           // A refused plot undoes a fresh take, so the item is not left marked for work that cannot start.
-          return yield* plots.claim({ sessionID: session.id, directory, paths, purpose: dodPurpose(id, owner) }).pipe(
-            Effect.as(dod),
-            Effect.catchTag("Plot.TakenError", (error) =>
-              Effect.gen(function* () {
-                if (before.items.find((item) => item.id === id)?.owner !== owner)
-                  yield* Dod.release({ directory, id, owner }).pipe(Effect.ignore)
-                return yield* new ForbiddenError({ message: error.message })
-              }),
-            ),
-          )
+          return yield* plots
+            .claim({ sessionID: session.id, directory, paths, purpose: dodPurpose(taken.id, owner.name) })
+            .pipe(
+              Effect.as(result),
+              Effect.catchTag("Plot.TakenError", (error) =>
+                Effect.gen(function* () {
+                  if (previous?.ownerID !== owner.id) {
+                    yield* Dod.release({ directory, id: taken.id, owner }).pipe(Effect.ignore)
+                    record("release", taken.id)
+                  }
+                  return yield* new ForbiddenError({ message: error.message })
+                }),
+              ),
+            )
+        }),
+      )
+      .handle(
+        "room.guest.dod.submit",
+        Effect.fn(function* (ctx) {
+          const joined = yield* guestWho(ctx.params.roomID, "member")
+          const directory = yield* roomDirectory(joined.room)
+          const owner = ownerOf(joined.member)
+          const id = ctx.payload.id.trim()
+          const command = yield* Dod.command({ directory, id, owner }).pipe(Effect.mapError(invalidDod))
+          if (ctx.payload.handover?.trim()) yield* writeHandover(joined.room, id, owner.name, ctx.payload.handover)
+          // The check is the host's own, from its own file, so it runs without asking: a member
+          // could already have the host's AI run the same command in the shared session.
+          const result = yield* Effect.tryPromise({
+            try: (signal) => Passport.run(command, directory, signal),
+            catch: (error) => new InvalidRequestError({ message: `Could not run the check: ${String(error)}` }),
+          })
+          const dod = yield* Dod.accept({
+            directory,
+            id,
+            command,
+            exitCode: result.exitCode,
+            summary: outputSummary(result.output, result.exitCode),
+            by: owner.name,
+          }).pipe(Effect.mapError(invalidDod))
+          const passed = result.exitCode === 0
+          if (passed) yield* freeDodPlots(directory, id)
+          codes.record(joined.room.id, {
+            kind: passed ? "pass" : "fail",
+            who: owner.name,
+            item: id,
+            ...(passed ? {} : { detail: outputSummary(result.output, result.exitCode).slice(0, 120) }),
+          })
+          return { ...forGuest(dod, joined.member), check: { exitCode: result.exitCode, output: result.output } }
+        }),
+      )
+      .handle(
+        "room.guest.feed",
+        Effect.fn(function* (ctx) {
+          const joined = yield* guestOf(ctx.params.roomID)
+          return yield* codes.feed(joined.room.id, ctx.query.after ?? 0, ctx.query.wait)
+        }),
+      )
+      .handle(
+        "room.feed",
+        Effect.fn(function* (ctx) {
+          const room = yield* rooms.get(ctx.params.roomID).pipe(Effect.catchTag("Room.NotFoundError", missingRoom))
+          return yield* codes.feed(room.id, ctx.query.after ?? 0, ctx.query.wait)
         }),
       )
       .handle(
@@ -529,6 +690,8 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
         Effect.fn(function* (ctx) {
           const joined = yield* guestOf(ctx.params.roomID)
           yield* rooms.removeMember(joined.room.id, joined.member.id)
+          codes.record(joined.room.id, { kind: "leave", who: joined.member.name })
+          yield* releaseMember(joined.room, joined.member)
           return HttpApiSchema.NoContent.make()
         }),
       )
