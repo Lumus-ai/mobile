@@ -6,8 +6,8 @@ import { parseReleaseVersion } from "./updater-action"
 
 // Opencode++ is shared as a git checkout pinned to a release tag (release/1.2.0),
 // installed by opencode-pp-install.sh or .ps1. Such a checkout updates by moving to the
-// newest release tag on its origin. A checkout on a branch is a development tree:
-// it never offers updates, so work in progress is never replaced.
+// newest release tag on its origin. A checkout on a branch is a development tree: it
+// only fast-forwards to its upstream, so local work is never rewritten or merged.
 
 const PREFIX = "release/"
 const checkout = path.resolve(import.meta.dir, "../../../..")
@@ -55,4 +55,34 @@ function version(tag: string) {
   if (!tag.startsWith(PREFIX)) return undefined
   const value = tag.slice(PREFIX.length)
   return parseReleaseVersion(value) ? value : undefined
+}
+
+export type Branch =
+  | { readonly type: "behind"; readonly name: string; readonly behind: number }
+  | { readonly type: "current" }
+  | { readonly type: "diverged" }
+  | { readonly type: "no-upstream" }
+
+// Where the development branch stands against its upstream after a fetch, or
+// undefined when the checkout is not on a branch.
+export async function branch(root = checkout): Promise<Branch | undefined> {
+  const name = (await $`git -C ${root} symbolic-ref -q --short HEAD`.quiet().nothrow().text()).trim()
+  if (!name) return undefined
+  const upstream = await $`git -C ${root} rev-parse --abbrev-ref --symbolic-full-name @{u}`.quiet().nothrow()
+  if (upstream.exitCode !== 0) return { type: "no-upstream" }
+  await $`git -C ${root} fetch --quiet ${upstream.text().trim().split("/")[0]!}`.quiet()
+  const [ahead, behind] = (await $`git -C ${root} rev-list --left-right --count HEAD...@{u}`.quiet().text())
+    .trim()
+    .split(/\s+/)
+    .map(Number)
+  if (!behind) return { type: "current" }
+  if (ahead) return { type: "diverged" }
+  return { type: "behind", name, behind }
+}
+
+// Fast-forwards the branch to its upstream and installs what the new code needs.
+// Uncommitted edits stay; git refuses the merge if the incoming commits touch them.
+export async function pull(root = checkout) {
+  await $`git -C ${root} merge --ff-only @{u}`.quiet()
+  await $`${process.execPath} install`.cwd(root).quiet()
 }

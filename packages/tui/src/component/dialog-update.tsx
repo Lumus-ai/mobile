@@ -5,6 +5,7 @@ import { useTheme } from "../context/theme"
 import type { UpdateState } from "../context/update-notification"
 import { useDialog } from "../ui/dialog"
 import { errorMessage } from "../util/error"
+import { useT } from "../util/i18n"
 import { Spinner } from "./spinner"
 
 export function DialogUpdate(props: {
@@ -16,6 +17,7 @@ export function DialogUpdate(props: {
 }) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
+  const t = useT()
   const [error, setError] = createSignal<string>()
   const [active, setActive] = createSignal(0)
   const controller = new AbortController()
@@ -46,13 +48,13 @@ export function DialogUpdate(props: {
     if (type === "installing") return []
     const confirm =
       type === "available"
-        ? { label: "Update", run: props.install }
+        ? { label: t("Update"), run: props.install }
         : type === "installed"
-          ? { label: "Restart", run: props.restart }
+          ? { label: t("Restart"), run: props.restart }
           : undefined
     return [
       {
-        label: "Skip",
+        label: t("Skip"),
         run: () => {
           props.skip()
           dialog.clear()
@@ -90,10 +92,10 @@ export function DialogUpdate(props: {
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
           {state().type === "installing"
-            ? "Updating Opencode++"
+            ? t("Updating Opencode++")
             : state().type === "available" || state().type === "failed"
-              ? "Update available"
-              : "Update"}
+              ? t("Update available")
+              : t("Update")}
         </text>
         <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
@@ -104,29 +106,33 @@ export function DialogUpdate(props: {
           {(current) => (
             <Switch>
               <Match when={current.type === "checking"}>
-                <Spinner shimmer={theme.text.base}>Checking for updates…</Spinner>
+                <Spinner shimmer={theme.text.base}>{t("Checking for updates…")}</Spinner>
               </Match>
               <Match when={current.type === "available"}>
-                <text fg={theme.text.muted}>
-                  An update is available. After installing, you'll be prompted to restart Opencode++.
+                <text fg={theme.text.muted} wrapMode="word">
+                  {current.type === "available"
+                    ? t("Version {version} is available. After installing, you'll be prompted to restart Opencode++.", {
+                        version: current.version,
+                      })
+                    : ""}
                 </text>
               </Match>
               <Match when={current.type === "installing"}>
                 <Spinner shimmer={theme.text.base}>
-                  {current.type === "installing" ? `Installing Opencode++ ${current.version}…` : ""}
+                  {current.type === "installing" ? t("Installing Opencode++ {version}…", { version: current.version }) : ""}
                 </Spinner>
               </Match>
               <Match when={current.type === "installed"}>
                 <text fg={theme.text.muted} wrapMode="word">
-                  Update successful! A restart is required. Any active sessions will be resumed automatically.
+                  {t("Update successful! A restart is required. Any active sessions will be resumed automatically.")}
                 </text>
               </Match>
               <Match when={current.type === "current"}>
-                <text fg={theme.text.muted}>Opencode++ is already up to date.</text>
+                <text fg={theme.text.muted}>{t("Opencode++ is already up to date.")}</text>
               </Match>
               <Match when={current.type === "unavailable"}>
                 <text fg={theme.text.muted} wrapMode="word">
-                  {current.type === "unavailable" ? current.message : ""}
+                  {current.type === "unavailable" ? t(current.message) : ""}
                 </text>
               </Match>
               <Match when={current.type === "failed" || current.type === "check-failed"}>

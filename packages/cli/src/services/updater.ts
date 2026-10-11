@@ -502,9 +502,9 @@ const make = Effect.gen(function* () {
   })
 
   const apply = Effect.fn("cli.updater.apply")(function* (version: string) {
-    if (OPENCODE_LOCAL && (yield* sourceRelease()))
+    if (OPENCODE_LOCAL)
       return yield* Effect.tryPromise({
-        try: () => SourceRelease.apply(version),
+        try: async () => ((await SourceRelease.current()) ? SourceRelease.apply(version) : SourceRelease.pull()),
         catch: (cause) =>
           new UpgradeError(
             {
@@ -521,11 +521,7 @@ const make = Effect.gen(function* () {
   const check = Effect.fn("cli.updater.check")(function* () {
     const release = OPENCODE_LOCAL ? yield* sourceRelease() : undefined
     if (release) return release.available ? { type: "available" as const, version: release.available } : undefined
-    if (OPENCODE_LOCAL)
-      return {
-        type: "unavailable" as const,
-        message: "This build runs from a source checkout. Use an installed Opencode++ release to check for updates.",
-      }
+    if (OPENCODE_LOCAL) return yield* developmentBranch()
     const version = yield* latest()
     if (!parseReleaseVersion(version)) return yield* Effect.fail(new Error(`Invalid version: ${version}`))
     const current = yield* Ref.get(installedVersion)
@@ -550,8 +546,28 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
+  // A development tree offers its upstream's new commits; the messages stay fixed text
+  // so the TUI can translate them.
+  const developmentBranch = Effect.fnUntraced(function* () {
+    const status = yield* Effect.promise(() => SourceRelease.branch())
+    if (!status)
+      return {
+        type: "unavailable" as const,
+        message: "This build runs from a source checkout. Use an installed Opencode++ release to check for updates.",
+      }
+    if (status.type === "behind") return { type: "available" as const, version: `${status.name} +${status.behind}` }
+    if (status.type === "current") return undefined
+    return {
+      type: "unavailable" as const,
+      message:
+        status.type === "diverged"
+          ? "This branch and its copy on GitHub both have new commits. Merge them by hand with git pull."
+          : "This branch has no copy on GitHub to update from.",
+    }
+  })
+
   // The release this source checkout is pinned to and a newer published one, if any.
-  // Undefined for development trees, which never update themselves.
+  // Undefined for development trees, which update through developmentBranch.
   const sourceRelease = Effect.fnUntraced(function* () {
     const pinned = yield* Effect.promise(() => SourceRelease.current())
     if (!pinned) return undefined

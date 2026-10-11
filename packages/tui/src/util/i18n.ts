@@ -425,6 +425,20 @@ const ru: Record<string, string> = {
   // Mascot
   "Show mascot": "Показать маскота",
   "Hide mascot": "Скрыть маскота",
+  // Update
+  "Update": "Обновить",
+  "Restart": "Перезапустить",
+  "Skip": "Пропустить",
+  "Updating Opencode++": "Обновляю Opencode++",
+  "Update available": "Есть обновление",
+  "Checking for updates…": "Проверяю обновления…",
+  "Version {version} is available. After installing, you'll be prompted to restart Opencode++.": "Доступна версия {version}. После установки Opencode++ предложит перезапуск.",
+  "Installing Opencode++ {version}…": "Устанавливаю Opencode++ {version}…",
+  "Update successful! A restart is required. Any active sessions will be resumed automatically.": "Обновлено. Нужен перезапуск; активные сессии продолжатся сами.",
+  "Opencode++ is already up to date.": "Opencode++ уже последней версии.",
+  "This build runs from a source checkout. Use an installed Opencode++ release to check for updates.": "Эта сборка запущена из исходников без ветки. Обновления проверяет только установленный релиз Opencode++.",
+  "This branch and its copy on GitHub both have new commits. Merge them by hand with git pull.": "И в этой ветке, и в её копии на GitHub есть новые коммиты. Объедини их вручную через git pull.",
+  "This branch has no copy on GitHub to update from.": "У этой ветки нет копии на GitHub, обновляться неоткуда.",
   // Settings
   Settings: "Настройки",
   General: "Основное",
