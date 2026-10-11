@@ -35,17 +35,42 @@ function gitTagVersion(): string | undefined {
   }
 }
 
+// The commit these sources are, as semver build metadata. The background service is replaced
+// only when its version differs from the client's, and every commit of a checkout announced
+// the same release, so after an update or a reinstall the old service kept serving the new
+// client: missing fields in the API, fixes that never ran. Build metadata leaves the version's
+// precedence alone, and the opencode.ai free tier accepts it.
+function gitCommit(): string | undefined {
+  try {
+    const out = spawnSync("git", ["rev-parse", "--short=9", "HEAD"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+    if (out.status !== 0) return undefined
+    return out.stdout.trim() || undefined
+  } catch {
+    return undefined
+  }
+}
+
 const [floorMajor, floorMinor] = MINIMUM_ANNOUNCED_VERSION.split(".").map(Number)
 
 const version = (() => {
   if (typeof OPENCODE_VERSION === "string" && OPENCODE_VERSION !== "undefined") return OPENCODE_VERSION
-  const tag = gitTagVersion()
-  if (tag) {
-    const [major, minor] = tag.split(".").map(Number)
-    if (major > floorMajor || (major === floorMajor && minor >= floorMinor)) return tag
-  }
-  return FALLBACK_VERSION
+  const release = releaseVersion()
+  const commit = gitCommit()
+  return commit ? `${release}+${commit}` : release
 })()
+
+function releaseVersion() {
+  const tag = gitTagVersion()
+  if (!tag) return FALLBACK_VERSION
+  const [major, minor] = tag.split(".").map(Number)
+  if (major > floorMajor || (major === floorMajor && minor >= floorMinor)) return tag
+  return FALLBACK_VERSION
+}
+
 const channel = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
 const artifact = typeof OPENCODE_ARTIFACT === "string" ? OPENCODE_ARTIFACT : "cli"
 
