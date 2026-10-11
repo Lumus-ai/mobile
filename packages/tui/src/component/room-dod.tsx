@@ -39,12 +39,20 @@ export function RoomDodRows(props: {
   const [open, setOpen] = createSignal(false)
   const [armed, setArmed] = createSignal<string>()
   const [events, setEvents] = createSignal<readonly RoomEvent[]>([])
-  // A gone host or a broken file lists nothing; the room view and the file's own tools say why.
+  // Why the last read failed, and when one last succeeded. A failed read keeps the items
+  // already shown and says so: an empty list stays reserved for a project without a DoD,
+  // never for a host that is gone or a file that does not parse.
+  const [failure, setFailure] = createSignal<string>()
+  const [loadedAt, setLoadedAt] = createSignal<number>()
   const read = () =>
     void props
       .load()
-      .then((dod) => setItems(dod.items))
-      .catch(() => setItems([]))
+      .then((dod) => {
+        setItems(dod.items)
+        setFailure()
+        setLoadedAt(Date.now())
+      })
+      .catch((error: unknown) => setFailure(errorMessage(error)))
   onMount(() => {
     read()
     // Leases run out without an event, so the list still refreshes now and then.
@@ -110,7 +118,21 @@ export function RoomDodRows(props: {
   const actionId = (item: RoomDodItem) => `${props.id}:dod:${item.id}`
 
   return (
-    <Show when={items().length > 0}>
+    <Show when={items().length > 0 || failure()}>
+      <Show when={failure()}>
+        {(reason) => (
+          <box paddingLeft={6}>
+            <text fg={theme.text.feedback.error.base} wrapMode="word">
+              {loadedAt()
+                ? t("DoD not updated since {time}: {reason}", {
+                    time: new Date(loadedAt()!).toLocaleTimeString(),
+                    reason: reason(),
+                  })
+                : t("DoD could not be read: {reason}", { reason: reason() })}
+            </text>
+          </box>
+        )}
+      </Show>
       <Row id={`${props.id}:dod`} hover={props.hover} setHover={props.setHover} onClick={() => setOpen(!open())}>
         <text flexShrink={0} fg={theme.text.muted}>
           {open() ? "    ▾ " : "    ▸ "}
