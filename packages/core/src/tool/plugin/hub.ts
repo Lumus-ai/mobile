@@ -291,8 +291,9 @@ export const Plugin = {
               if (!input.id) return yield* failure("Pass an entry id, or use list/query to discover one")
               const entry = Hub.get(input.id)
               if (!entry) return yield* failure(unknownEntry(input.id))
-              // The operator's terminal choice applies unless the model asks for one explicitly.
-              const preferred = input.backend ?? (yield* Effect.promise(() => Hub.read())).terminal
+              // The operator's terminal choice wins over the model's: models ask for bash from
+              // habit, and running it there undoes the operator picking nu or pwsh.
+              const preferred = (yield* Effect.promise(() => Hub.read())).terminal ?? input.backend
               let rendered: Hub.Rendered
               try {
                 rendered = Hub.prepare(

@@ -750,11 +750,15 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           const joined = yield* guestWho(ctx.params.roomID, "member")
           if (joined.room.directory === undefined)
             return yield* new InvalidRequestError({ message: "This room shares one session; the host starts others" })
+          // A guest's new session runs on the room session's model, the one the host picked; left
+          // unset it would fall to the first model in the host's catalog.
+          const shared = yield* sessions.get(joined.room.sessionID).pipe(Effect.option)
           return {
             data: yield* sessions
               .create({
                 title: ctx.payload.title?.trim() || undefined,
                 location: { directory: AbsolutePath.make(joined.room.directory) },
+                model: Option.getOrUndefined(shared)?.model,
               })
               .pipe(Effect.orDie),
           }

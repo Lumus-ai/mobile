@@ -7108,7 +7108,10 @@ export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
-export type ConfigUpdateInput = { readonly shell: { readonly shell: string | null }["shell"] }
+export type ConfigUpdateInput = {
+  readonly shell?: { readonly shell?: string | null; readonly model?: string | null }["shell"]
+  readonly model?: { readonly shell?: string | null; readonly model?: string | null }["model"]
+}
 
 export type ConfigUpdateOutput = void
 

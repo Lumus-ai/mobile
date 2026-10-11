@@ -6,6 +6,7 @@ import { hostname } from "node:os"
 import { useConfig } from "../config"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
+import { useLocal } from "../context/local"
 import { useProjects } from "../context/projects"
 import { Orchestra } from "@opencode/schema/orchestra"
 import { Keymap } from "../context/keymap"
@@ -27,6 +28,7 @@ export function DialogHost(props: { onClose?: () => void }) {
   const client = useClient()
   const data = useData()
   const projects = useProjects()
+  const local = useLocal()
   const route = useRoute()
   const theme = useTheme().surface("dialog")
   const toast = useToast()
@@ -88,6 +90,14 @@ export function DialogHost(props: { onClose?: () => void }) {
     if (!id) return
     const target = whole ? project() : undefined
     void run(async () => {
+      // Guests prompt the session as it is stored. One that never ran has no model yet and
+      // would run on the first model of the host's catalog, not the one picked here.
+      const selected = local.model.current()
+      if (!data.session.get(id)?.model && selected)
+        await client.api.session.switchModel({
+          sessionID: id,
+          model: { providerID: selected.providerID, id: selected.modelID, variant: local.model.variant.current() },
+        })
       const room = await client.api.room.create({
         sessionID: id,
         name: target?.name ?? (data.session.get(id)?.title || undefined),

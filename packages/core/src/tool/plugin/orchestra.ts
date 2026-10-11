@@ -3,7 +3,7 @@ export * as OrchestraTool from "./orchestra.js"
 import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Orchestra } from "../../orchestra.js"
 import { AbsolutePath } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -29,7 +29,7 @@ export const Input = Schema.Struct({
   }),
   title: Schema.optionalKey(Schema.String).annotate({ description: "Title of the session to create" }),
   role: Schema.optionalKey(Schema.String).annotate({
-    description: "Role id of the session to create; one of the roles listed with your team",
+    description: "Role id of the session to create, required; one of the roles listed with your team",
   }),
   category: Schema.optionalKey(Schema.String).annotate({
     description: "Category of the session to create, e.g. Planning, Build or Quality",
@@ -157,10 +157,15 @@ export const Plugin = {
                 case "create": {
                   const roles = yield* orchestra.roles()
                   const role = roles.find((item) => item.id === input.role)
-                  if (input.role && !role)
+                  // A role is required: without one the session runs the default agent under
+                  // whatever title the model invents ("Architect"), a member the roster never had.
+                  if (!role)
                     return yield* new ToolFailure({
-                      message: `Unknown role ${input.role}. Roles: ${roles.map((role) => role.id).join(", ")}`,
+                      message: `${input.role ? `Unknown role ${input.role}` : "Pass a role"}. Roles: ${roles.map((role) => role.id).join(", ")}`,
                     })
+                  // A role without its own model runs on the orchestrator's, the one the operator picked,
+                  // rather than the server's first catalog model.
+                  const main = yield* sessions.get(context.sessionID).pipe(Effect.option)
                   // Claimed first, so the new member never shows up in another project's team.
                   const id = SessionSchema.ID.create()
                   yield* orchestra.claim(id, project.id).pipe(Effect.orDie)
@@ -169,8 +174,8 @@ export const Plugin = {
                       id,
                       location: { directory: AbsolutePath.make(project.directory) },
                       title: input.title?.trim() || undefined,
-                      agent: role?.agent,
-                      model: Orchestra.modelOf(role),
+                      agent: role.agent,
+                      model: Orchestra.modelOf(role) ?? Option.getOrUndefined(main)?.model,
                     })
                     .pipe(Effect.mapError((error) => new ToolFailure({ message: "Could not create a session", error })))
                   yield* orchestra.setAccess(created.id, "full")

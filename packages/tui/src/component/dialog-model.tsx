@@ -10,7 +10,13 @@ import { useData } from "../context/data"
 import { modelPreferenceKey } from "../model-preference"
 import { useLocation } from "../context/location"
 
-export function DialogModel(props: { providerID?: string }) {
+// With onPick the choice goes to the caller (the global default model) instead of the
+// current session's selection.
+export function DialogModel(props: {
+  providerID?: string
+  title?: string
+  onPick?: (model: { providerID: string; modelID: string }) => void
+}) {
   const local = useLocal()
   const data = useData()
   const dialog = useDialog()
@@ -119,11 +125,16 @@ export function DialogModel(props: { providerID?: string }) {
 
   const title = createMemo(() => {
     const value = provider()
-    if (!value) return "Select model"
+    if (!value) return props.title ?? "Select model"
     return value.name
   })
 
   function onSelect(providerID: string, modelID: string) {
+    if (props.onPick) {
+      dialog.clear()
+      props.onPick({ providerID, modelID })
+      return
+    }
     local.model.set({ providerID, modelID }, { recent: true })
     const list = local.model.variant.list()
     const cur = local.model.variant.current()
@@ -149,7 +160,9 @@ export function DialogModel(props: { providerID?: string }) {
           onTrigger() {
             dialog.replace(() => (
               <DialogIntegration
-                onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)}
+                onConnected={(providerID) =>
+                  dialog.replace(() => <DialogModel providerID={providerID} title={props.title} onPick={props.onPick} />)
+                }
               />
             ))
           },

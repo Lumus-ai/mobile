@@ -25,7 +25,6 @@ import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
 import { rewrite as hubRewrite } from "../../hub/match.js"
 import { HubHost } from "../../hub/host.js"
-import { which } from "../../util/which.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -47,7 +46,7 @@ const description = (shell?: string) =>
     ...(shell === "nu"
       ? [
           "Write Nushell syntax, not POSIX: `;` or `and` instead of `&&`, `$env.NAME` instead of `$NAME`, `| save file` instead of `> file`, `^cmd` to force an external program.",
-          "A command that is not valid Nushell runs in bash instead, so a POSIX command still works the first time; the result says so.",
+          "A command that is not valid Nushell is rejected before it runs, with the parser's reason; rewrite it in Nushell.",
         ]
       : []),
     "Quote file paths containing spaces or special characters.",
@@ -225,9 +224,12 @@ export const Plugin = {
             Effect.gen(function* () {
               const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
               let finalTimeout = timeout
-              const configured = yield* compatibleShell
-              const posix = yield* posixFallback(processes, configured, input.command)
-              const shellPath = posix?.shell ?? configured
+              const shellPath = yield* compatibleShell
+              const invalid = yield* nushellError(processes, shellPath, input.command)
+              if (invalid)
+                return yield* new ToolFailure({
+                  message: `Not valid Nushell: ${invalid}. The configured shell is nu; rewrite the command in Nushell syntax.`,
+                })
               const used = ShellSelect.name(shellPath)
               const info = yield* shell.create(
                 {
@@ -258,7 +260,7 @@ export const Plugin = {
                   : output.output
                 return {
                   ...output,
-                  output: posix ? `(Ran in bash: not valid Nushell — ${posix.reason})\n${ran}` : ran,
+                  output: ran,
                   status: "completed" as const,
                   shell: used,
                 }
@@ -324,13 +326,12 @@ export const Plugin = {
 }
 
 // Models write POSIX shell from habit. Nushell parses a whole command before running any of
-// it, so a command it rejects has done nothing yet and runs unchanged in bash: the call works
-// the first time instead of costing a step on a parser error. Any failure to check keeps nu.
-const posixFallback = (processes: AppProcess.Interface, shell: string, command: string) =>
+// it, so a command it rejects is turned back with the parser's reason before anything runs.
+// It never falls back to another shell: the operator chose nu, and on Windows the bash a
+// fallback finds is often missing or broken. Any failure to check keeps the command in nu.
+const nushellError = (processes: AppProcess.Interface, shell: string, command: string) =>
   Effect.gen(function* () {
     if (ShellSelect.name(shell) !== "nu") return undefined
-    const bash = which("bash")
-    if (!bash) return undefined
     // nu reads the source to check from a file; spawned stdin is not one it can open.
     const file = yield* Effect.acquireRelease(
       Effect.promise(async () => {
@@ -344,12 +345,11 @@ const posixFallback = (processes: AppProcess.Interface, shell: string, command: 
       ChildProcess.make(shell, ["--no-config-file", "--ide-check", "5", file], { extendEnv: true, stdin: "ignore" }),
       { timeout: "5 seconds" },
     )
-    const reason = result.stdout
+    return result.stdout
       .toString("utf8")
       .split("\n")
       .flatMap((line) => Option.toArray(decodeDiagnostic(line)))
       .find((diagnostic) => diagnostic.severity === "Error")?.message
-    return reason ? { shell: bash, reason } : undefined
   }).pipe(Effect.scoped, Effect.orElseSucceed(() => undefined))
 
 const decodeDiagnostic = Schema.decodeUnknownOption(

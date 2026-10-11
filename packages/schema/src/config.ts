@@ -109,8 +109,12 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   experimental: ConfigExperimental.Info.pipe(optional),
 }) {}
 
+// Each key present is written to the global config; null removes it, an absent key is left alone.
 export const Patch = Schema.Struct({
-  shell: Schema.NullOr(Schema.String),
+  shell: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  model: Schema.optionalKey(Schema.NullOr(Schema.String)).annotate({
+    description: "Default model for new sessions, as provider/model",
+  }),
 }).annotate({ identifier: "Config.Patch" })
 export interface Patch extends Schema.Schema.Type<typeof Patch> {}
 

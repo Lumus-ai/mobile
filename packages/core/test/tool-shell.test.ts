@@ -1426,8 +1426,8 @@ describe("ShellTool", () => {
     )
   }
 
-  const nushell = isWindows || !Bun.which("nu") || !Bun.which("bash") ? it.live.skip : it.live
-  nushell("runs a command Nushell rejects in bash and keeps valid Nushell in nu", () =>
+  const nushell = isWindows || !Bun.which("nu") ? it.live.skip : it.live
+  nushell("rejects a command Nushell cannot parse and keeps valid Nushell in nu", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -1437,11 +1437,9 @@ describe("ShellTool", () => {
             const selection = yield* ShellSelect.Service
             yield* selection.transform((editor) => editor.configure("nu"))
             const posix = yield* executeTool(registry, call({ command: "echo one && echo two" }, "call-nu-posix"))
-            expect(posix.status).toBe("completed")
-            expect(posix.metadata).toMatchObject({ exit: 0, shell: "bash" })
-            expect(posix.content?.[0]).toEqual({
-              type: "text",
-              text: "(Ran in bash: not valid Nushell — The '&&' operator is not supported in Nushell)\none\ntwo\n",
+            expect(posix).toMatchObject({
+              status: "error",
+              error: { message: expect.stringContaining("Not valid Nushell: The '&&' operator is not supported") },
             })
             const native = yield* executeTool(registry, call({ command: "[1 2 3] | length" }, "call-nu-native"))
             expect(native.metadata).toMatchObject({ exit: 0, shell: "nu" })

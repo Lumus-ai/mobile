@@ -896,6 +896,30 @@ function App() {
         },
       },
       {
+        name: "model.default",
+        title: "Set default model",
+        category: "Agent",
+        slash: { name: "default-model", aliases: ["default"] },
+        run: () => {
+          dialog.replace(() => (
+            <DialogModel
+              title="Default model for new sessions"
+              onPick={(model) =>
+                void client.api.config
+                  .update({ model: `${model.providerID}/${model.modelID}` })
+                  .then(() =>
+                    toast.show({
+                      variant: "success",
+                      message: `Default model: ${model.providerID}/${model.modelID}`,
+                    }),
+                  )
+                  .catch(toast.error)
+              }
+            />
+          ))
+        },
+      },
+      {
         name: "model.cycle_recent",
         title: "Model cycle",
         category: "Agent",

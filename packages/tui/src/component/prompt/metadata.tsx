@@ -40,15 +40,23 @@ export function PromptMetadataRow(props: {
         fallback={<box height={1} />}
       >
         <Show when={layout().agent}>
-          {(agent) => <text fg={fade(props.highlight, props.agentAlpha)}>{agent()}</text>}
+          {(agent) => (
+            <text flexShrink={0} wrapMode="none" fg={fade(props.highlight, props.agentAlpha)}>
+              {agent()}
+            </text>
+          )}
         </Show>
         <Show when={props.mode === "normal" && layout().auto}>
-          <text fg={fade(theme.text.muted, props.agentAlpha)}>auto</text>
+          <text flexShrink={0} wrapMode="none" fg={fade(theme.text.muted, props.agentAlpha)}>
+            auto
+          </text>
         </Show>
         <Show when={props.mode === "normal" && layout().model}>
           <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
             <Show when={layout().agent}>
-              <text fg={fade(theme.text.muted, props.modelAlpha)}>·</text>
+              <text flexShrink={0} wrapMode="none" fg={fade(theme.text.muted, props.modelAlpha)}>
+                ·
+              </text>
             </Show>
             <text
               flexShrink={1}
@@ -61,7 +69,7 @@ export function PromptMetadataRow(props: {
             </text>
             <Show when={layout().provider}>
               {(provider) => (
-                <text flexShrink={0} fg={fade(theme.text.muted, props.modelAlpha)}>
+                <text flexShrink={1} minWidth={0} wrapMode="none" truncate fg={fade(theme.text.muted, props.modelAlpha)}>
                   {provider()}
                 </text>
               )}
@@ -69,8 +77,12 @@ export function PromptMetadataRow(props: {
             <Show when={layout().variant}>
               {(variant) => (
                 <>
-                  <text fg={fade(theme.text.muted, props.variantAlpha)}>·</text>
+                  <text flexShrink={0} wrapMode="none" fg={fade(theme.text.muted, props.variantAlpha)}>
+                    ·
+                  </text>
                   <text
+                    flexShrink={0}
+                    wrapMode="none"
                     fg={fade(theme.text.feedback.warning.base, props.variantAlpha)}
                     attributes={TextAttributes.BOLD}
                   >
