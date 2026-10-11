@@ -29,7 +29,7 @@ export const Input = Schema.Struct({
   }),
   title: Schema.optionalKey(Schema.String).annotate({ description: "Title of the session to create" }),
   role: Schema.optionalKey(Schema.String).annotate({
-    description: "Role id of the session to create, e.g. architect, developer, tester, reviewer",
+    description: "Role id of the session to create; one of the roles listed with your team",
   }),
   category: Schema.optionalKey(Schema.String).annotate({
     description: "Category of the session to create, e.g. Planning, Build or Quality",
@@ -70,13 +70,20 @@ export const Plugin = {
     })
 
     // The team as the orchestrator may see it, grouped by category in first-seen order.
+    // A session's role is named by its role id, the one action create takes, not its agent id.
     const team = Effect.fnUntraced(function* (project: Orchestra.Project) {
       const members = yield* orchestra.sessions(project.id).pipe(Effect.orDie)
       const access = yield* orchestra.accessMany(members.map((session) => session.id))
       const categories = yield* orchestra.categories(members.map((session) => session.id))
+      const roles = yield* orchestra.roles()
       return members
         .filter((session) => access[session.id] !== "hidden")
-        .map((session) => ({ session, access: access[session.id], category: categories[session.id] ?? "Other" }))
+        .map((session) => ({
+          session,
+          access: access[session.id],
+          category: categories[session.id] ?? "Other",
+          role: roles.find((role) => role.agent === session.agent)?.id ?? session.agent ?? "default",
+        }))
     })
 
     const grouped = <T extends { category: string }>(rows: ReadonlyArray<T>, line: (row: T) => string) =>
@@ -99,7 +106,7 @@ export const Plugin = {
         (row) =>
           [
             `${row.session.title ?? "(untitled)"} ${row.session.id}`,
-            `role ${row.session.agent ?? "default"}`,
+            `role ${row.role}`,
             active.has(row.session.id) ? "running" : "idle",
             `access ${row.access}`,
             ...(row.sent === undefined
@@ -207,17 +214,24 @@ export const Plugin = {
         const project = yield* orchestra.mainOf(event.sessionID)
         if (!project) return
         const rows = yield* team(project)
+        const roles = yield* orchestra.roles()
         event.system.push({
           type: "text",
           text: [
             `# Your team — project "${project.name}" (${project.directory})`,
             rows.length === 0
-              ? "No team sessions yet. Create them with the sessions tool, action create."
-              : grouped(
-                  rows,
-                  (row) =>
-                    `${row.session.title ?? "(untitled)"} ${row.session.id} · role ${row.session.agent ?? "default"} · access ${row.access}`,
-                ),
+              ? "The team has no sessions yet. No session exists until you create it with the sessions tool, action create."
+              : [
+                  "These are all the sessions of the team; no other session exists. Name and address them only by these titles and IDs.",
+                  grouped(
+                    rows,
+                    (row) =>
+                      `${row.session.title ?? "(untitled)"} ${row.session.id} · role ${row.role} · access ${row.access}`,
+                  ),
+                ].join("\n"),
+            "",
+            "Roles you can create a session with (action create, role id):",
+            ...roles.map((role) => `- ${role.id} (${role.name}, ${role.category}): ${role.description}`),
           ].join("\n"),
         })
       }),
