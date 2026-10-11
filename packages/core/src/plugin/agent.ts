@@ -163,10 +163,16 @@ export const Plugin = define({
         item.mode = "primary"
         // A note's chat runs it; it is never offered in agent pickers.
         item.hidden = true
+        // The opencode.ai free tier answers 403 "can only be used from within OpenCode" to a
+        // request whose tool list lacks either `read` or `shell`, so a deny-all would cut the
+        // note's chat off from every free model. `read` stays open, being read-only; `shell`
+        // stays listed but asks before each call.
         item.permissions.push(
           { action: "*", resource: "*", effect: "deny" },
           { action: "note", resource: "*", effect: "allow" },
           { action: "question", resource: "*", effect: "allow" },
+          { action: "read", resource: "*", effect: "allow" },
+          { action: "shell", resource: "*", effect: "ask" },
         )
       })
 
