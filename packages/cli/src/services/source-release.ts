@@ -38,8 +38,10 @@ export async function latest(root = checkout) {
 
 // Moves the checkout to a release and installs its dependencies.
 export async function apply(release: string, root = checkout) {
-  await $`git -C ${root} fetch --tags --force origin`.quiet()
-  await $`git -C ${root} checkout --detach ${PREFIX + release}`.quiet()
+  // Without --force a release tag that moved on origin fails the fetch instead of
+  // silently replacing the code this checkout already trusts.
+  await $`git -C ${root} fetch --tags origin`.quiet()
+  await $`git -C ${root} checkout --detach ${"refs/tags/" + PREFIX + release}`.quiet()
   // The running Bun, so the update works even when bun is not on PATH.
   // Only what the terminal app needs, as the installer does.
   await $`${process.execPath} install --frozen-lockfile --filter ./packages/cli`.cwd(root).quiet()

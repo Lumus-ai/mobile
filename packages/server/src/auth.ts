@@ -33,7 +33,7 @@ export function required(config: Info) {
 export function authorized(credentials: DecodedCredentials, config: Info) {
   if (Option.isNone(config.password) || credentials.username !== config.username) return false
   const password = Redacted.value(credentials.password)
-  return password === config.password.value || verifySession(password, config)
+  return equal(password, config.password.value) || verifySession(password, config)
 }
 
 // Sessions are signed with a key derived from the server password, so rotating the password revokes every session.
@@ -63,4 +63,11 @@ export function sessionCookieName(host: string | undefined) {
 function sign(password: string, payload: string) {
   const key = createHmac("sha256", password).update("opencode-session-v1").digest()
   return createHmac("sha256", key).update(payload).digest("base64url")
+}
+
+// Constant time, so response timing does not reveal how much of a guessed password matched.
+function equal(actual: string, expected: string) {
+  const a = Buffer.from(actual)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
 }

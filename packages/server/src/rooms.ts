@@ -7,7 +7,7 @@ import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import type { ServerAuth } from "./auth"
 
 // Join codes stay valid until they expire so several devices can join with the
-// one code the host reads out; the host issues a new code to stop admissions.
+// one code the host reads out; a new code replaces the room's previous one.
 const CODE_TTL = Duration.minutes(10)
 // Unambiguous characters only, so a code read aloud or typed on a phone survives.
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -36,6 +36,8 @@ export const LEASE_MS = 30 * 60_000
 // The events a room keeps; older ones fall off the front.
 const FEED_LIMIT = 200
 export const FEED_WAIT_MS = 25_000
+// Readers one room may hold waiting at once; past it, a read answers at once instead of waiting.
+const FEED_WAITERS = 100
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ServerRooms") {}
 
@@ -45,6 +47,8 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const codes = yield* Cache.make<string, Room.ID>({ capacity: 1_000, lookup: noLookup, timeToLive: CODE_TTL })
+    // Each room's newest code, so a new code retires the one before it.
+    const issued = new Map<Room.ID, string>()
     const presence = new Map<string, number>()
     const feeds = new Map<Room.ID, Room.Event[]>()
     const waiters = new Map<Room.ID, Set<() => void>>()
@@ -64,7 +68,8 @@ const layer = Layer.effect(
         // A reader whose cursor is past the end saw a feed from before a restart; it starts over.
         const last = feeds.get(roomID)?.at(-1)?.seq ?? 0
         const from = seq > last ? 0 : seq
-        if (after(roomID, from).length > 0 || !wait) return { events: after(roomID, from) }
+        if (after(roomID, from).length > 0 || !wait || (waiters.get(roomID)?.size ?? 0) >= FEED_WAITERS)
+          return { events: after(roomID, from) }
         yield* Effect.callback<void>((resume) => {
           const forget = () => {
             clearTimeout(timer)
@@ -82,6 +87,9 @@ const layer = Layer.effect(
       }),
       issueCode: Effect.fn("ServerRooms.issueCode")(function* (roomID) {
         const code = Array.from({ length: CODE_LENGTH }, () => ALPHABET[randomInt(ALPHABET.length)]).join("")
+        const previous = issued.get(roomID)
+        if (previous !== undefined) yield* Cache.invalidate(codes, previous)
+        issued.set(roomID, code)
         yield* Cache.set(codes, code, roomID)
         return { code: `${code.slice(0, 4)}-${code.slice(4)}`, expires_in: Duration.toSeconds(CODE_TTL) }
       }),

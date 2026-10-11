@@ -180,6 +180,16 @@ it.live("a join code admits a guest whose token opens only that room", () =>
     expect((yield* call(`/api/room/${other.id}/guest`, { headers: guest })).status).toBe(401)
     // without a token the guest routes refuse as well
     expect((yield* call(`/api/room/${room.id}/guest`)).status).toBe(401)
+
+    // a name reaches the host's terminal and notes, so control characters stay out of it
+    const escape = yield* call("/api/room/join", { method: "POST", body: { code, name: "Eve\u001b[2J" } })
+    expect(escape.status).toBe(400)
+    expect((yield* call("/api/room/join", { method: "POST", body: { code, name: "Eve\nhost" } })).status).toBe(400)
+
+    // a new code retires the one before it
+    const next = (yield* call(`/api/room/${room.id}/code`, { method: "POST", headers: host })).body.code as string
+    expect((yield* call("/api/room/join", { method: "POST", body: { code, name: "Late" } })).status).toBe(401)
+    expect((yield* call("/api/room/join", { method: "POST", body: { code: next, name: "Late" } })).status).toBe(200)
   }).pipe(Effect.scoped),
 )
 
@@ -219,6 +229,14 @@ it.live("an open room admits guests by its ID without a code; a closed one does 
       headers: { authorization: `Bearer ${joined.body.token}` },
     })
     expect(view.status).toBe(200)
+
+    // anyone on the network may enter an open room, so only a code earns more than member
+    yield* call(`/api/room/${room.id}`, { method: "PATCH", headers: host, body: { defaultRole: "cohost" } })
+    const open = yield* call("/api/room/join", { method: "POST", body: { roomID: room.id, name: "Stranger" } })
+    expect(open.body.role).toBe("member")
+    const code = (yield* call(`/api/room/${room.id}/code`, { method: "POST", headers: host })).body.code as string
+    const invited = yield* call("/api/room/join", { method: "POST", body: { code, name: "Friend" } })
+    expect(invited.body.role).toBe("cohost")
   }).pipe(Effect.scoped),
 )
 
@@ -509,6 +527,10 @@ it.live("a guest who leaves drops out of the host's members and its token stops 
 
 it.live("a guest reads the host's passport, and a cohost runs a command once the host allows it", () =>
   Effect.gen(function* () {
+    yield* Effect.acquireRelease(
+      Effect.sync(() => (process.env.ROOM_TEST_API_KEY = "host-only")),
+      () => Effect.sync(() => delete process.env.ROOM_TEST_API_KEY),
+    )
     const { call, directory } = yield* setup
     // a session with an agent, as people use them, so its permission rules ask the host
     const session = (yield* call("/api/session", {
@@ -534,7 +556,7 @@ it.live("a guest reads the host's passport, and a cohost runs a command once the
       call(`/api/room/${room.id}/guest/run`, {
         method: "POST",
         headers: guest,
-        body: { command: "echo from-the-host" },
+        body: { command: "echo from-the-host; env" },
       })
     expect((yield* run()).status).toBe(403)
     yield* call(`/api/room/${room.id}/member/${joined.guest.id}`, {
@@ -553,6 +575,13 @@ it.live("a guest reads the host's passport, and a cohost runs a command once the
       Effect.map((requests) => requests[0]),
     )
     expect(request.action).toBe("room.run")
+    // the cohost sees its request but only the host answers it
+    const self = yield* call(`/api/room/${room.id}/guest/permission/${request.id}/reply`, {
+      method: "POST",
+      headers: guest,
+      body: { decision: "once", sessionID: session.id },
+    })
+    expect(self.status).toBe(403)
     yield* call(`/api/session/${session.id}/permission/${request.id}/reply`, {
       method: "POST",
       headers: host,
@@ -562,6 +591,8 @@ it.live("a guest reads the host's passport, and a cohost runs a command once the
     expect(result.status).toBe(200)
     expect(result.body.exitCode).toBe(0)
     expect(result.body.output).toContain("from-the-host")
+    // the output goes to the guest, so the host's keys are not in the command's environment
+    expect(result.body.output).not.toContain("ROOM_TEST_API_KEY")
   }).pipe(Effect.scoped),
 )
 
@@ -646,7 +677,7 @@ it.live("guests share the host project's DoD: one takes an item with a plot, the
 
 it.live("a guest takes the next ready item, hands it over, and the host's check decides it", () =>
   Effect.gen(function* () {
-    const { call, room, code, directory } = yield* setup
+    const { call, session, room, code, directory } = yield* setup
     yield* Effect.promise(() =>
       Bun.write(
         path.join(directory, ".opencode", "dod.yaml"),
@@ -677,8 +708,28 @@ it.live("a guest takes the next ready item, hands it over, and the host's check 
     const boHeaders = { authorization: `Bearer ${bo.token}` }
     const claim = (headers: Record<string, string>, body: Record<string, unknown>) =>
       call(`/api/room/${room.id}/guest/dod`, { method: "POST", headers, body })
-    const submit = (headers: Record<string, string>, body: Record<string, unknown>) =>
+    const send = (headers: Record<string, string>, body: Record<string, unknown>) =>
       call(`/api/room/${room.id}/guest/dod/submit`, { method: "POST", headers, body })
+    // dod.yaml can change under the host, so its check runs only once the host allows it
+    const submit = (headers: Record<string, string>, body: Record<string, unknown>, decision?: string) =>
+      Effect.gen(function* () {
+        const pending = yield* send(headers, body).pipe(Effect.forkScoped)
+        if (decision === undefined) return yield* Fiber.join(pending)
+        const request = yield* call(`/api/session/${session.id}/permission`, { headers: host }).pipe(
+          Effect.map((response) => response.body.data as { id: string; action: string }[]),
+          Effect.filterOrFail((requests) => requests.length > 0),
+          Effect.retry(Schedule.spaced("20 millis")),
+          Effect.timeout("5 seconds"),
+          Effect.map((requests) => requests[0]),
+        )
+        expect(request.action).toBe("room.check")
+        yield* call(`/api/session/${session.id}/permission/${request.id}/reply`, {
+          method: "POST",
+          headers: host,
+          body: { decision },
+        })
+        return yield* Fiber.join(pending)
+      })
 
     // L-002 waits for L-001, so next hands out L-001 and nothing to the second guest
     expect((yield* claim(boHeaders, { id: "L-002", take: true })).body.message).toBe("L-002 waits for L-001")
@@ -694,7 +745,11 @@ it.live("a guest takes the next ready item, hands it over, and the host's check 
     expect((yield* submit(boHeaders, { id: "L-001" })).body.message).toBe(
       "Take L-001 before submitting it; only its holder submits",
     )
-    const failed = yield* submit(alexHeaders, { id: "L-001", handover: "Parser stub is in, the file is not yet." })
+    const failed = yield* submit(
+      alexHeaders,
+      { id: "L-001", handover: "Parser stub is in, the file is not yet." },
+      "always",
+    )
     expect(failed.body.check.exitCode).not.toBe(0)
     expect(failed.body.items[0].state).toBe("FAILED")
 
@@ -706,6 +761,7 @@ it.live("a guest takes the next ready item, hands it over, and the host's check 
     expect(handed.body.note.text).toContain("Parser stub is in, the file is not yet.")
 
     yield* Effect.promise(() => Bun.write(path.join(directory, "parser.txt"), "done"))
+    // "always" remembered this exact check, so it runs without asking again
     const passed = yield* submit(boHeaders, { id: "L-001" })
     expect(passed.body.check.exitCode).toBe(0)
     expect(passed.body.items[0].state).toBe("DONE")

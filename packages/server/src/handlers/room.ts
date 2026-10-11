@@ -66,6 +66,16 @@ const RANK: Record<Room.Role, number> = { viewer: 0, member: 1, helper: 2, cohos
 // Sessions a project room lists; enough for a shared project, bounded for a busy host.
 const SESSION_LIMIT = 200
 
+// Guests a room keeps; joining an open room needs no code, so a flood of joins stops here.
+const MEMBER_LIMIT = 100
+
+// Requests that run a command on the host for a guest. Only the host answers them, so a
+// cohost or helper cannot approve its own command.
+const HOST_ONLY = new Set(["room.run", "room.check"])
+
+// Control and format characters in a name would reach the host's terminal, notes and feed.
+const UNSAFE_NAME = /[\p{Cc}\p{Cf}\u2028\u2029]/u
+
 // Loopback is left out: tunnels such as Porthole deliver every guest from it, so a ban on it would ban them all.
 function remoteAddress(request: HttpServerRequest.HttpServerRequest) {
   const address = Option.getOrUndefined(request.remoteAddress)?.replace(/^::ffff:/, "")
@@ -302,6 +312,13 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           const name = ctx.payload.name.trim()
           if (name === "" || name.length > 64)
             return yield* new InvalidRequestError({ message: "Name must be 1 to 64 characters", field: "name" })
+          if (UNSAFE_NAME.test(name))
+            return yield* new InvalidRequestError({ message: "Name has characters that cannot be shown", field: "name" })
+          const address = remoteAddress(yield* HttpServerRequest.HttpServerRequest)
+          // Without a password every route is open to anyone who reaches the server, so it
+          // shares rooms only with this computer.
+          if (!ServerAuth.required(auth) && address !== undefined)
+            return yield* new UnauthorizedError({ message: "The host must set a server password to share rooms" })
           const code = ctx.payload.code?.trim()
           const roomID = code ? yield* codes.redeemCode(code) : ctx.payload.roomID
           // A code can outlive its room; both cases read the same to the guest.
@@ -311,14 +328,17 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
               message: code ? "Join code is wrong or expired" : "This room needs the join code its host shows",
             })
           const device = ctx.payload.device?.trim() || undefined
-          const address = remoteAddress(yield* HttpServerRequest.HttpServerRequest)
           if (Room.banned(yield* rooms.bans(room.id), { device, address }))
             return yield* new UnauthorizedError({ message: "The host banned you from this room" })
+          if ((yield* rooms.members(room.id)).length >= MEMBER_LIMIT)
+            return yield* new InvalidRequestError({ message: "This room is full" })
+          const role = Room.joinRole(room)
           const issued = ServerRooms.issueToken(auth, room.id, name)
           const member = yield* rooms.saveMember(room.id, {
             id: issued.guest.id,
             name,
-            role: Room.joinRole(room),
+            // Anyone on the network may enter an open room, so only a code earns more than member.
+            role: !code && RANK[role] > RANK.member ? "member" : role,
             device,
             address,
             joined: Date.now(),
@@ -488,6 +508,8 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             const permission = yield* Permission.Service
             const request = yield* permission.get(ctx.params.requestID)
             if (!request || request.sessionID !== session.id) return yield* missingRequest(ctx.params.requestID)
+            if (HOST_ONLY.has(request.action))
+              return yield* new ForbiddenError({ message: "Only the host answers this request" })
             yield* permission
               .reply({ requestID: ctx.params.requestID, reply: ctx.payload.decision, message: ctx.payload.message })
               .pipe(Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)))
@@ -646,8 +668,23 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           const id = ctx.payload.id.trim()
           const command = yield* Dod.command({ directory, id, owner }).pipe(Effect.mapError(invalidDod))
           if (ctx.payload.handover?.trim()) yield* writeHandover(joined.room, id, owner.name, ctx.payload.handover)
-          // The check is the host's own, from its own file, so it runs without asking: a member
-          // could already have the host's AI run the same command in the shared session.
+          // dod.yaml can change under the host (an edit by the AI, a pull), so the host approves
+          // each check command; "always" remembers that exact command.
+          const session = yield* inRoom(joined.room, undefined)
+          yield* Permission.Service.use((permission) =>
+            permission.confirm({
+              action: "room.check",
+              resources: [command],
+              save: [command],
+              metadata: { guest: joined.guest.name, command, item: id },
+              sessionID: session.id,
+            }),
+          ).pipe(
+            instances.provide(session),
+            locationErrors,
+            Effect.catchTag("LocationNotFoundError", Effect.die),
+            Effect.catch(() => Effect.fail(new ForbiddenError({ message: "The host did not allow this check" }))),
+          )
           const result = yield* Effect.tryPromise({
             try: (signal) => Passport.run(command, directory, signal),
             catch: (error) => new InvalidRequestError({ message: `Could not run the check: ${String(error)}` }),

@@ -13,7 +13,8 @@ export const respond = (httpPort: number) =>
     Effect.sync(() => {
       const socket = createSocket({ type: "udp4", reuseAddr: true })
       socket.on("message", (message, peer) => {
-        if (message.toString() !== QUERY) return
+        // Rooms are for the local network; a query from elsewhere, or a spoofed one, gets no answer.
+        if (message.toString() !== QUERY || !isPrivate(peer.address)) return
         socket.send(encodeReply({ name: hostname(), port: httpPort }), peer.port, peer.address)
       })
       socket.on("error", () => socket.close())
@@ -22,3 +23,8 @@ export const respond = (httpPort: number) =>
     }),
     (socket) => Effect.sync(() => socket.close()),
   )
+
+function isPrivate(address: string) {
+  const [a, b] = address.split(".").map(Number)
+  return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)
+}

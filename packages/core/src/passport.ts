@@ -38,7 +38,7 @@ export async function run(command: string, directory: string, signal?: AbortSign
     cwd: directory,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, [searchPath.key]: searchPath.value },
+    env: { ...guestEnv(), [searchPath.key]: searchPath.value },
   })
   const timer = setTimeout(() => child.kill(), RUN_TIMEOUT_MS)
   const stop = () => child.kill()
@@ -58,6 +58,13 @@ export async function run(command: string, directory: string, signal?: AbortSign
     output: output.length > OUTPUT_LIMIT ? output.slice(-OUTPUT_LIMIT) : output,
     ...(output.length > OUTPUT_LIMIT ? { cut: true } : {}),
   }
+}
+
+// The output goes back to a guest, so the host's keys and tokens stay out of the command's environment.
+const SECRET = /KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE|SESSION|PRIVATE/i
+
+function guestEnv() {
+  return Object.fromEntries(Object.entries(process.env).filter(([name]) => !SECRET.test(name)))
 }
 
 // Branch, commit and how many files are changed; absent outside a git checkout.
