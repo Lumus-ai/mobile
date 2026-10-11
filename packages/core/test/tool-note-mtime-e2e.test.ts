@@ -135,6 +135,36 @@ describe("note tool mtime end to end", () => {
     ),
   )
 
+  it.live("writes when the model sends the stamp as a string, and says what is wrong with one that is not a number", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const tools = yield* Tool.Service
+        const note = onDisk(directory, "plan")
+        yield* run(tools, "create-plan", { action: "create", name: "plan", title: "План", body: "строка" })
+        const stamp = onlyStamp(yield* run(tools, "read-plan", { action: "read", name: "plan" }))
+
+        const edited = yield* run(tools, "edit-string", {
+          action: "edit",
+          name: "plan",
+          body: "правка",
+          mode: "append",
+          expectedMtime: String(stamp),
+        })
+        expect(edited).toMatchObject({ status: "completed" })
+        expect(yield* readFile(note)).toContain("строка\nправка")
+
+        const garbled = yield* run(tools, "edit-garbled", {
+          action: "edit",
+          name: "plan",
+          body: "ещё",
+          expectedMtime: "updated",
+        })
+        expect(garbled).toMatchObject({ status: "error" })
+        expect(JSON.stringify(garbled)).toContain("expectedMtime must be the number")
+      }).pipe(Effect.provide(harness(directory))),
+    ),
+  )
+
   it.live("writes with the printed stamp when the frontmatter timestamp is a millisecond off the real mtime", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {

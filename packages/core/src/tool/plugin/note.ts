@@ -35,9 +35,11 @@ export const Input = Schema.Struct({
       description: "How much to write into the note from its own chat: brief, balanced or detailed",
     }),
   ),
+  // Models often send the stamp as a JSON string ("1791730573129"); refusing it made every
+  // write fail validation and the model retry the same call forever, so both forms are read.
   expectedMtime: optional(
-    Schema.Number.annotate({
-      description: "File mtime in epoch ms from an earlier read; required by edit and update",
+    Schema.Union([Schema.Number, Schema.String]).annotate({
+      description: "File mtime in epoch ms from an earlier read, as a number; required by edit and update",
     }),
   ),
 })
@@ -211,10 +213,18 @@ const needName = (input: Input) =>
     : Effect.succeed(input.name)
 
 /** The store refuses a write it did not read, so the caller has to hand back what it saw. */
-const needStamp = (input: Input) =>
-  input.expectedMtime === undefined
-    ? Effect.fail(new ToolFailure({ message: `note ${input.action} needs expectedMtime from an earlier read` }))
-    : Effect.succeed(input.expectedMtime)
+const needStamp = (input: Input) => {
+  if (input.expectedMtime === undefined)
+    return Effect.fail(new ToolFailure({ message: `note ${input.action} needs expectedMtime from an earlier read` }))
+  const stamp = Number(input.expectedMtime)
+  if (!Number.isFinite(stamp))
+    return Effect.fail(
+      new ToolFailure({
+        message: `expectedMtime must be the number from the "updated" value of a read, got ${JSON.stringify(input.expectedMtime)}`,
+      }),
+    )
+  return Effect.succeed(stamp)
+}
 
 /**
  * The reported `updated` is the file mtime, because that is the value the store
