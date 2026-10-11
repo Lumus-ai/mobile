@@ -147,3 +147,25 @@ export const RunResult = Schema.Struct({
   cut: Schema.Boolean.pipe(Schema.optional),
 }).annotate({ identifier: "Room.RunResult" })
 export interface RunResult extends Schema.Schema.Type<typeof RunResult> {}
+
+// One item of the shared project's Definition of Done (.opencode/dod.yaml) as a room shows
+// it. The DoD is the room's shared work queue: a guest or its AI takes a free item, the
+// host's file records who has it, and everyone in the room sees who does what.
+export const DodItem = Schema.Struct({
+  id: Schema.String,
+  what: Schema.String,
+  stage: Schema.String,
+  // The file's task_state: NOT_STARTED, IN_PROGRESS, BLOCKED, FAILED, DONE or OUT_OF_SCOPE.
+  state: Schema.String,
+  // Steps checked and steps in all.
+  done: Schema.Number,
+  total: Schema.Number,
+  // The guest who took the item; absent while it is free or the host's own.
+  owner: Schema.String.pipe(Schema.optional),
+}).annotate({ identifier: "Room.DodItem" })
+export interface DodItem extends Schema.Schema.Type<typeof DodItem> {}
+
+export const Dod = Schema.Struct({
+  items: Schema.Array(DodItem),
+}).annotate({ identifier: "Room.Dod" })
+export interface Dod extends Schema.Schema.Type<typeof Dod> {}

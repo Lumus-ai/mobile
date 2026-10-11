@@ -290,6 +290,10 @@ import type {
   RoomUpdateOutput,
   RoomRemoveInput,
   RoomRemoveOutput,
+  RoomDodGetInput,
+  RoomDodGetOutput,
+  RoomDodReleaseInput,
+  RoomDodReleaseOutput,
   RoomCodeInput,
   RoomCodeOutput,
   RoomPublicOutput,
@@ -308,6 +312,10 @@ import type {
   RoomGuestPassportOutput,
   RoomGuestRunInput,
   RoomGuestRunOutput,
+  RoomGuestDodGetInput,
+  RoomGuestDodGetOutput,
+  RoomGuestDodClaimInput,
+  RoomGuestDodClaimOutput,
   RoomGuestLeaveInput,
   RoomGuestLeaveOutput,
   RoomGuestSessionListInput,
@@ -2524,6 +2532,31 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      dod: {
+        get: (input: RoomDodGetInput, requestOptions?: RequestOptions) =>
+          request<RoomDodGetOutput>(
+            {
+              method: "GET",
+              path: `/api/room/${encodeURIComponent(input.roomID)}/dod`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        release: (input: RoomDodReleaseInput, requestOptions?: RequestOptions) =>
+          request<RoomDodReleaseOutput>(
+            {
+              method: "POST",
+              path: `/api/room/${encodeURIComponent(input.roomID)}/dod/release`,
+              body: { id: input["id"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       code: (input: RoomCodeInput, requestOptions?: RequestOptions) =>
         request<RoomCodeOutput>(
           {
@@ -2667,6 +2700,31 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        dod: {
+          get: (input: RoomGuestDodGetInput, requestOptions?: RequestOptions) =>
+            request<RoomGuestDodGetOutput>(
+              {
+                method: "GET",
+                path: `/api/room/${encodeURIComponent(input.roomID)}/guest/dod`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          claim: (input: RoomGuestDodClaimInput, requestOptions?: RequestOptions) =>
+            request<RoomGuestDodClaimOutput>(
+              {
+                method: "POST",
+                path: `/api/room/${encodeURIComponent(input.roomID)}/guest/dod`,
+                body: { id: input["id"], take: input["take"], sessionID: input["sessionID"], paths: input["paths"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+        },
         leave: (input: RoomGuestLeaveInput, requestOptions?: RequestOptions) =>
           request<RoomGuestLeaveOutput>(
             {

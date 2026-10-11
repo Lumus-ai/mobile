@@ -5,6 +5,7 @@ import { Room } from "@opencode/core/room"
 import { Peer } from "@opencode/core/peer"
 import { Plot } from "@opencode/core/plot"
 import { Passport } from "@opencode/core/passport"
+import { Dod } from "@opencode/core/dod"
 import path from "node:path"
 import { Session } from "@opencode/core/session"
 import { Model } from "@opencode/core/model"
@@ -70,6 +71,15 @@ function remoteAddress(request: HttpServerRequest.HttpServerRequest) {
   const address = Option.getOrUndefined(request.remoteAddress)?.replace(/^::ffff:/, "")
   if (!address || address === "::1" || address.startsWith("127.")) return
   return address
+}
+
+function invalidDod(error: Dod.DodError) {
+  return new InvalidRequestError({ message: error.message })
+}
+
+// A plot taken for a DoD item names the item first, so freeing the item finds it.
+function dodPurpose(id: string, owner: string) {
+  return `DoD ${id} for ${owner}`
 }
 
 function missingRoom(error: Room.NotFoundError) {
@@ -150,6 +160,21 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
         instances.provide(session),
         locationErrors,
         Effect.orDie,
+      )
+    })
+
+    // The project a room shares: its directory, or the folder of its one session.
+    const roomDirectory = Effect.fnUntraced(function* (room: Room.Info) {
+      if (room.directory !== undefined) return room.directory
+      const session = yield* sessions.get(room.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+      return session.location.directory
+    })
+
+    // Plots that were taken for a DoD item go with it, whichever session holds them.
+    const freeDodPlots = Effect.fnUntraced(function* (directory: string, id: string) {
+      const held = (yield* plots.list(directory)).filter((plot) => plot.purpose.startsWith(`DoD ${id} for `))
+      yield* Effect.forEach(held, (plot) =>
+        plot.members[0] ? plots.release({ sessionID: plot.members[0], directory, id: plot.id }) : Effect.void,
       )
     })
 
@@ -443,6 +468,60 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             try: (signal) => Passport.run(command, session.location.directory, signal),
             catch: (error) => new InvalidRequestError({ message: `Could not run the command: ${String(error)}` }),
           })
+        }),
+      )
+      .handle(
+        "room.dod.get",
+        Effect.fn(function* (ctx) {
+          const room = yield* rooms.get(ctx.params.roomID).pipe(Effect.catchTag("Room.NotFoundError", missingRoom))
+          return yield* Dod.read(yield* roomDirectory(room)).pipe(Effect.mapError(invalidDod))
+        }),
+      )
+      .handle(
+        "room.dod.release",
+        Effect.fn(function* (ctx) {
+          const room = yield* rooms.get(ctx.params.roomID).pipe(Effect.catchTag("Room.NotFoundError", missingRoom))
+          const directory = yield* roomDirectory(room)
+          const dod = yield* Dod.release({ directory, id: ctx.payload.id }).pipe(Effect.mapError(invalidDod))
+          yield* freeDodPlots(directory, ctx.payload.id)
+          return dod
+        }),
+      )
+      .handle(
+        "room.guest.dod.get",
+        Effect.fn(function* (ctx) {
+          const joined = yield* guestOf(ctx.params.roomID)
+          return yield* Dod.read(yield* roomDirectory(joined.room)).pipe(Effect.mapError(invalidDod))
+        }),
+      )
+      .handle(
+        "room.guest.dod.claim",
+        Effect.fn(function* (ctx) {
+          const joined = yield* guestWho(ctx.params.roomID, "member")
+          const session = yield* inRoom(joined.room, ctx.payload.sessionID)
+          const directory = yield* roomDirectory(joined.room)
+          const id = ctx.payload.id.trim()
+          const owner = joined.member.name
+          if (!ctx.payload.take) {
+            const dod = yield* Dod.release({ directory, id, owner }).pipe(Effect.mapError(invalidDod))
+            yield* freeDodPlots(directory, id)
+            return dod
+          }
+          const before = yield* Dod.read(directory).pipe(Effect.mapError(invalidDod))
+          const dod = yield* Dod.take({ directory, id, owner }).pipe(Effect.mapError(invalidDod))
+          const paths = ctx.payload.paths ?? []
+          if (paths.length === 0) return dod
+          // A refused plot undoes a fresh take, so the item is not left marked for work that cannot start.
+          return yield* plots.claim({ sessionID: session.id, directory, paths, purpose: dodPurpose(id, owner) }).pipe(
+            Effect.as(dod),
+            Effect.catchTag("Plot.TakenError", (error) =>
+              Effect.gen(function* () {
+                if (before.items.find((item) => item.id === id)?.owner !== owner)
+                  yield* Dod.release({ directory, id, owner }).pipe(Effect.ignore)
+                return yield* new ForbiddenError({ message: error.message })
+              }),
+            ),
+          )
         }),
       )
       .handle(

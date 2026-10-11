@@ -49,6 +49,16 @@ export interface Interface {
   readonly create: (link: Link, title?: string) => Effect.Effect<RemoteSession, PeerError>
   // What the host's computer offers: system, shells, tools, project state and plots.
   readonly passport: (link: Link) => Effect.Effect<Room.Passport, PeerError>
+  // The host project's DoD, with who took each item.
+  readonly dod: (link: Link) => Effect.Effect<Room.Dod, PeerError>
+  // Takes a DoD item for this guest, holding a plot over the paths the work changes, or gives one back.
+  readonly claim: (input: {
+    link: Link
+    id: string
+    take: boolean
+    sessionID?: string
+    paths?: ReadonlyArray<string>
+  }) => Effect.Effect<Room.Dod, PeerError>
   // Runs a command on the host's computer once the host allows it; cohosts only.
   readonly run: (input: { link: Link; command: string; sessionID?: string }) => Effect.Effect<Room.RunResult, PeerError>
   // Posts a message from this computer's AI into a session of the room. When the AI
@@ -213,6 +223,12 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service> = Layer.e
       sessions: (link) => call(link, `${room(link)}/session`, Sessions).pipe(Effect.map((result) => result.data)),
       chat,
       passport: (link) => call(link, `${room(link)}/passport`, Room.Passport),
+      dod: (link) => call(link, `${room(link)}/dod`, Room.Dod),
+      claim: (input) =>
+        call(input.link, `${room(input.link)}/dod`, Room.Dod, {
+          method: "POST",
+          body: { id: input.id, take: input.take, sessionID: input.sessionID, paths: input.paths },
+        }),
       run: (input) =>
         call(input.link, `${room(input.link)}/run`, Room.RunResult, {
           method: "POST",

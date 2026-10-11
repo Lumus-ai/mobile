@@ -71,6 +71,8 @@ const GUEST_PATHS = [
   /^\/api\/room\/[^/]+\/guest\/passport$/,
   // room.guest.run
   /^\/api\/room\/[^/]+\/guest\/run$/,
+  // room.guest.dod.get, room.guest.dod.claim
+  /^\/api\/room\/[^/]+\/guest\/dod$/,
 ]
 
 export function isRoomGuestURL(url: URL) {
@@ -150,6 +152,33 @@ export const RoomGroup = HttpApiGroup.make("server.room")
         identifier: "room.remove",
         summary: "Close room",
         description: "Stop sharing a room. Its session stays; every guest token for it stops working.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("room.dod.get", "/api/room/:roomID/dod", {
+      params: { roomID: Room.ID },
+      success: Room.Dod,
+      error: [RoomNotFoundError, SessionNotFoundError, InvalidRequestError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "room.dod.get",
+        summary: "Read a room's DoD",
+        description: "The items of the shared project's Definition of Done, with the guests who took them.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("room.dod.release", "/api/room/:roomID/dod/release", {
+      params: { roomID: Room.ID },
+      payload: Schema.Struct({ id: Schema.String }),
+      success: Room.Dod,
+      error: [RoomNotFoundError, SessionNotFoundError, InvalidRequestError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "room.dod.release",
+        summary: "Free a DoD item a guest took",
+        description: "Give a guest's DoD item back to the room, for a guest who left or stopped working on it.",
       }),
     ),
   )
@@ -303,6 +332,42 @@ export const RoomGroup = HttpApiGroup.make("server.room")
         summary: "Run a command on the host's computer",
         description:
           "Run one command in a room session's directory with the host's shell, once the host allows it; cohosts only.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("room.guest.dod.get", "/api/room/:roomID/guest/dod", {
+      params: { roomID: Room.ID },
+      success: Room.Dod,
+      error: [UnauthorizedError, RoomNotFoundError, SessionNotFoundError, InvalidRequestError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "room.guest.dod.get",
+        summary: "Read the shared project's DoD",
+        description: "The items of the host project's Definition of Done, with who took each one.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("room.guest.dod.claim", "/api/room/:roomID/guest/dod", {
+      params: { roomID: Room.ID },
+      payload: Schema.Struct({
+        id: Schema.String,
+        // True takes the item for the calling guest, false gives it back.
+        take: Schema.Boolean,
+        // The room session that will do the work; the room's own when omitted.
+        sessionID: Session.ID.pipe(Schema.optional),
+        // Files or folders of the project the work changes, taken as a plot for that session.
+        paths: Schema.Array(Schema.String).pipe(Schema.optional),
+      }),
+      success: Room.Dod,
+      error: [UnauthorizedError, ForbiddenError, RoomNotFoundError, SessionNotFoundError, InvalidRequestError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "room.guest.dod.claim",
+        summary: "Take or give back a DoD item",
+        description:
+          "Take a free item of the host project's DoD for the calling guest, optionally holding a plot over the paths it changes, or give back one the guest took; members and above.",
       }),
     ),
   )

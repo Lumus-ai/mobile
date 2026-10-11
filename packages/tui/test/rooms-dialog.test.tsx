@@ -527,3 +527,56 @@ test("the red cross on a hosted room closes it after a second click", async () =
   await setup.waitFor(() => closed.length > 0)
   await setup.waitForFrame((frame) => !frame.includes("⇄ Lab"))
 })
+
+test("a hosted room shows its project's DoD with who took each item, and the host frees one after a second click", async () => {
+  await using state = await tmpdir()
+  const freed: unknown[] = []
+  const items = () => [
+    { id: "L-001", what: "Write the parser", stage: "Stage 1", state: "DONE", done: 2, total: 2 },
+    {
+      id: "L-002",
+      what: "Add the check",
+      stage: "Stage 1",
+      state: "IN_PROGRESS",
+      done: 1,
+      total: 3,
+      ...(freed.length ? {} : { owner: "Alex" }),
+    },
+    { id: "L-003", what: "Document it", stage: "Stage 2", state: "NOT_STARTED", done: 0, total: 0 },
+  ]
+  await using setup = await createAppFixture({
+    width: 130,
+    height: 40,
+    state: state.path,
+    config: { animations: false, debug: { devtools: true } },
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/location") return json(location)
+      if (url.pathname === "/api/room") return json({ data: [room] })
+      if (url.pathname === `/api/room/${room.id}/member`) return json({ data: [] })
+      if (url.pathname === `/api/room/${room.id}/ban`) return json({ data: [] })
+      if (url.pathname === `/api/room/${room.id}/dod`) return json({ items: items() })
+      if (url.pathname === `/api/room/${room.id}/dod/release` && request.method === "POST") {
+        freed.push(await request.json())
+        return json({ items: items() })
+      }
+    },
+  })
+  const tree = await setup.waitForFrame((frame) => /DoD 1\/3 · 1 taken/.test(frame))
+  // finished items only count toward the bar; the open ones list under it
+  const heading = cell(tree, "DoD")
+  await setup.mockMouse.click(heading.x, heading.y)
+  const open = await setup.waitForFrame((frame) => frame.includes("● L-002") && frame.includes("1/3 Alex ×"))
+  expect(open).toContain("· L-003 Document it")
+  expect(open).not.toContain("L-001")
+  const cross = open.split("\n")[cell(open, "Alex").y].indexOf("×", cell(open, "Alex").x)
+  await setup.mockMouse.click(cross, cell(open, "Alex").y)
+  const armed = await setup.waitForFrame((frame) => frame.includes("free?"))
+  expect(freed).toEqual([])
+  const sure = cell(armed, "free?")
+  await setup.mockMouse.click(sure.x + 1, sure.y)
+  await setup.waitFor(() => freed.length > 0)
+  expect(freed).toEqual([{ id: "L-002" }])
+  await setup.waitForFrame(
+    (frame) => !frame.includes("Alex") && frame.includes("DoD 1/3 ███") && frame.includes("● L-002"),
+  )
+})

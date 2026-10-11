@@ -18,13 +18,16 @@ const description = [
   "create starts a new session in a project room, optionally with a first task sent the same way;",
   "passport describes the other computer: its system, shells, installed tools, the project's branch and commit, and the plots (участки) teams hold there, so you know what it can check that this computer cannot;",
   "run executes one command on the other computer in the project, for example its tests on another operating system; the host approves each run, you need the cohost role, and the output comes back directly.",
-  "Respect plots: do not ask the other AI to change files inside a plot another team holds.",
+  "dod shows the host project's Definition of Done as the room's shared work queue: every item, its stage, state, checked steps, and who in the room took it;",
+  "take claims a free DoD item for you (pass item, and paths the work will change to hold them as a plot), so nobody else in the room starts it; then do it, yourself or through send to the AI there;",
+  "release gives an item you took back when you stop working on it.",
+  "Respect plots and owners: do not ask the other AI to change files inside a plot another team holds, and do not work on a DoD item someone else took.",
   "Pass room as the room ID from list, and sessionID to pick a session other than the room's own.",
   "Write to the other AI as to a capable colleague: say what you need, what you already know, and what the answer should contain.",
 ].join("\n")
 
 export const Input = Schema.Struct({
-  action: Schema.Literals(["list", "read", "send", "create", "passport", "run"]),
+  action: Schema.Literals(["list", "read", "send", "create", "passport", "run", "dod", "take", "release"]),
   room: Schema.optionalKey(Schema.String).annotate({ description: "Room ID from list, for read, send and create" }),
   sessionID: Schema.optionalKey(Schema.String).annotate({
     description: "Session of the room for read and send; the room's own session when omitted",
@@ -33,6 +36,10 @@ export const Input = Schema.Struct({
     description: "Message for send, the first task for create, or the command for run",
   }),
   title: Schema.optionalKey(Schema.String).annotate({ description: "Title of the session to create" }),
+  item: Schema.optionalKey(Schema.String).annotate({ description: "DoD item ID for take and release, such as L-002" }),
+  paths: Schema.optionalKey(Schema.Array(Schema.String)).annotate({
+    description: "Project files or folders the item's work changes, held as a plot for take",
+  }),
   limit: Schema.optionalKey(Schema.Int).annotate({ description: "How many recent messages read returns (default 10)" }),
 })
 
@@ -146,6 +153,35 @@ export const Plugin = {
                     ].join("\n"),
                   }
                 }
+                case "dod": {
+                  const link = yield* linkOf(input.room)
+                  const dod = yield* peers.dod(link).pipe(Effect.mapError(failed))
+                  return { output: describeDod(link, dod) }
+                }
+                case "take":
+                case "release": {
+                  const link = yield* linkOf(input.room)
+                  const item = input.item?.trim()
+                  if (!item) return yield* new ToolFailure({ message: "Pass item, the DoD item ID from dod" })
+                  if (input.action === "take") yield* ask(link.name)
+                  const dod = yield* peers
+                    .claim({
+                      link,
+                      id: item,
+                      take: input.action === "take",
+                      sessionID: input.sessionID,
+                      paths: input.paths,
+                    })
+                    .pipe(Effect.mapError(failed))
+                  return {
+                    output: [
+                      input.action === "take"
+                        ? `${item} is yours in ${link.name}${input.paths?.length ? `, with a plot over ${input.paths.join(", ")}` : ""}. Release it if you stop.`
+                        : `${item} is free again in ${link.name}.`,
+                      describeDod(link, dod),
+                    ].join("\n\n"),
+                  }
+                }
                 case "create": {
                   const link = yield* linkOf(input.room)
                   yield* ask(link.name)
@@ -213,6 +249,32 @@ function describePassport(link: Peer.Link, passport: Room.Passport) {
               `- ${plot.paths.join(", ")} · ${plot.team} on ${plot.machine} · ${plot.purpose} · until ${new Date(plot.expires).toLocaleTimeString()}`,
           ),
         ].join("\n"),
+  ].join("\n")
+}
+
+const DOD_MARK: Record<string, string> = {
+  DONE: "✓",
+  IN_PROGRESS: "●",
+  BLOCKED: "!",
+  FAILED: "✗",
+  OUT_OF_SCOPE: "–",
+}
+
+function describeDod(link: Peer.Link, dod: Room.Dod) {
+  if (dod.items.length === 0) return `${link.name} has no DoD (.opencode/dod.yaml) in its project.`
+  const done = dod.items.filter((item) => item.state === "DONE" || item.state === "OUT_OF_SCOPE").length
+  const stages = [...new Set(dod.items.map((item) => item.stage))]
+  return [
+    `DoD of ${link.name}: ${done}/${dod.items.length} done. Free items have no owner; yours say "you".`,
+    ...stages.flatMap((stage) => [
+      `## ${stage}`,
+      ...dod.items
+        .filter((item) => item.stage === stage)
+        .map(
+          (item) =>
+            `${DOD_MARK[item.state] ?? "·"} ${item.id} [${item.state}${item.total > 0 ? ` ${item.done}/${item.total}` : ""}] ${item.what}${item.owner ? ` — ${item.owner === link.guest ? "you" : item.owner}` : ""}`,
+        ),
+    ]),
   ].join("\n")
 }
 

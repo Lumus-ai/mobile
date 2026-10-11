@@ -292,6 +292,10 @@ import type {
   RoomUpdateOutput,
   RoomRemoveInput,
   RoomRemoveOutput,
+  RoomDodGetInput,
+  RoomDodGetOutput,
+  RoomDodReleaseInput,
+  RoomDodReleaseOutput,
   RoomCodeInput,
   RoomCodeOutput,
   RoomPublicOutput,
@@ -310,6 +314,10 @@ import type {
   RoomGuestPassportOutput,
   RoomGuestRunInput,
   RoomGuestRunOutput,
+  RoomGuestDodGetInput,
+  RoomGuestDodGetOutput,
+  RoomGuestDodClaimInput,
+  RoomGuestDodClaimOutput,
   RoomGuestLeaveInput,
   RoomGuestLeaveOutput,
   RoomGuestSessionListInput,
@@ -1844,6 +1852,18 @@ const EndpointRoomRemove = (raw: RawClient["server.room"]) => (input: RoomRemove
     raw["room.remove"]({ params: { roomID: input["roomID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointRoomDodGet = (raw: RawClient["server.room"]) => (input: RoomDodGetInput) =>
+  preserveEffect<RoomDodGetOutput>()(
+    raw["room.dod.get"]({ params: { roomID: input["roomID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointRoomDodRelease = (raw: RawClient["server.room"]) => (input: RoomDodReleaseInput) =>
+  preserveEffect<RoomDodReleaseOutput>()(
+    raw["room.dod.release"]({ params: { roomID: input["roomID"] }, payload: { id: input["id"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointRoomCode = (raw: RawClient["server.room"]) => (input: RoomCodeInput) =>
   preserveEffect<RoomCodeOutput>()(
     raw["room.code"]({ params: { roomID: input["roomID"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1918,6 +1938,19 @@ const EndpointRoomGuestRun = (raw: RawClient["server.room"]) => (input: RoomGues
     raw["room.guest.run"]({
       params: { roomID: input["roomID"] },
       payload: { command: input["command"], sessionID: input["sessionID"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointRoomGuestDodGet = (raw: RawClient["server.room"]) => (input: RoomGuestDodGetInput) =>
+  preserveEffect<RoomGuestDodGetOutput>()(
+    raw["room.guest.dod.get"]({ params: { roomID: input["roomID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointRoomGuestDodClaim = (raw: RawClient["server.room"]) => (input: RoomGuestDodClaimInput) =>
+  preserveEffect<RoomGuestDodClaimOutput>()(
+    raw["room.guest.dod.claim"]({
+      params: { roomID: input["roomID"] },
+      payload: { id: input["id"], take: input["take"], sessionID: input["sessionID"], paths: input["paths"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -2102,6 +2135,7 @@ const adaptGroupRoom = (raw: RawClient["server.room"]) => ({
   create: EndpointRoomCreate(raw),
   update: EndpointRoomUpdate(raw),
   remove: EndpointRoomRemove(raw),
+  dod: { get: EndpointRoomDodGet(raw), release: EndpointRoomDodRelease(raw) },
   code: EndpointRoomCode(raw),
   public: EndpointRoomPublic(raw),
   join: EndpointRoomJoin(raw),
@@ -2117,6 +2151,7 @@ const adaptGroupRoom = (raw: RawClient["server.room"]) => ({
     },
     passport: EndpointRoomGuestPassport(raw),
     run: EndpointRoomGuestRun(raw),
+    dod: { get: EndpointRoomGuestDodGet(raw), claim: EndpointRoomGuestDodClaim(raw) },
     leave: EndpointRoomGuestLeave(raw),
     model: { list: EndpointRoomGuestModelList(raw) },
     agent: { list: EndpointRoomGuestAgentList(raw) },

@@ -172,6 +172,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/api/room/link")
       return request.method === "GET" ? json({ data: [] }) : new Response(null, { status: 204 })
     if (url.pathname === "/api/room/link/remove") return new Response(null, { status: 204 })
+    // The shared project's DoD under each room; these projects have none.
+    if (/^\/api\/room\/[^/]+\/(guest\/)?dod$/.test(url.pathname)) return json({ items: [] })
     if (url.pathname === "/api/note" && request.method === "GET")
       return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
     if (url.pathname === "/api/orchestra/project") return json([])

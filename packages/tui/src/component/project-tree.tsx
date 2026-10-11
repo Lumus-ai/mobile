@@ -26,6 +26,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { useNotes, type NotesTab } from "../context/notes"
 import { NotesPanel } from "./notes-panel"
 import { Row } from "./panel-row"
+import { RoomDodRows } from "./room-dod"
 import { useNow } from "./note-canvas"
 import { useT } from "../util/i18n"
 
@@ -71,10 +72,7 @@ export function ProjectTree(props: { width: number }) {
 
   const sessionProject = () => {
     const session = current()
-    return (
-      session &&
-      projects().find((item) => item.main === session.id || owner(session)?.id === item.id)
-    )
+    return session && projects().find((item) => item.main === session.id || owner(session)?.id === item.id)
   }
 
   // The project of the open session starts expanded so the tree shows where you are.
@@ -204,10 +202,7 @@ export function ProjectTree(props: { width: number }) {
       .list()
       .filter(
         (session) =>
-          !session.parentID &&
-          !removed[session.id] &&
-          session.id !== project.main &&
-          owner(session)?.id === project.id,
+          !session.parentID && !removed[session.id] && session.id !== project.main && owner(session)?.id === project.id,
       )
 
   // Categories in first-seen order; sessions without one come last, under "Other"
@@ -399,40 +394,49 @@ export function ProjectTree(props: { width: number }) {
           <RoomPeople rooms={rooms.latest ?? []} hover={hover} setHover={setHover} />
           <For each={rooms.latest ?? []}>
             {(room) => (
-              <Row
-                id={`hosted:${room.id}`}
-                hover={hover}
-                setHover={setHover}
-                selected={room.sessionID === current()?.id}
-                onClick={() => route.navigate({ type: "session", sessionID: room.sessionID })}
-              >
-                <text flexShrink={0} fg={theme.text.action.secondary.base}>
-                  {"  ⇄ "}
-                </text>
-                <box flexGrow={1} minWidth={0}>
-                  <text fg={theme.text.base} wrapMode="none" truncate>
-                    {room.name}
-                  </text>
-                </box>
-                <box
-                  flexShrink={0}
-                  onMouseOut={() => setArmed()}
-                  onMouseUp={(event) => {
-                    event.stopPropagation()
-                    stopHosting(room.id)
-                  }}
+              <>
+                <Row
+                  id={`hosted:${room.id}`}
+                  hover={hover}
+                  setHover={setHover}
+                  selected={room.sessionID === current()?.id}
+                  onClick={() => route.navigate({ type: "session", sessionID: room.sessionID })}
                 >
-                  <text
-                    fg={
-                      armed() === `hosted:${room.id}`
-                        ? theme.text.action.destructive.focused
-                        : theme.text.action.destructive.base
-                    }
-                  >
-                    {armed() === `hosted:${room.id}` ? ` ${t("close?")}` : " ×"}
+                  <text flexShrink={0} fg={theme.text.action.secondary.base}>
+                    {"  ⇄ "}
                   </text>
-                </box>
-              </Row>
+                  <box flexGrow={1} minWidth={0}>
+                    <text fg={theme.text.base} wrapMode="none" truncate>
+                      {room.name}
+                    </text>
+                  </box>
+                  <box
+                    flexShrink={0}
+                    onMouseOut={() => setArmed()}
+                    onMouseUp={(event) => {
+                      event.stopPropagation()
+                      stopHosting(room.id)
+                    }}
+                  >
+                    <text
+                      fg={
+                        armed() === `hosted:${room.id}`
+                          ? theme.text.action.destructive.focused
+                          : theme.text.action.destructive.base
+                      }
+                    >
+                      {armed() === `hosted:${room.id}` ? ` ${t("close?")}` : " ×"}
+                    </text>
+                  </box>
+                </Row>
+                <RoomDodRows
+                  id={`hosted:${room.id}`}
+                  hover={hover}
+                  setHover={setHover}
+                  load={() => client.api.room.dod.get({ roomID: room.id })}
+                  release={(id) => client.api.room.dod.release({ roomID: room.id, id })}
+                />
+              </>
             )}
           </For>
           <For each={joined.joined}>
@@ -473,6 +477,15 @@ export function ProjectTree(props: { width: number }) {
                     </text>
                   </box>
                 </Row>
+                <RoomDodRows
+                  id={roomKey(room)}
+                  hover={hover}
+                  setHover={setHover}
+                  me={room.guest}
+                  load={() => roomClient(room).room.guest.dod.get({ roomID: room.roomID })}
+                  take={(id) => roomClient(room).room.guest.dod.claim({ roomID: room.roomID, id, take: true })}
+                  release={(id) => roomClient(room).room.guest.dod.claim({ roomID: room.roomID, id, take: false })}
+                />
                 <RoomSessions
                   room={room}
                   hover={hover}

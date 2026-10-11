@@ -469,6 +469,16 @@ export type RoomInfo = {
   created: number
 }
 
+export type RoomDodItem = {
+  id: string
+  what: string
+  stage: string
+  state: string
+  done: number
+  total: number
+  owner?: string | undefined
+}
+
 export type RoomJoinCode = { code: string; expires_in: number }
 
 export type RoomGuest = { id: string; name: string }
@@ -1815,6 +1825,8 @@ export type NoteFrontmatter = {
   created: number
   updated: number
 }
+
+export type RoomDod = { items: Array<RoomDodItem> }
 
 export type RoomJoined = {
   token: string
@@ -7192,6 +7204,17 @@ export type RoomRemoveInput = { readonly roomID: { readonly roomID: string }["ro
 
 export type RoomRemoveOutput = void
 
+export type RoomDodGetInput = { readonly roomID: { readonly roomID: string }["roomID"] }
+
+export type RoomDodGetOutput = RoomDod
+
+export type RoomDodReleaseInput = {
+  readonly roomID: { readonly roomID: string }["roomID"]
+  readonly id: { readonly id: string }["id"]
+}
+
+export type RoomDodReleaseOutput = RoomDod
+
 export type RoomCodeInput = { readonly roomID: { readonly roomID: string }["roomID"] }
 
 export type RoomCodeOutput = RoomJoinCode
@@ -7398,6 +7421,40 @@ export type RoomGuestRunInput = {
 }
 
 export type RoomGuestRunOutput = RoomRunResult
+
+export type RoomGuestDodGetInput = { readonly roomID: { readonly roomID: string }["roomID"] }
+
+export type RoomGuestDodGetOutput = RoomDod
+
+export type RoomGuestDodClaimInput = {
+  readonly roomID: { readonly roomID: string }["roomID"]
+  readonly id: {
+    readonly id: string
+    readonly take: boolean
+    readonly sessionID?: string | undefined
+    readonly paths?: ReadonlyArray<string> | undefined
+  }["id"]
+  readonly take: {
+    readonly id: string
+    readonly take: boolean
+    readonly sessionID?: string | undefined
+    readonly paths?: ReadonlyArray<string> | undefined
+  }["take"]
+  readonly sessionID?: {
+    readonly id: string
+    readonly take: boolean
+    readonly sessionID?: string | undefined
+    readonly paths?: ReadonlyArray<string> | undefined
+  }["sessionID"]
+  readonly paths?: {
+    readonly id: string
+    readonly take: boolean
+    readonly sessionID?: string | undefined
+    readonly paths?: ReadonlyArray<string> | undefined
+  }["paths"]
+}
+
+export type RoomGuestDodClaimOutput = RoomDod
 
 export type RoomGuestLeaveInput = { readonly roomID: { readonly roomID: string }["roomID"] }
 

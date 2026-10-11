@@ -10,6 +10,7 @@ import { PORT, QUERY, decodeReply } from "@opencode/protocol/room-discovery"
 import { isRoomGuestURL } from "@opencode/protocol/groups/room"
 import { createSocket } from "node:dgram"
 import { hostname } from "node:os"
+import path from "node:path"
 
 // Every guest path the server.room group registers (verified against the group's
 // endpoint list). Each one carries a room token instead of the server credential,
@@ -33,6 +34,7 @@ const GUEST_PATHS = [
   "/api/room/room_1/guest/prompt",
   "/api/room/room_1/guest/permission",
   "/api/room/room_1/guest/permission/per_1/reply",
+  "/api/room/room_1/guest/dod",
 ]
 
 // Host-only paths: the guest token is not a server credential, so none of these
@@ -49,6 +51,8 @@ const HOST_PATHS = [
   "/api/room/room_1/member/guest_1/ban",
   "/api/room/room_1/ban",
   "/api/room/room_1/ban/ban_1",
+  "/api/room/room_1/dod",
+  "/api/room/room_1/dod/release",
 ]
 
 // Paths under /api/room/ that no endpoint registers, plus session paths. A broad
@@ -555,5 +559,84 @@ it.live("a guest reads the host's passport, and a cohost runs a command once the
     expect(result.status).toBe(200)
     expect(result.body.exitCode).toBe(0)
     expect(result.body.output).toContain("from-the-host")
+  }).pipe(Effect.scoped),
+)
+
+it.live("guests share the host project's DoD: one takes an item with a plot, the host frees it", () =>
+  Effect.gen(function* () {
+    const { call, room, code, directory } = yield* setup
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, ".opencode", "dod.yaml"),
+        [
+          "leaves:",
+          "  - id: L-001",
+          '    what: "Write the parser"',
+          "    task_state: NOT_STARTED",
+          "    steps:",
+          '      - "[ ] write it"',
+          "  - id: L-002",
+          '    what: "Ship it"',
+          "    task_state: DONE",
+          "",
+        ].join("\n"),
+      ),
+    )
+    const join = (name: string) =>
+      call("/api/room/join", { method: "POST", body: { code, name } }).pipe(
+        Effect.map((response) => ({ authorization: `Bearer ${response.body.token}` })),
+      )
+    const alex = yield* join("Alex")
+    const second = (yield* call(`/api/room/${room.id}/code`, { method: "POST", headers: host })).body.code as string
+    const bo = (yield* call("/api/room/join", { method: "POST", body: { code: second, name: "Bo" } })).body
+    const boHeaders = { authorization: `Bearer ${bo.token}` }
+
+    const dod = yield* call(`/api/room/${room.id}/guest/dod`, { headers: alex })
+    expect(dod.status).toBe(200)
+    expect(dod.body.items.map((item: { id: string }) => item.id)).toEqual(["L-001", "L-002"])
+    expect((yield* call(`/api/room/${room.id}/guest/dod`)).status).toBe(401)
+
+    const claim = (headers: Record<string, string>, body: Record<string, unknown>) =>
+      call(`/api/room/${room.id}/guest/dod`, { method: "POST", headers, body })
+    // a viewer only watches
+    yield* call(`/api/room/${room.id}/member/${bo.guest.id}`, {
+      method: "PATCH",
+      headers: host,
+      body: { role: "viewer" },
+    })
+    expect((yield* claim(boHeaders, { id: "L-001", take: true })).status).toBe(403)
+
+    const taken = yield* claim(alex, { id: "L-001", take: true, paths: ["src"] })
+    expect(taken.status).toBe(200)
+    expect(taken.body.items[0]).toMatchObject({ id: "L-001", state: "IN_PROGRESS", owner: "Alex" })
+    expect((yield* claim(alex, { id: "L-002", take: true })).body.message).toBe("L-002 is already done")
+    const passport = (yield* call(`/api/room/${room.id}/guest/passport`, { headers: alex })).body
+    expect(passport.plots).toMatchObject([{ purpose: "DoD L-001 for Alex", paths: ["src"] }])
+
+    yield* call(`/api/room/${room.id}/member/${bo.guest.id}`, {
+      method: "PATCH",
+      headers: host,
+      body: { role: "member" },
+    })
+    expect((yield* claim(boHeaders, { id: "L-001", take: true })).body.message).toBe("L-001 is taken by Alex")
+    expect((yield* claim(boHeaders, { id: "L-001", take: false })).body.message).toBe("L-001 is taken by Alex")
+
+    // the host sees who has it and frees it, plot and all
+    expect((yield* call(`/api/room/${room.id}/dod`, { headers: host })).body.items[0].owner).toBe("Alex")
+    const freed = yield* call(`/api/room/${room.id}/dod/release`, {
+      method: "POST",
+      headers: host,
+      body: { id: "L-001" },
+    })
+    expect(freed.body.items[0]).toEqual({
+      id: "L-001",
+      what: "Write the parser",
+      stage: "Ungrouped",
+      state: "NOT_STARTED",
+      done: 0,
+      total: 1,
+    })
+    expect((yield* call(`/api/room/${room.id}/guest/passport`, { headers: alex })).body.plots).toEqual([])
+    expect((yield* claim(boHeaders, { id: "L-001", take: true })).body.items[0].owner).toBe("Bo")
   }).pipe(Effect.scoped),
 )
