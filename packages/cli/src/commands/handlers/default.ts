@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { run } from "@opencode/tui"
@@ -66,6 +67,8 @@ export default Runtime.handler(Commands, (input) =>
     const resultListeners = new Set<(result: Updater.RunResult) => void>()
     // Background checks, `/update` lookups, and manual installs take turns so two installs never overlap.
     const checking = yield* Semaphore.make(1)
+    // Restart after an update: the client exits and starts again in the same terminal.
+    let relaunch = false
     yield* updater
       .run((version) => {
         installing = version
@@ -136,6 +139,9 @@ export default Runtime.handler(Commands, (input) =>
           )
         },
         apply: (version) => runPromise(checking.withPermits(1)(updater.apply(version))),
+        relaunch: () => {
+          relaunch = true
+        },
       },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
@@ -154,5 +160,14 @@ export default Runtime.handler(Commands, (input) =>
         runFork(effect)
       },
     }).pipe(Effect.provide(LayerNode.compile(Global.node)))
+    // The same runtime, flags and arguments start the updated code; this process only waits
+    // for it and hands its exit code on, so the terminal stays with the new client.
+    if (relaunch) {
+      const next = spawnSync(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
+        stdio: "inherit",
+        env: process.env,
+      })
+      process.exitCode = next.status ?? 1
+    }
   }),
 )

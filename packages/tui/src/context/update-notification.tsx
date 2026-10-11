@@ -24,6 +24,8 @@ export type UpdateSource = {
     onInstall: (version: string) => void,
   ) => Promise<ClientNotice | { readonly type: "unavailable"; readonly message: string } | undefined>
   readonly apply: (version: string) => Promise<void>
+  /** Asks the CLI to start the client again once this one has exited. */
+  readonly relaunch?: () => void
 }
 
 export const { use: useUpdateNotification, provider: UpdateNotificationProvider } = createSimpleContext({
@@ -96,7 +98,10 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       // same version, so nothing would replace it on the next start: restart it before leaving.
       void (client.restart?.() ?? Promise.resolve())
         .catch((error) => log.error("failed to restart the service after an update", { error }))
-        .finally(() => exit())
+        .finally(() => {
+          props.updater?.relaunch?.()
+          exit()
+        })
     }
 
     const open = (origin: "manual" | "notification") => {
