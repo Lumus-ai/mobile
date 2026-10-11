@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import path from "path"
 
 declare const OPENCODE_VERSION: string
 declare const OPENCODE_CHANNEL: string
@@ -11,9 +12,16 @@ declare const OPENCODE_ARTIFACT: string
 const MINIMUM_ANNOUNCED_VERSION = "1.18.0"
 const FALLBACK_VERSION = "2.0.0"
 
+// The tag describes the checkout these sources were cut from, not wherever the CLI happens
+// to be started: a project directory is the cwd, so a lookup that follows cwd silently falls
+// back for every project that is not this repository, and the announced version stops matching
+// the build the free tier is asked to accept.
+const REPO_ROOT = path.resolve(import.meta.dir, "../../..")
+
 function gitTagVersion(): string | undefined {
   try {
     const out = spawnSync("git", ["describe", "--tags", "--abbrev=0"], {
+      cwd: REPO_ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     })
@@ -27,12 +35,14 @@ function gitTagVersion(): string | undefined {
   }
 }
 
+const [floorMajor, floorMinor] = MINIMUM_ANNOUNCED_VERSION.split(".").map(Number)
+
 const version = (() => {
   if (typeof OPENCODE_VERSION === "string" && OPENCODE_VERSION !== "undefined") return OPENCODE_VERSION
   const tag = gitTagVersion()
   if (tag) {
     const [major, minor] = tag.split(".").map(Number)
-    if (major > 1 || (major === 1 && minor >= 18)) return tag
+    if (major > floorMajor || (major === floorMajor && minor >= floorMinor)) return tag
   }
   return FALLBACK_VERSION
 })()
