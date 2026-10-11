@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Hub } from "@opencode/core/hub/index"
 import { HubTool } from "@opencode/core/tool/plugin/hub"
+import { Schema } from "effect"
 
 // A fixed machine: which tools resolve (and under which local name) and which
 // backends have a shell. Keeps every case independent of the host running it.
@@ -263,6 +264,11 @@ test("gh entries render the same command in bash and PowerShell and list gh as a
   expect(entry?.templates.bash).toBe(entry?.templates.pwsh)
   expect(Hub.get("github.setup-git")?.danger).toBe(true)
   expect(Hub.get("github.pr-create")?.danger).toBe(true)
+})
+
+test("hub args accept the numbers and flags models send", () => {
+  const input = Schema.decodeUnknownSync(HubTool.Input)({ id: "system.processes", args: { limit: 5, all: true } })
+  expect(input.args).toEqual({ limit: 5, all: true })
 })
 
 describe("unknown entry", () => {

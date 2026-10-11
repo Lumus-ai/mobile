@@ -36,7 +36,9 @@ const description = (tools: string[]) =>
 
 export const Input = Schema.Struct({
   id: Schema.optionalKey(Schema.String),
-  args: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  // Models often pass counts and flags as JSON numbers or booleans ({"limit": 5});
+  // every value fills a text template, so accept them and render them as text.
+  args: Schema.optionalKey(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Number, Schema.Boolean]))),
   backend: Schema.optionalKey(Schema.Literals(["bash", "nu", "pwsh"])),
   list: Schema.optionalKey(Schema.Boolean),
   query: Schema.optionalKey(Schema.String),
@@ -293,7 +295,11 @@ export const Plugin = {
               const preferred = input.backend ?? (yield* Effect.promise(() => Hub.read())).terminal
               let rendered: Hub.Rendered
               try {
-                rendered = Hub.prepare(entry, input.args ?? {}, { backend: preferred })
+                rendered = Hub.prepare(
+                  entry,
+                  Object.fromEntries(Object.entries(input.args ?? {}).map(([key, value]) => [key, String(value)])),
+                  { backend: preferred },
+                )
               } catch (error) {
                 if (error instanceof Hub.MissingToolError) {
                   const plan = Hub.planFor(error.missing)
