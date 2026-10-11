@@ -419,6 +419,9 @@ const ru: Record<string, string> = {
   Improve: "Улучшить",
   Outline: "План",
   "✎ Note: {title} · open": "✎ Заметка: {title} · открыть",
+  // Mascot
+  "Show mascot": "Показать маскота",
+  "Hide mascot": "Скрыть маскота",
 }
 
 export function translate(language: Language | undefined, text: string, values?: Record<string, string | number>) {

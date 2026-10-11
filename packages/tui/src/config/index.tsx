@@ -251,6 +251,9 @@ export const Info = Schema.Struct({
       "Panel layout; 'compact' narrows the project panel and docks the session sidebar beside the chat, 'auto' turns it on for narrow terminals (default: auto)",
   }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
+  mascot: Schema.optional(Schema.Boolean).annotate({
+    description: "Show the Opencode++ mascot in the prompt (default: true)",
+  }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
   cursor: Schema.optional(Cursor),
 })

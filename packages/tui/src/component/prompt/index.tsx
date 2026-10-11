@@ -70,6 +70,8 @@ import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
+import { Mascot, type MascotState } from "../mascot"
+import { MASCOT_WIDTH } from "../../ui/mascot-sprite"
 import { useT } from "../../util/i18n"
 
 export type PromptProps = {
@@ -1656,6 +1658,19 @@ export function Prompt(props: PromptProps) {
   const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
 
   const promptBg = createMemo(() => theme.decrease(theme.background.raised.base))
+  // The mascot stands in the prompt's right edge, exactly as tall as an empty prompt,
+  // and leaves the prompt when it would squeeze the input on a narrow terminal.
+  const mascot = createMemo(() => config.mascot !== false && dimensions().width >= 80)
+  const mascotState = createMemo((): MascotState => {
+    const id = props.sessionID
+    if (!id) return "idle"
+    if ((data.session.permission.list(id)?.length ?? 0) > 0) return "attention"
+    if ((data.session.form.list(id)?.length ?? 0) > 0) return "attention"
+    if (status() === "running") return "busy"
+    if (data.session.get(id)?.outcome === "failed") return "error"
+    return "idle"
+  })
+  const paddingX = createMemo(() => (dimensions().width < 44 ? 1 : 2))
 
   return (
     <>
@@ -1670,14 +1685,19 @@ export function Prompt(props: PromptProps) {
           }}
         >
           <box
-            paddingLeft={dimensions().width < 44 ? 1 : 2}
-            paddingRight={dimensions().width < 44 ? 1 : 2}
+            paddingLeft={paddingX()}
+            paddingRight={mascot() ? paddingX() + MASCOT_WIDTH + 2 : paddingX()}
             paddingTop={1}
             flexShrink={0}
             backgroundColor={promptBg()}
             flexGrow={1}
             width="100%"
           >
+            <Show when={mascot()}>
+              <box position="absolute" right={paddingX()} bottom={0}>
+                <Mascot state={mascotState()} backdrop={promptBg()} />
+              </box>
+            </Show>
             <Show when={config.prompt?.image_preview && visibleImageAttachments().length > 0}>
               <box
                 width="100%"
