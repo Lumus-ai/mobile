@@ -8,6 +8,7 @@ import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { useProjects } from "../context/projects"
 import { Orchestra } from "@opencode/schema/orchestra"
+import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
@@ -355,7 +356,8 @@ export function DialogConnect(props: { onClose?: () => void }) {
     const address = fields.address?.value.trim() ?? ""
     const code = fields.code?.value.trim() ?? ""
     if (!address) return setJoinError(t("Enter the host's address"))
-    const url = /^https?:\/\//.test(address) ? address : `http://${address}`
+    const url = withPort(/^https?:\/\//.test(address) ? address : `http://${address}`)
+    if (!url) return setJoinError(t("Add the host's port: 192.168.1.5:PORT"))
     if (code) return enter(url, { code })
     setBusy(true)
     setJoinError()
@@ -373,6 +375,35 @@ export function DialogConnect(props: { onClose?: () => void }) {
       .catch((error: unknown) => setJoinError(errorMessage(error)))
       .finally(() => setBusy(false))
   }
+
+  // A bare IP takes this computer's server port: hosts usually run the same setup, and
+  // without it the URL would silently point at port 80.
+  const withPort = (url: string) => {
+    const parsed = new URL(url)
+    if (parsed.port) return url
+    const own = found()?.find((server) => server.own)
+    if (!own) return undefined
+    parsed.port = new URL(own.url).port
+    return parsed.origin
+  }
+
+  const order = ["address", "code", "name"] as const
+  const cycle = (delta: number) => {
+    const index = order.findIndex((key) => fields[key]?.focused)
+    fields[order[(index + delta + order.length) % order.length]]?.focus()
+  }
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    commands: [
+      { bind: "tab", title: "Next field", group: "Connect", run: () => cycle(1) },
+      { bind: "shift+tab", title: "Previous field", group: "Connect", run: () => cycle(-1) },
+    ],
+  }))
+  onMount(() =>
+    setTimeout(() => {
+      if (fields.address && !fields.address.isDestroyed) fields.address.focus()
+    }, 1),
+  )
 
   // An open room joins at once; any other only lacks the code: fill its address and move to the code field.
   const pick = (room: FoundRoom) => {
@@ -407,6 +438,7 @@ export function DialogConnect(props: { onClose?: () => void }) {
         ref={(element: InputRenderable) => {
           fields[key] = element
         }}
+        onMouseDown={() => fields[key]?.focus()}
         onSubmit={join}
         placeholder={placeholder}
         placeholderColor={theme.text.muted}
@@ -429,7 +461,7 @@ export function DialogConnect(props: { onClose?: () => void }) {
         scrollbarOptions={{ visible: false }}
       >
         <Section title={t("Join by address")} />
-        {field("address", t("Address"), t("e.g. 192.168.1.5:49375"))}
+        {field("address", t("Address"), t("IP or IP:port, e.g. 192.168.1.5"))}
         {field("code", t("Join code"), t("e.g. ABCD-EFGH, empty if not needed"))}
         {field("name", t("Your name"), t("{name} (default)", { name: hostname() }))}
         <Show when={joinError()}>
