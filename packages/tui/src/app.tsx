@@ -1227,7 +1227,10 @@ function App() {
         title: "Toggle console",
         category: "System",
         run: () => {
-          renderer.console.toggle()
+          // The engine's toggle only focuses a visible console that lost focus, which left
+          // it stuck on screen after an escape; a visible console always closes here.
+          if (renderer.console.visible) renderer.console.hide()
+          else renderer.console.toggle()
           dialog.clear()
         },
       },
