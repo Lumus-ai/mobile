@@ -407,6 +407,82 @@ describe("NoteTool", () => {
     ),
   )
 
+  it.live("refuses to edit another note inside a note's own chat and leaves it untouched", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const tools = yield* Tool.Service
+        const note = yield* NoteStore.Service
+        yield* note.create({ title: "Room plan", name: "room-plan", body: "черновик" })
+        // A second note exists on disk and the stamp is current, so the write would
+        // succeed on its own: only the scope rule can be what refuses it.
+        const other = yield* note.create({ title: "Чужая", name: "other-note", body: "текст человека" })
+        const before = yield* read(onDisk(directory, "other-note"))
+
+        const result = yield* run(tools, "call-edit-foreign", {
+          action: "edit",
+          name: "other-note",
+          body: "правка агента",
+          expectedMtime: other.mtime,
+        })
+
+        expect(result).toMatchObject({ status: "error" })
+        expect(refusal(result)).toContain('the note "room-plan"')
+        expect(refusal(result)).toContain("works only on that note")
+        // The refusal happens before the write, so the foreign note is byte for byte what it was.
+        expect(yield* read(onDisk(directory, "other-note"))).toBe(before)
+        expect(before).toContain("текст человека")
+      }).pipe(Effect.provide(harness(directory, [], "room-plan"))),
+    ),
+  )
+
+  it.live("refuses to update or read another note inside a note's own chat", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const tools = yield* Tool.Service
+        const note = yield* NoteStore.Service
+        yield* note.create({ title: "Room plan", name: "room-plan" })
+        const other = yield* note.create({ title: "Чужая", name: "other-note", body: "текст человека" })
+        const before = yield* read(onDisk(directory, "other-note"))
+
+        const updated = yield* run(tools, "call-update-foreign", {
+          action: "update",
+          name: "other-note",
+          status: "done",
+          expectedMtime: other.mtime,
+        })
+        const readBack = yield* run(tools, "call-read-foreign", { action: "read", name: "other-note" })
+
+        expect(updated).toMatchObject({ status: "error" })
+        expect(refusal(updated)).toContain('the note "room-plan"')
+        expect(readBack).toMatchObject({ status: "error" })
+        expect(refusal(readBack)).toContain('the note "room-plan"')
+        expect(yield* read(onDisk(directory, "other-note"))).toBe(before)
+      }).pipe(Effect.provide(harness(directory, [], "room-plan"))),
+    ),
+  )
+
+  it.live("an ordinary chat still edits any note, including one another chat is bound to", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const tools = yield* Tool.Service
+        const note = yield* NoteStore.Service
+        yield* note.create({ title: "Room plan", name: "room-plan" })
+        const other = yield* note.create({ title: "Чужая", name: "other-note", body: "текст человека" })
+
+        const result = yield* run(tools, "call-edit-foreign-ordinary", {
+          action: "edit",
+          name: "other-note",
+          body: "правка обычного чата",
+          expectedMtime: other.mtime,
+        })
+
+        // No binding on this session, so the scope rule must not narrow anything.
+        expect(result).toMatchObject({ status: "completed" })
+        expect(yield* read(onDisk(directory, "other-note"))).toContain("правка обычного чата")
+      }).pipe(Effect.provide(harness(directory))),
+    ),
+  )
+
   it.live("keeps create and list working in an ordinary chat", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {

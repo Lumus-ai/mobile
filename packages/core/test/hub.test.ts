@@ -277,5 +277,44 @@ describe("unknown entry", () => {
   test("a guess that fits nothing points at list and shell", () => {
     expect(HubTool.unknownEntry("zzz")).toEndWith("Use list or query to find an entry, or shell for anything else.")
   })
+
+  // A guess keeps only the eight best fits, so an entry is observable only while fewer than
+  // eight ids share its first segment. Candidates are taken from the live catalog under that
+  // rule, so the test follows the catalog instead of freezing today's ids in it.
+  const placeInPrefixGroup = (id: string) => {
+    const head = `${id.split(".")[0]}.`
+    return Hub.all.filter((entry) => entry.id.startsWith(head)).findIndex((entry) => entry.id === id)
+  }
+
+  const listed = (id: string) =>
+    (HubTool.unknownEntry(id).split("Entries that may fit:\n")[1] ?? "")
+      .split("\n")
+      .some((line) => line.slice(2).split(/[\s:]/)[0] === id)
+
+  const visibleEntry = (match: (entry: Hub.Entry) => boolean) => {
+    const entry = Hub.all.find((candidate) => match(candidate) && placeInPrefixGroup(candidate.id) < 8)
+    expect(entry).toBeDefined()
+    return entry!
+  }
+
+  const machine = () => process.platform as Hub.Platform
+
+  // A filter that lets the array index reach the platform argument drops every gated entry,
+  // so a gated-but-fitting one never shows up as a fit.
+  test("an entry gated to this platform still comes back as a fit", () => {
+    const entry = visibleEntry((candidate) => candidate.platforms?.includes(machine()) ?? false)
+    expect(listed(entry.id)).toBe(true)
+  })
+
+  test("an entry gated away from this platform stays out of the fits", () => {
+    const entry = Hub.all.find((candidate) => candidate.platforms && !candidate.platforms.includes(machine()))
+    expect(entry).toBeDefined()
+    expect(listed(entry!.id)).toBe(false)
+  })
+
+  test("an entry with no platforms keeps coming back", () => {
+    const entry = visibleEntry((candidate) => !candidate.platforms)
+    expect(listed(entry.id)).toBe(true)
+  })
 })
 

@@ -5,7 +5,7 @@ import { ToolFailure } from "@opencode/ai"
 import { Note } from "@opencode/schema/note"
 import { Session } from "@opencode/schema/session"
 import { optional } from "@opencode/schema/schema"
-import { Effect, Schema } from "effect"
+import { Effect, Result, Schema } from "effect"
 import { NoteStore } from "../../note.js"
 import { Permission } from "../../permission.js"
 
@@ -74,12 +74,15 @@ export const Plugin = {
     const permission = yield* Permission.Service
 
     /**
-     * A note's dedicated chat may only work on that note, so creating a second note
-     * or listing the folder is refused there. The binding lives in session metadata
-     * and only this session knows it, which is why the check reads it per call; it is
-     * scoped to the two actions that need it, so the common edit path pays nothing.
+     * The note this chat is the dedicated chat of, read from the session's own metadata:
+     * that binding is what the scope rule below is checked against. It lives in session
+     * metadata and only this session knows it, which is why it is read per call. A chat
+     * with no binding is an ordinary chat and stays unrestricted.
      */
     const noteBoundTo = Effect.fn("NoteTool.noteBoundTo")(function* (sessionID: Session.ID) {
+      // An empty id is a call outside any session, so there is no metadata to read a
+      // binding from and nothing to look up.
+      if (sessionID === "") return undefined
       const session = yield* ctx.session.get({ sessionID }).pipe(Effect.orElseSucceed(() => undefined))
       return session === undefined ? undefined : Note.chatOf(session.metadata)
     })
@@ -145,10 +148,8 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              if (refusedInsideNote(input, context.sessionID)) {
-                const bound = yield* noteBoundTo(context.sessionID)
-                if (bound !== undefined) yield* refuse(bound, input.action)
-              }
+              const bound = yield* noteBoundTo(context.sessionID)
+              if (bound !== undefined && refusedInsideNote(input, bound)) yield* refuse(bound, input.action)
               if (writes(input.action)) {
                 yield* permission.assert({
                   action: name,
@@ -174,9 +175,23 @@ function writes(action: Input["action"]) {
   return action !== "list" && action !== "read"
 }
 
-/** A note's own chat edits that note; it never creates another one nor browses the folder. */
-function refusedInsideNote(input: Input, sessionID: string) {
-  return (input.action === "create" || input.action === "list") && sessionID !== ""
+/**
+ * A note's dedicated chat works on that note and nothing else: it never creates
+ * another one, never browses the folder, and never reads or writes a second note.
+ *
+ * The name is compared through `Note.name`, the same folding the store applies before
+ * it resolves a path, so a model that asks for `Room-Plan` is talking about the bound
+ * note `room-plan` and is not refused for spelling. A name that is not a slug at all
+ * cannot be the bound note either, so it is refused too — the store would refuse it
+ * moments later with a worse message.
+ */
+function refusedInsideNote(input: Input, bound: Note.Slug) {
+  if (input.action === "create" || input.action === "list") return true
+  if (input.name === undefined) return false
+  return Result.match(Note.name(input.name), {
+    onSuccess: (slug) => slug !== bound,
+    onFailure: () => true,
+  })
 }
 
 /**

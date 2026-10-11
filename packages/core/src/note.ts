@@ -154,9 +154,26 @@ const layer = Layer.effect(
       return { name, ...Note.parse(content), mtime: modified(stamp.mtime) } satisfies Info
     })
 
+    /**
+     * The content goes to a temporary file in the notes directory and only then takes the
+     * note's place. A plain write opens the note itself, so a crash or a full disk midway
+     * leaves an empty or half-written file that still parses as a note with no body;
+     * rename never opens the destination, so the previous note survives until the new one
+     * is whole. The temporary name ends in `.tmp`, not `.md`, so names() never lists it.
+     */
+    const writeFile = Effect.fn("NoteStore.writeFile")(function* (destination: string, content: string) {
+      const temporary = `${destination}.${process.pid}.${crypto.randomUUID()}.tmp`
+      yield* fs.ensureDir(path.dirname(destination)).pipe(
+        Effect.andThen(fs.writeFileString(temporary, content)),
+        Effect.andThen(fs.rename(temporary, destination)),
+        // Reached on success too, where the temporary is already gone: force makes that a no-op.
+        Effect.ensuring(fs.remove(temporary, { force: true }).pipe(Effect.ignore)),
+      )
+    })
+
     const write = Effect.fn("NoteStore.write")(function* (name: Note.Slug, file: Note.File) {
       const resolved = yield* target(name)
-      yield* fs.writeWithDirs(resolved.absolute, Note.serialize(file)).pipe(Effect.catch(storage(resolved.absolute)))
+      yield* writeFile(resolved.absolute, Note.serialize(file)).pipe(Effect.catch(storage(resolved.absolute)))
       const written = yield* read(name)
       yield* announce(name)
       return written

@@ -1,9 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Ref, Stream } from "effect"
+import { Effect, Layer, PlatformError, Ref, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "@opencode/core/bus"
 import { NoteStore } from "@opencode/core/note"
 import { Note } from "@opencode/schema/note"
@@ -16,7 +17,7 @@ import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 
-function provide(directory: string) {
+function provide(directory: string, filesystem?: Layer.Layer<FSUtil.Service>) {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
@@ -25,9 +26,63 @@ function provide(directory: string) {
     AppNodeBuilder.build(LayerNode.group([NoteStore.node, Bus.node]), [
       Location.node.replace(activeLocation),
       Permission.node.replace(permissionLayer()),
+      ...(filesystem === undefined ? [] : [FSUtil.node.replace(filesystem)]),
     ]),
   )
 }
+
+/**
+ * Runs one store action under a chosen FSUtil layer. The store is resolved inside that
+ * layer, so a test that swaps the layer swaps the filesystem the write really goes
+ * through rather than only observing a service bound somewhere else.
+ */
+function withStore<A, E>(
+  directory: string,
+  filesystem: Layer.Layer<FSUtil.Service> | undefined,
+  body: (notes: NoteStore.Interface) => Effect.Effect<A, E>,
+) {
+  return Effect.gen(function* () {
+    const notes = yield* NoteStore.Service
+    return yield* body(notes)
+  }).pipe(Effect.scoped, provide(directory, filesystem))
+}
+
+/** A layer that observes `rename` as it happens, keeping the real one underneath. */
+const watchingRename = (onRename: (from: string, to: string) => Effect.Effect<void>) =>
+  Layer.effect(
+    FSUtil.Service,
+    FSUtil.Service.use((base) =>
+      Effect.succeed(
+        FSUtil.Service.of({
+          ...base,
+          rename: (from, to) => onRename(from, to).pipe(Effect.andThen(base.rename(from, to))),
+        }),
+      ),
+    ),
+  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+
+/** A layer whose `rename` never lands, so the failure lands mid-swap instead. */
+const failingRename = (description: string) =>
+  Layer.effect(
+    FSUtil.Service,
+    FSUtil.Service.use((base) =>
+      Effect.succeed(
+        FSUtil.Service.of({
+          ...base,
+          rename: () =>
+            Effect.fail(
+              PlatformError.systemError({
+                _tag: "Unknown",
+                module: "FileSystem",
+                method: "rename",
+                pathOrDescriptor: description,
+                cause: new Error("the swap did not land"),
+              }),
+            ),
+        }),
+      ),
+    ),
+  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 
 const file = (directory: string, name: string) => path.join(directory, ".opencode", "notes", `${name}.md`)
 const text = (target: string) => Effect.promise(() => fs.readFile(target, "utf8"))
@@ -371,6 +426,64 @@ describe("NoteStore", () => {
           { name: "room-plan", removed: true, directory },
         ])
       }).pipe(Effect.scoped, provide(directory)),
+    ),
+  )
+
+  it.live("replaces a note only once the new content is complete on disk", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        // What the directory holds at the instant the new content takes the note's place,
+        // sampled inside rename before the real one runs.
+        const swap = yield* Ref.make<{ readonly entries: string[]; readonly held: string } | undefined>(undefined)
+        const target = file(directory, "room-plan")
+        const created = yield* withStore(directory, undefined, (notes) =>
+          notes.create({ title: "План", name: "room-plan", body: "первое" }),
+        )
+
+        const observer = watchingRename((_, to) =>
+          to === target
+            ? Effect.gen(function* () {
+                const entries = yield* Effect.promise(() => fs.readdir(path.dirname(target)))
+                const held = yield* Effect.promise(() => fs.readFile(target, "utf8"))
+                yield* Ref.set(swap, { entries, held })
+              })
+            : Effect.void,
+        )
+        yield* withStore(directory, observer, (notes) =>
+          notes.edit({ name: "room-plan", body: "второе", expectedMtime: created.mtime }),
+        )
+
+        const seen = yield* Ref.get(swap)
+        // The note still holds the previous text at the moment of the swap: the new
+        // content is already whole under a temporary name, and only then replaces it.
+        expect(seen?.held).toContain("первое")
+        expect(seen?.entries.some((entry) => entry.endsWith(".tmp"))).toBe(true)
+        expect(yield* text(target)).toContain("второе")
+      }),
+    ),
+  )
+
+  it.live("a failed write leaves the previous note intact and no temporary files behind", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const target = file(directory, "room-plan")
+        const created = yield* withStore(directory, undefined, (notes) =>
+          notes.create({ title: "План", name: "room-plan", body: "первое" }),
+        )
+        const before = yield* Effect.promise(() => fs.readFile(target))
+
+        const failure = yield* Effect.flip(
+          withStore(directory, failingRename(target), (notes) =>
+            notes.edit({ name: "room-plan", body: "второе", expectedMtime: created.mtime }),
+          ),
+        )
+
+        expect(failure._tag).toBe("NoteStore.StorageError")
+        // The human's text survived a write that failed at the swap, byte for byte.
+        expect(yield* Effect.promise(() => fs.readFile(target))).toEqual(before)
+        const entries = yield* Effect.promise(() => fs.readdir(path.dirname(target)))
+        expect(entries.filter((entry) => entry.endsWith(".tmp"))).toEqual([])
+      }),
     ),
   )
 })

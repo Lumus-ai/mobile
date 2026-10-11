@@ -63,14 +63,17 @@ const ideas = (): Note => ({
 
 type Call = { method: string; path: string; body?: unknown }
 
-function render(state: string, input: { notes: Note[]; calls: Call[]; conflict?: () => boolean }) {
+function render(
+  state: string,
+  input: { notes: Note[]; calls: Call[]; conflict?: () => boolean; width?: number; layout?: "compact" },
+) {
   let created: (ReturnType<typeof session> & { metadata?: unknown; permissions?: unknown[] }) | undefined
   return createAppFixture({
-    width: 150,
+    width: input.width ?? 150,
     height: 40,
     state,
     args: { sessionID: worker.id },
-    config: { animations: false, session: { sidebar: "hide" }, debug: { devtools: true } },
+    config: { animations: false, layout: input.layout, session: { sidebar: "hide" }, debug: { devtools: true } },
     fetch: async (url, request) => {
       if (url.pathname.startsWith("/api/note")) {
         const body = request.method === "GET" ? undefined : await request.json().catch(() => undefined)
@@ -327,4 +330,22 @@ test("a new note starts with its own bound chat, and deleting one takes two clic
   })
   // The new note opens as the document of its new chat.
   await setup.waitForFrame((frame) => frame.includes("This note is empty.") && frame.includes("New idea"))
+})
+
+test("a long note title gives way in a compact panel and the delete control stays readable", async () => {
+  await using state = await tmpdir()
+  const calls: Call[] = []
+  const long = { ...ideas(), frontmatter: { ...ideas().frontmatter, title: "Opencode++ доработки по итогам совета ИИ" } }
+  await using setup = await render(state.path, { notes: [plan(), long], calls, width: 140, layout: "compact" })
+  await setup.waitForFrame((frame) => frame.includes("Projects │ Notes"))
+  await click(setup, "Notes", 1)
+  await setup.waitForFrame((frame) => frame.includes("Release plan") && frame.includes("○ Openco"))
+  const row = () => setup.captureCharFrame().split("\n")[cell(setup.captureCharFrame(), "○ Openco").y]
+  expect(row()).toMatch(/ 2d +× /)
+
+  const line = row()
+  await setup.mockMouse.click(line.indexOf("×"), cell(setup.captureCharFrame(), "○ Openco").y)
+  await setup.waitForFrame((frame) => frame.includes("delete?"))
+  expect(row()).toMatch(/ 2d +delete\? /)
+  expect(calls.some((call) => call.method === "DELETE")).toBe(false)
 })

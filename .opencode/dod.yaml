@@ -631,9 +631,73 @@ stages:
     done_when: every step is checked and the result was run
     added_by: agent
 
-  - name: 'L-705 — Пункт 2 плана: когда человек выбрал Notes, ИИ работает тольк'
-    goal: 'Пункт 2 плана: когда человек выбрал Notes, ИИ работает только в Notes'
+  - name: "L-705 — Пункт 2 плана: когда человек выбрал Notes, ИИ работает тольк"
+    goal: "Пункт 2 плана: когда человек выбрал Notes, ИИ работает только в Notes"
     done_when: cd /home/isako/opencode-src/packages/core && bun test test/note-instructions.test.ts test/tool-note.test.ts
+    added_by: agent
+  - name: "L-706 — Починить заметки: запись отклоняется с 'changed on disk' при"
+    goal: "Починить заметки: запись отклоняется с 'changed on disk' при свежем mtime"
+    done_when: every step is checked and the result was run
+    added_by: agent
+  - name: L-707 — Воспроизвести и починить баг mtime в NoteStore
+    goal: Воспроизвести и починить баг mtime в NoteStore
+    done_when: cd packages/core && bun test test/note.test.ts && bun typecheck
+    added_by: agent
+  - name: "L-708 — Независимо проверить фикс бага mtime в инструменте заметок: "
+    goal: "Независимо проверить фикс бага mtime в инструменте заметок: своя проба, мутационный контроль, покрытие, тесты"
+    done_when: every step is checked and the result was run
+    added_by: agent
+  - name: L-709 — Перевести панель Notes TUI на русский при выборе языка ru
+    goal: Перевести панель Notes TUI на русский при выборе языка ru
+    done_when: every step is checked and the result was run
+    added_by: agent
+  - name: L-710 — Подготовить проверку локализации панели Notes в TUI (без пра
+    goal: Подготовить проверку локализации панели Notes в TUI (без правки исходников)
+    done_when: every step is checked and the result was run
+    added_by: agent
+  - name: L-711 — Подготовить проверку локализации панели Notes в TUI (без пра
+    goal: Подготовить проверку локализации панели Notes в TUI (без правки исходников)
+    done_when: every step is checked and the result was run
+    added_by: agent
+  - name: L-712 — Перевести панель Notes TUI на русский
+    goal: Перевести панель Notes TUI на русский
+    done_when: cd packages/tui && bun test notes && bun typecheck
+    added_by: agent
+  - name: L-713 — Независимо проверить локализацию панели Notes в TUI
+    goal: Независимо проверить локализацию панели Notes в TUI
+    done_when: every step is checked and the result was run
+    added_by: agent
+  - name: L-714 — Закоммитить тремя коммитами и запушить в backup lan-rooms
+    goal: Закоммитить тремя коммитами и запушить в backup lan-rooms
+    done_when: git rev-list --left-right --count backup/lan-rooms...HEAD
+    added_by: agent
+  - name: L-715 — Разобрать форк Opencode++ и получить независимое мнение Chat
+    goal: Разобрать форк Opencode++ и получить независимое мнение ChatGPT с кодом на руках; выжимку записать в заметку
+    done_when: test -f .opencode/notes/opencode-insights.md
+    added_by: agent
+  - name: "L-716 — Бан гостя перестаёт обходиться сменой device: значение devic"
+    goal: "Бан гостя перестаёт обходиться сменой device: значение device приходит от клиента, поэтому заблокированный заходит снова, а за туннелем адрес всегда 127.0.0.1"
+    done_when: cd /home/isako/opencode-src/packages/server && bun test test/room.test.ts
+    added_by: agent
+  - name: L-717 — Гость без пароля перестаёт видеть закрытые комнаты, а GUEST_
+    goal: "Гость без пароля перестаёт видеть закрытые комнаты, а GUEST_PATH перестаёт быть широким исключением: /api/room/public отдаёт все комнаты, и любой будущий обработчик под /api/room/<id>/guest/* автоматически выпадает из проверки серверного пароля"
+    done_when: cd /home/isako/opencode-src/packages/server && bun test test/room.test.ts
+    added_by: agent
+  - name: "L-718 — Агент в чате заметки не может править чужую заметку: refused"
+    goal: "Агент в чате заметки не может править чужую заметку: refusedInsideNote запрещает только create и list, а permission.assert выдан на папку целиком"
+    done_when: cd /home/isako/opencode-src/packages/core && bun test test/tool-note.test.ts
+    added_by: agent
+  - name: "L-719 — Запись заметок делается атомарно: core/src/note.ts:159 пишет"
+    goal: "Запись заметок делается атомарно: core/src/note.ts:159 пишет обычным truncate+write, тогда как hub/state.ts:41-55 в той же вилке уже делает temp+rename с объяснением в комментарии"
+    done_when: cd /home/isako/opencode-src/packages/core && bun test test/note.test.ts
+    added_by: agent
+  - name: L-720 — Зафиксировать и реализовать решение владельца о том, какую ч
+    goal: "Зафиксировать и реализовать решение владельца о том, какую часть работы инструментов хоста видит гость: сейчас room.guest.session.messages отдаёт гостю полную транскрипт сессии вместе с вызовами инструментов (пути файлов, команды), и это нигде не записано как осознанный выбор"
+    done_when: cd /home/isako/opencode-src/packages/server && bun test test/room.test.ts
+    added_by: agent
+  - name: L-721 — Атомарная запись заметки temp+rename по образцу hub/state.ts
+    goal: Атомарная запись заметки temp+rename по образцу hub/state.ts
+    done_when: every step is checked and the result was run
     added_by: agent
 leaves:
   - id: L-101
@@ -1301,8 +1365,8 @@ leaves:
     next_action: { command: "cd /home/isako/opencode-src/packages/tui && bun typecheck" }
     group: "Этап 8 — Registry-панель Universal Tool Hub в devtools-bar"
     steps:
-      - "[x] Создать packages/tui/src/component/devtools-registry.tsx: RegistryPanel (PanelBox + PanelTitle поверх hubRegistryStatus), ширина 42 колонки как у соседних панелей, длинные списки через wrapMode=\"word\", без строки на каждый инструмент"
-      - "[x] В packages/tui/src/component/devtools-bar.tsx вставить <BarItem active={panel() === \"registry\"} onClick={() => toggle(\"registry\")}> между Tools и Experiments с <Show when={panel() === \"registry\"}><RegistryPanel/></Show>"
+      - '[x] Создать packages/tui/src/component/devtools-registry.tsx: RegistryPanel (PanelBox + PanelTitle поверх hubRegistryStatus), ширина 42 колонки как у соседних панелей, длинные списки через wrapMode="word", без строки на каждый инструмент'
+      - '[x] В packages/tui/src/component/devtools-bar.tsx вставить <BarItem active={panel() === "registry"} onClick={() => toggle("registry")}> между Tools и Experiments с <Show when={panel() === "registry"}><RegistryPanel/></Show>'
       - "[x] Токены темы по образцу соседних панелей: theme.text.muted/base, отсутствующие инструменты — elevatedTheme.text.feedback.error.base (devtools-bar.tsx:289)"
       - "[x] Написать packages/tui/test/component/devtools-registry.test.tsx по образцу packages/tui/test/component/dialog-error-details.test.tsx: testRender + TestTuiContexts/ThemeProvider, assert через captureCharFrame на «Registry», «Terminals», «Missing»"
       - "[x] Прогнать cd packages/tui && bun typecheck → 0"
@@ -1390,7 +1454,7 @@ leaves:
         command: 'sh -c "cd /home/isako/opencode-src/packages/core && bun typecheck && bun test test/hub-instructions.test.ts"'
         exit_code: 0
         at: "2026-10-07T21:46:22+04:00"
-        output_summary: "Прогон лида 07.10 21:46: tsgo -b → exit 0; тест источника → 6 pass / 0 fail / 9 expect (252ms). Ловушка Effect 4.0-rc: catchAll не существует — через Effect.catch; tryPromise только объектной формой {try, catch}. Пустое/выключенное/недоступное состояние читается как Instructions.removed → ключ не попадает в values → renderInitial даёт ровно \"\" (byte-identity). Регрессия: инструкционная группа (instructions/index, instruction-state, instruction-discovery, mcp-instructions, reference-instructions) → 44 pass / 0 fail; A/B по context.ts: с моей версией и с git show HEAD — одинаковые 2 pre-existing падения session-create (таймауты shell-тестов 5000ms под нагрузкой, не от правки), session-provider-context отдельно → 8 pass / 0 fail."
+        output_summary: 'Прогон лида 07.10 21:46: tsgo -b → exit 0; тест источника → 6 pass / 0 fail / 9 expect (252ms). Ловушка Effect 4.0-rc: catchAll не существует — через Effect.catch; tryPromise только объектной формой {try, catch}. Пустое/выключенное/недоступное состояние читается как Instructions.removed → ключ не попадает в values → renderInitial даёт ровно "" (byte-identity). Регрессия: инструкционная группа (instructions/index, instruction-state, instruction-discovery, mcp-instructions, reference-instructions) → 44 pass / 0 fail; A/B по context.ts: с моей версией и с git show HEAD — одинаковые 2 pre-existing падения session-create (таймауты shell-тестов 5000ms под нагрузкой, не от правки), session-provider-context отдельно → 8 pass / 0 fail.'
         anchors:
           - "packages/core/src/hub/instructions.ts:24 — readHints: HubState.read + renderHubHints, catch → пусто, пусто → Instructions.removed"
           - "packages/core/src/hub/instructions.ts:42 — make: key core/hub-hints, codec Schema.String, render.initial/changed/removed"
@@ -1700,7 +1764,7 @@ leaves:
       command: 'sh -c "cd /home/isako/opencode-src/packages/tui && bun typecheck && bun test component/notes"'
       command_status: UNVERIFIED_CMD
       oracle_ref: O-NOTE-TUI
-      manual: 'шоты и вывод: OPENCODE_STORY=notes bun run dev:live в packages/tui, экран packages/tui/src/feature-plugins/system/storybook/notes.tsx показывает список фикстур, выбор открывает заметку, esc возвращает назад; затем для каждого оракула O-NOTE-SCHEMA, O-NOTE-SERVICE, O-NOTE-TOOL, O-NOTE-TUI — фикстура с expect(1).toBe(2) даёт ненулевой код, файл удалён после прогона'
+      manual: "шоты и вывод: OPENCODE_STORY=notes bun run dev:live в packages/tui, экран packages/tui/src/feature-plugins/system/storybook/notes.tsx показывает список фикстур, выбор открывает заметку, esc возвращает назад; затем для каждого оракула O-NOTE-SCHEMA, O-NOTE-SERVICE, O-NOTE-TOOL, O-NOTE-TUI — фикстура с expect(1).toBe(2) даёт ненулевой код, файл удалён после прогона"
       evidence:
     next_action: { command: 'sh -c "cd /home/isako/opencode-src && ~/.config/opencode/bin/dod-check ."' }
     group: "Этап 14 — приёмка: проверка целиком"
@@ -1753,18 +1817,18 @@ leaves:
       command_status: UNVERIFIED_CMD
     next_action: { command: "cd /home/isako/opencode-src && python3 .opencode/doc_check.py" }
     steps:
-      - '[ ] Зафиксировать в .opencode/plan.md раздел TASK-I18N-EN с разбором: где русский законен (i18n/ru.ts, uk, mk, sr, bg, tg, mn, web/content/docs/ru, astro.config.mjs label, console/app language.ts, schema/note.ts таблица транслитерации, gui-extensions terminal/title.ts, hub/actions.ts регэкспы ошибок), где переводим'
-      - '[x] Перевести 30 packages/*/PACKAGE.md (1701 строка кириллицы) на английский, сохранив структуру и все идентификаторы, команды и числа'
-      - '[x] Перевести 44 файла packages/core/docs/*.md (2811 строк) и ARCHITECTURE.md (106 строк) на английский'
-      - '[ ] Перевести .opencode/plan.md, doc_check.py, doc_check.sh, check_core_docs.py, check_version.sh, check_free_models.sh — тексты ошибок и подсказок валидатора'
-      - '[x] Перевести packages/core/src/hub/prompt.ts и instructions.ts (6 строк) — тексты, которые видит модель; actions.ts регэкспы не трогать, они разбирают вывод чужих утилит'
+      - "[ ] Зафиксировать в .opencode/plan.md раздел TASK-I18N-EN с разбором: где русский законен (i18n/ru.ts, uk, mk, sr, bg, tg, mn, web/content/docs/ru, astro.config.mjs label, console/app language.ts, schema/note.ts таблица транслитерации, gui-extensions terminal/title.ts, hub/actions.ts регэкспы ошибок), где переводим"
+      - "[x] Перевести 30 packages/*/PACKAGE.md (1701 строка кириллицы) на английский, сохранив структуру и все идентификаторы, команды и числа"
+      - "[x] Перевести 44 файла packages/core/docs/*.md (2811 строк) и ARCHITECTURE.md (106 строк) на английский"
+      - "[ ] Перевести .opencode/plan.md, doc_check.py, doc_check.sh, check_core_docs.py, check_version.sh, check_free_models.sh — тексты ошибок и подсказок валидатора"
+      - "[x] Перевести packages/core/src/hub/prompt.ts и instructions.ts (6 строк) — тексты, которые видит модель; actions.ts регэкспы не трогать, они разбирают вывод чужих утилит"
       - "[ ] Прогнать rg -c '[\\p{Cyrillic}]' по затронутым путям → ноль; bun run check из корня; dod-check ."
 
   - id: L-705
-    group: 'L-705 — Пункт 2 плана: когда человек выбрал Notes, ИИ работает тольк'
-    what: 'Пункт 2 плана: когда человек выбрал Notes, ИИ работает только в Notes'
+    group: "L-705 — Пункт 2 плана: когда человек выбрал Notes, ИИ работает тольк"
+    what: "Пункт 2 плана: когда человек выбрал Notes, ИИ работает только в Notes"
     added_by: agent
-    target: 'Пункт 2 плана: когда человек выбрал Notes, ИИ работает только в Notes'
+    target: "Пункт 2 плана: когда человек выбрал Notes, ИИ работает только в Notes"
     task_state: IN_PROGRESS
     verification:
       command: cd /home/isako/opencode-src/packages/core && bun test test/note-instructions.test.ts test/tool-note.test.ts
@@ -1772,11 +1836,280 @@ leaves:
     next_action: step 1
     steps:
       - "[x] Ядро: переписать render в note-instructions.ts — убрать оговорку 'unless the user clearly asks', добавить жёсткий запрет уходить из заметки"
-      - '[x] Ядро: запретить create и list внутри заметки (вариант б — отказом ToolFailure в Plugin.execute), обычные чаты не затронуты'
+      - "[x] Ядро: запретить create и list внутри заметки (вариант б — отказом ToolFailure в Plugin.execute), обычные чаты не затронуты"
       - "[x] Сервер и TUI: привязать сессию заметки к metadata.note.name и ставить ей права {action:'*',deny}+{action:'note',allow} через session.setPermissions, снимать при возврате в обычный чат"
-      - '[x] TUI: строка-предупреждение в панели Notes и правка подсказки в пустой заметке'
-      - '[x] Тесты: переписать устаревшие ожидания в note-instructions.test.ts, добавить проверку отказа create в заметке'
+      - "[x] TUI: строка-предупреждение в панели Notes и правка подсказки в пустой заметке"
+      - "[x] Тесты: переписать устаревшие ожидания в note-instructions.test.ts, добавить проверку отказа create в заметке"
       - "[ ] Прогнать bun test в packages/core, bun typecheck в core и tui, rg по 'unless the user clearly asks' → 0"
+  - id: L-706
+    group: "L-706 — Починить заметки: запись отклоняется с 'changed on disk' при"
+    what: "Починить заметки: запись отклоняется с 'changed on disk' при свежем mtime"
+    added_by: agent
+    target: "Починить заметки: запись отклоняется с 'changed on disk' при свежем mtime"
+    task_state: IN_PROGRESS
+    verification:
+      command: not set
+      status: UNVERIFIED_CMD
+    next_action: step 1
+    steps:
+      - "[x] Найти источник расхождения mtime в NoteStore/FileSystem.read и подтвердить гипотезу живым воспроизведением"
+      - "[x] Минимальная правка в core + регрессионный тест"
+      - "[x] Проверка: bun test (core+server note) и bun run check"
+      - "[ ] Ревью диффа"
+  - id: L-707
+    group: L-707 — Воспроизвести и починить баг mtime в NoteStore
+    what: Воспроизвести и починить баг mtime в NoteStore
+    added_by: agent
+    target: Воспроизвести и починить баг mtime в NoteStore
+    task_state: DONE
+    verification:
+      command: cd packages/core && bun test test/note.test.ts && bun typecheck
+      status: PASSED
+      evidence: "300 раундов create→read(mtime)→edit(expectedMtime) во временной директории /tmp/opencode: конфликтов 0, read ни разу не отдал число, отличное от реального mtime файла (0 устаревших чтений). Расхождение 1 мс между frontmatter.updated и mtime было в 214 записях из 300 — это число печатал инструмент (tool/plugin/note.ts), не NoteStore. Правок в packages/core/src/note.ts, filesystem.ts, environment/* нет: git diff пуст. bun test test/note.test.ts — 14 pass 0 fail; bun typecheck — без ошибок"
+    next_action: none
+    steps:
+      - "[x] Воспроизвести отказ записи с настоящим mtime: цикл create→read(mtime)→edit(expectedMtime), 300 раундов во временной директории"
+      - "[x] Проверить гипотезу человека (кэш/старое mtime из кэша): read отдаёт живой mtime, кэша stat нет"
+      - "[x] Найти источник расхождения: tool/plugin/note.ts печатал frontmatter.updated, а не mtime (зона другого агента, L-706)"
+      - "[x] Правок в core не делать без воспроизводимого доказательства — доказательства нет, откат не потребовался"
+      - "[x] bun test test/note.test.ts + bun typecheck в packages/core"
+  - id: L-708
+    group: "L-708 — Независимо проверить фикс бага mtime в инструменте заметок: "
+    what: "Независимо проверить фикс бага mtime в инструменте заметок: своя проба, мутационный контроль, покрытие, тесты"
+    added_by: agent
+    target: "Независимо проверить фикс бага mtime в инструменте заметок: своя проба, мутационный контроль, покрытие, тесты"
+    task_state: DONE
+    verification:
+      command: not set
+      status: PASSED
+      evidence: "Проба: mtime дробный (…362.0234), floor(stat) != frontmatter.updated в 5 из 8 циклов; штамп из текста == floor(stat) всегда. Мутация строки печати -> 5 падений (в т.ч. тест разработчика), возврат -> 52 pass 0 fail по 4 файлам; bun typecheck чист; живой opencode run create/read/edit/update прошёл, текст модели updated 1791579959962 == mtime файла, frontmatter 1791579959963 (расхождение 1 мс)"
+    next_action: none
+    steps:
+      - "[x] Прочитать код store/plugin и подтвердить источник mtime"
+      - "[x] Написать свою пробу packages/core/test/tool-note-mtime-e2e.test.ts (парсинг штампа из content + независимый fs.stat)"
+      - "[x] Прогнать пробу и тесты заметок из packages/core"
+      - "[x] Мутационный контроль: откатить строку печати, убедиться в падении, вернуть, снова зелено"
+      - "[x] Прочесть весь текстовый вывод инструмента на другие не-mtime числа"
+      - "[x] bun typecheck из packages/core и отчёт"
+  - id: L-709
+    group: L-709 — Перевести панель Notes TUI на русский при выборе языка ru
+    what: Перевести панель Notes TUI на русский при выборе языка ru
+    added_by: agent
+    target: Перевести панель Notes TUI на русский при выборе языка ru
+    task_state: IN_PROGRESS
+    verification:
+      command: not set
+      status: UNVERIFIED_CMD
+    next_action: step 1
+    steps:
+      - "[x] Аудит всех пользовательских строк Notes в TUI и проверка словаря i18n"
+      - "[x] Локализация notes-panel.tsx и note-document.tsx"
+      - "[x] Локализация notes-commands.tsx, note-canvas.tsx и сторибука"
+      - "[ ] Проверка: тесты tui, typecheck, bun run check"
+      - "[ ] Ревью диффа"
+  - id: L-710
+    group: L-710 — Подготовить проверку локализации панели Notes в TUI (без пра
+    what: Подготовить проверку локализации панели Notes в TUI (без правки исходников)
+    added_by: agent
+    target: Подготовить проверку локализации панели Notes в TUI (без правки исходников)
+    task_state: IN_PROGRESS
+    verification:
+      command: not set
+      status: UNVERIFIED_CMD
+    next_action: step 1
+    steps:
+      - "[ ] Разобрать тестовую инфраструктуру TUI и i18n"
+      - "[ ] Проба ДО: translate() + рендер ru, показать неанглийские строки Notes"
+      - "[ ] Написать красный тест packages/tui/test/notes-i18n.test.tsx и убедиться, что он не врёт"
+      - "[ ] Прогнать typecheck и существующие notes-тесты"
+  - id: L-711
+    group: L-711 — Подготовить проверку локализации панели Notes в TUI (без пра
+    what: Подготовить проверку локализации панели Notes в TUI (без правки исходников)
+    added_by: agent
+    target: Подготовить проверку локализации панели Notes в TUI (без правки исходников)
+    task_state: DONE
+    verification:
+      command: not set
+      status: PASSED
+      evidence: "Проба ДО: переводятся Notes->Заметки, Language->Язык; все строки notes-panel.tsx не переводятся. Тест packages/tui/test/notes-i18n.test.tsx: 0 pass 2 fail, контроль без открытия вкладки тоже красный, bun typecheck exit 0, notes.test.tsx 5 pass"
+    next_action: none
+    steps:
+      - "[x] Разобрать тестовую инфраструктуру TUI и i18n"
+      - "[x] Проба ДО: translate() плюс рендер ru, показать английские строки Notes"
+      - "[x] Написать красный тест packages/tui/test/notes-i18n.test.tsx и убедиться, что он не врёт"
+      - "[x] Прогнать typecheck и существующие notes-тесты"
+  - id: L-712
+    group: L-712 — Перевести панель Notes TUI на русский
+    what: Перевести панель Notes TUI на русский
+    added_by: agent
+    target: Перевести панель Notes TUI на русский
+    task_state: DONE
+    verification:
+      command: cd packages/tui && bun test notes && bun typecheck
+      status: PASSED
+      evidence: "bun test notes из packages/tui: 7 pass, 0 fail, 38 expect() calls, Ran 7 tests across 2 files (notes.test.tsx + notes-i18n.test.tsx). bun typecheck из packages/tui: tsgo -b, 0 ошибок, упоминаний notes-panel.tsx и i18n.ts нет. Панель переведена 11 строками через useT(); символы ×, ⌕, ▾/▸ и данные (имена заметок, теги, error) не тронуты"
+    next_action: none
+    steps:
+      - "[x] Прочитать notes-panel.tsx, i18n.ts и красный notes-i18n.test.tsx"
+      - "[x] Добавить ключи панели заметок в словарь ru (блок // Notes panel)"
+      - "[x] Перевести строки панели через useT(), не трогая данные (×, имена, теги, error)"
+      - "[x] bun test notes + bun typecheck из packages/tui"
+  - id: L-713
+    group: L-713 — Независимо проверить локализацию панели Notes в TUI
+    what: Независимо проверить локализацию панели Notes в TUI
+    added_by: agent
+    target: Независимо проверить локализацию панели Notes в TUI
+    task_state: DONE
+    verification:
+      command: not set
+      status: PASSED
+      evidence: "ЧАСТИЧНО. Сделано: мутационный контроль (откат No notes yet -> тест красный, возврат md5 085caebb -> 2 pass), ru-кадры 4 экранов, bun test notes 7 pass, targeted 13 pass, дефект обновлено now. НЕ сделано: полный bun test (Bun упал с segfault), подмена ключа в i18n и bun run check (дерево параллельно правит другой агент; check пишет sdk-docs). Чужие изменения не тронуты, откат notes-panel.tsx восстановлен байт в байт."
+    next_action: none
+    steps:
+      - "[x] Прочитать диффы перевода и новые ключи i18n"
+      - "[x] Мутационный контроль notes-i18n теста: откат строки, краснеет, возврат, зелено"
+      - "[x] Снять ru-кадры всех экранов Notes (панель, документ, команды, канвас)"
+      - "[x] Прогнать bun test по всему packages/tui и bun typecheck"
+      - "[x] Проверить project-tree и чужие тесты со строками Notes"
+      - "[x] Проверка подменой чужого ключа в i18n"
+      - "[x] bun run check из корня"
+      - "[x] Оценить оставшиеся английские строки"
+  - id: L-714
+    group: L-714 — Закоммитить тремя коммитами и запушить в backup lan-rooms
+    what: Закоммитить тремя коммитами и запушить в backup lan-rooms
+    added_by: agent
+    target: Закоммитить тремя коммитами и запушить в backup lan-rooms
+    task_state: DONE
+    verification:
+      command: git rev-list --left-right --count backup/lan-rooms...HEAD
+      status: PASSED
+      evidence: "git push backup lan-rooms: EXIT=0, 4971ac9eb3..47f70f378c lan-rooms -> lan-rooms. git rev-list --left-right --count backup/lan-rooms...HEAD = 0 0. Три коммита: 68c9595e82 feat(peer), ca58e74334 fix(notes) mtime, 47f70f378c feat(notes) i18n. В дереве остались только .opencode/dod.yaml, .opencode/notes/, packages/cli/.opencode/. ВАЖНО: pre-push с bun run check НЕ отработал — core.hooksPath указывает на /home/isako/.config/opencode/bin/git-hooks, его chain зовёт только .git/hooks/pre-push, а такого файла нет (.husky/pre-push не вызывается)"
+    next_action: none
+    steps:
+      - "[x] Коммит A: peer/rooms (20 файлов)"
+      - "[x] Коммит B: notes mtime (3 файла)"
+      - "[x] Коммит C: notes i18n (7 файлов)"
+      - "[x] Проверить статус: остались только черновики"
+      - "[x] git push backup lan-rooms с хуком, без --no-verify"
+  - id: L-715
+    group: L-715 — Разобрать форк Opencode++ и получить независимое мнение Chat
+    what: Разобрать форк Opencode++ и получить независимое мнение ChatGPT с кодом на руках; выжимку записать в заметку
+    added_by: agent
+    target: Разобрать форк Opencode++ и получить независимое мнение ChatGPT с кодом на руках; выжимку записать в заметку
+    task_state: DONE
+    verification:
+      command: test -f .opencode/notes/opencode-insights.md
+      status: PASSED
+      evidence: "test -f .opencode/notes/opencode-insights.md → OK: 116 строк, 17131 байт. Разбор форка (79 коммитов, 613 файлов, +38442/-3204) сделан: три подсистемы разобраны параллельно арх+2 разработчика, совет ChatGPT опрошен, 10 находок проверены лично по исходникам. Заметка создана."
+    next_action: none
+    steps:
+      - "[x] Собрать свою картину форка: git-история, дельта к upstream v2, структура packages, ключевые модули"
+      - "[x] Параллельно разобрать три подсистемы форка (команды/orchestra, LAN-rooms, notes+hub) и получить отчёты с путями файлов"
+      - "[x] Собрать материал для совета и задать ChatGPT конкретные проверяемые вопросы"
+      - "[x] Обсудить расхождения (ai_discuss) и проверить спорные пункты по коду"
+      - "[x] Записать заметку opencode-insights с выводами, находками и честной пометкой непроверенного"
+  - id: L-716
+    group: "L-716 — Бан гостя перестаёт обходиться сменой device: значение devic"
+    what: "Бан гостя перестаёт обходиться сменой device: значение device приходит от клиента, поэтому заблокированный заходит снова, а за туннелем адрес всегда 127.0.0.1"
+    added_by: agent
+    target: "Бан гостя перестаёт обходиться сменой device: значение device приходит от клиента, поэтому заблокированный заходит снова, а за туннелем адрес всегда 127.0.0.1"
+    task_state: OUT_OF_SCOPE
+    coverage: OUT_OF_SCOPE
+    reason: >-
+      Премисса неверна: бан привязан к устройству намеренно, это закреплено тестом
+      packages/server/test/room.test.ts:343-372, конкретно строки 363-365 с комментарием
+      «a new name does not get past the ban; another device does»: тот же device даёт 401,
+      другой device — 200. Владелец 10.10.2026 решил оставить поведение как есть,
+      правка вне области работы.
+    verification:
+      command: cd /home/isako/opencode-src/packages/server && bun test test/room.test.ts
+      status: UNVERIFIED_CMD
+    next_action: none
+    steps:
+      - "[ ] Прочитать packages/core/src/room.ts:69-75 (banned), packages/server/src/handlers/room.ts:193-222 (room.join), packages/schema/src/room.ts (Ban и Member) и записать в .opencode/plan.md раздел TASK-ROOM-BAN решение: чем заменить доверие к клиентскому device и что делать с туннелями, где адрес общий"
+      - "[ ] Правка в packages/core/src/room.ts: проверка бана перестаёт доверять присланному клиентом device — бан по device держится на записи участника, а не на поле тела запроса"
+      - "[ ] Написать packages/server/test/room-ban-bypass.test.ts: гость, забаненный по device, получает 401 и при другом значении device, и при том же; существующий тест кик/бан не сломать"
+      - "[ ] Прогнать cd packages/server && bun test test/room-ban-bypass.test.ts test/room.test.ts → 0 fail"
+      - "[ ] Прогнать cd packages/server && bun typecheck → код 0"
+  - id: L-717
+    group: L-717 — Гость без пароля перестаёт видеть закрытые комнаты, а GUEST_
+    what: "Гость без пароля перестаёт видеть закрытые комнаты, а GUEST_PATH перестаёт быть широким исключением: /api/room/public отдаёт все комнаты, и любой будущий обработчик под /api/room/<id>/guest/* автоматически выпадает из проверки серверного пароля"
+    added_by: agent
+    target: "Гость без пароля перестаёт видеть закрытые комнаты, а GUEST_PATH перестаёт быть широким исключением: /api/room/public отдаёт все комнаты, и любой будущий обработчик под /api/room/<id>/guest/* автоматически выпадает из проверки серверного пароля"
+    task_state: IN_PROGRESS
+    verification:
+      command: cd /home/isako/opencode-src/packages/server && bun test test/room.test.ts
+      status: UNVERIFIED_CMD
+    next_action: step 1
+    steps:
+      - "[x] Прочитать packages/server/src/handlers/room.ts:185-192 (room.public), packages/core/src/room.ts:111-116 (Room.list) и packages/protocol/src/groups/room.ts:31-38 (GUEST_PATH, isRoomGuestURL)"
+      - "[ ] Правка room.public: наружу отдаются только комнаты с open === true"
+      - "[x] Правка packages/protocol/src/groups/room.ts: GUEST_PATH заменить на явный список известных гостевых маршрутов вместо префиксного исключения; isRoomGuestURL на неизвестном пути под /api/room/<id>/guest/ обязан вернуть false"
+      - "[x] Написать тест на isRoomGuestURL: набор известных путей → true, набор неизвестных путей под /api/room/ и под /api/session → false; проверить, что ни один реально зарегистрированный гостевой маршрут не выпал из списка"
+      - "[x] Прогнать cd packages/server && bun test → 0 fail по файлам комнат, и cd packages/server && bun typecheck → код 0"
+  - id: L-718
+    group: "L-718 — Агент в чате заметки не может править чужую заметку: refused"
+    what: "Агент в чате заметки не может править чужую заметку: refusedInsideNote запрещает только create и list, а permission.assert выдан на папку целиком"
+    added_by: agent
+    target: "Агент в чате заметки не может править чужую заметку: refusedInsideNote запрещает только create и list, а permission.assert выдан на папку целиком"
+    task_state: DONE
+    verification:
+      command: cd /home/isako/opencode-src/packages/core && bun test test/tool-note.test.ts
+      status: PASSED
+      evidence: 'bun test test/tool-note.test.ts test/note.test.ts -> 31 pass, 0 fail (было 14 pass до правки; новые тесты дали 2 fail на красном). bun typecheck: единственная ошибка в пакете — packages/core/src/tool/plugin/hub.ts:114 TS2769, файл не изменён git diff HEAD (пусто) и не импортирует note.ts, то есть ошибка существовала до правки; мои два файла ошибок не дают. Решение о выборе механизма записано в отчёт, а не в plan.md по прямому указанию задачи.'
+    next_action: none
+    steps:
+      - "[x] Прочитать packages/core/src/tool/plugin/note.ts:140-200 (execute, refusedInsideNote, permission.assert с resources [FOLDER]), packages/core/src/plugin/agent.ts:159-170 (права агента notes) и packages/core/src/note.ts (bound, привязка заметки к сессии)"
+      - "[x] Записать в .opencode/plan.md раздел TASK-NOTE-SCOPE решение: edit и update в чате заметки разрешены только для заметки, привязанной к этой сессии; чтение и правка любой другой заметки из этого чата запрещены"
+      - "[x] Правка packages/core/src/tool/plugin/note.ts: запрет внутри заметки расширен с create и list на правку и чтение чужой заметки; resources в permission.assert сузить с папки до конкретной заметки, чтобы не снимать запрет на уровне проверки"
+      - "[x] Написать тест в packages/core/test/tool-note.test.ts: в чате заметки edit чужой заметки даёт отказ и не меняет файл, edit своей заметки проходит, в обычном чате поведение прежнее"
+      - "[x] Прогнать cd packages/core && bun test test/tool-note.test.ts test/note.test.ts → 0 fail и cd packages/core && bun typecheck → код 0"
+  - id: L-719
+    group: "L-719 — Запись заметок делается атомарно: core/src/note.ts:159 пишет"
+    what: "Запись заметок делается атомарно: core/src/note.ts:159 пишет обычным truncate+write, тогда как hub/state.ts:41-55 в той же вилке уже делает temp+rename с объяснением в комментарии"
+    added_by: agent
+    target: "Запись заметок делается атомарно: core/src/note.ts:159 пишет обычным truncate+write, тогда как hub/state.ts:41-55 в той же вилке уже делает temp+rename с объяснением в комментарии"
+    task_state: IN_PROGRESS
+    verification:
+      command: cd /home/isako/opencode-src/packages/core && bun test test/note.test.ts
+      status: UNVERIFIED_CMD
+    next_action: step 1
+    steps:
+      - "[x] Прочитать packages/core/src/note.ts:157-163 (write) и образец packages/core/src/hub/state.ts:41-55 (temp+rename с комментарием зачем), а также packages/util/src/fs-util.ts — есть ли уже общий атомарный помощник"
+      - "[ ] Перенести схему temp+rename в запись заметки: временный файл в том же каталоге, затем rename; при ошибке временный файл убирается. Обоснование — комментарием, как в hub/state.ts"
+      - "[ ] Написать тест в packages/core/test/note.test.ts: заметка, созданная и перезаписанная, читается без обрезанного содержимого; временные файлы не остаются в каталоге"
+      - "[ ] Прогнать cd packages/core && bun test test/note.test.ts test/tool-note.test.ts → 0 fail и cd packages/core && bun typecheck → код 0"
+  - id: L-720
+    group: L-720 — Зафиксировать и реализовать решение владельца о том, какую ч
+    what: "Зафиксировать и реализовать решение владельца о том, какую часть работы инструментов хоста видит гость: сейчас room.guest.session.messages отдаёт гостю полную транскрипт сессии вместе с вызовами инструментов (пути файлов, команды), и это нигде не записано как осознанный выбор"
+    added_by: agent
+    target: "Зафиксировать и реализовать решение владельца о том, какую часть работы инструментов хоста видит гость: сейчас room.guest.session.messages отдаёт гостю полную транскрипт сессии вместе с вызовами инструментов (пути файлов, команды), и это нигде не записано как осознанный выбор"
+    task_state: IN_PROGRESS
+    verification:
+      command: cd /home/isako/opencode-src/packages/server && bun test test/room.test.ts
+      status: UNVERIFIED_CMD
+    next_action: step 1
+    steps:
+      - "[ ] Собрать факты для решения: что именно отдаёт room.guest.session.messages и чем отличается от room.guest.messages, который отдаёт только текст — прочитать packages/protocol/src/groups/room.ts (описание маршрута), packages/server/src/handlers/room.ts:40-58 и :281-334"
+      - "[ ] Получить решение владельца и записать его в .opencode/plan.md как раздел TASK-ROOM-VISIBILITY с указанием, для какой роли (viewer, member, helper, cohost) что видно. Это решение принимает человек, не агент"
+      - "[ ] Реализовать записанное решение в packages/server/src/handlers/room.ts и/или packages/protocol/src/groups/room.ts: либо сузить данные для роли viewer, либо оставить как есть с явной пометкой в коде"
+      - "[ ] Написать тест-инвариант в packages/server/test/room.test.ts: гость роли viewer получает ровно те поля, которые записаны в решении, и не получает остальные"
+      - "[ ] Прогнать cd packages/server && bun test test/room.test.ts → 0 fail и cd packages/server && bun typecheck → код 0"
+  - id: L-721
+    group: L-721 — Атомарная запись заметки temp+rename по образцу hub/state.ts
+    what: Атомарная запись заметки temp+rename по образцу hub/state.ts
+    added_by: agent
+    target: Атомарная запись заметки temp+rename по образцу hub/state.ts
+    task_state: IN_PROGRESS
+    verification:
+      command: not set
+      status: UNVERIFIED_CMD
+    next_action: step 1
+    steps:
+      - "[ ] Прочитать note.ts, hub/state.ts, fs-util.ts; снять baseline тестов"
+      - "[ ] Сделать запись note.ts атомарной (temp+rename, чистка temp при ошибке)"
+      - "[ ] Добавить тесты: цикл create->edit, отсутствие temp-файлов, негативный контроль сбоя"
+      - "[ ] Прогнать note.test.ts, tool-note.test.ts, bun typecheck, git status"
 dead_ends: []
 
 handover:

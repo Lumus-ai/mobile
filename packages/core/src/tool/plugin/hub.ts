@@ -111,7 +111,7 @@ export const unknownEntry = (id: string) => {
     return undefined
   }
   const close = Hub.all
-    .filter(Hub.supportsPlatform)
+    .filter((entry) => Hub.supportsPlatform(entry))
     .flatMap((entry) => {
       const score = rank(entry)
       return score === undefined ? [] : [{ entry, score }]

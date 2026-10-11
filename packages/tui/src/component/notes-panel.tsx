@@ -150,33 +150,42 @@ export function NotesPanel(props: {
               selected={note.name === props.openName}
               onClick={() => props.onOpen(note)}
             >
-              <text
-                fg={statusColor(theme, note.frontmatter.status)}
-              >{`${NOTE_STATUS_MARKER[note.frontmatter.status]} `}</text>
-              <box flexGrow={1} minWidth={0}>
+              {/* Only the title gives way in a narrow panel; the marker, age and delete keep their width. */}
+              <text flexShrink={0} fg={statusColor(theme, note.frontmatter.status)}>
+                {`${NOTE_STATUS_MARKER[note.frontmatter.status]} `}
+              </text>
+              {/* A truncated title can still draw one cell past its box; the clip keeps it off the age. */}
+              <box flexGrow={1} minWidth={0} overflow="hidden">
                 <text fg={theme.text.base} wrapMode="none" truncate>
                   {noteTitle(note)}
                 </text>
               </box>
-              <text fg={theme.text.muted} wrapMode="none">{` ${ago(note.frontmatter.updated, props.now)}`}</text>
+              <text flexShrink={0} fg={theme.text.muted} wrapMode="none">
+                {` ${ago(note.frontmatter.updated, props.now)} `}
+              </text>
               <box
+                flexShrink={0}
+                backgroundColor={
+                  armed() === note.name || hover() === `note:${note.name}`
+                    ? theme.background.action.destructive.base
+                    : undefined
+                }
                 onMouseOut={() => setArmed()}
                 onMouseUp={(event) => {
                   event.stopPropagation()
                   remove(note)
                 }}
               >
+                {/* The destructive text color is drawn for the destructive background, so they go together. */}
                 <text
                   fg={
-                    armed() === note.name
+                    armed() === note.name || hover() === `note:${note.name}`
                       ? theme.text.action.destructive.base
-                      : hover() === `note:${note.name}`
-                        ? theme.text.action.destructive.hovered
-                        : theme.text.muted
+                      : theme.text.muted
                   }
                   wrapMode="none"
                 >
-                  {armed() === note.name ? " " + t("delete?") : " ×"}
+                  {armed() === note.name ? ` ${t("delete?")} ` : " × "}
                 </text>
               </box>
             </Row>

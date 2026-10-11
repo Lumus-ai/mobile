@@ -332,13 +332,17 @@ function Action(props: {
   const color = () => {
     const state = hovered() ? "hovered" : "base"
     if (props.tone === "formfield") return theme.text.formfield[state]
-    if (props.tone === "destructive") return theme.text.action.destructive[state]
+    if (props.tone === "destructive") return theme.text.action.destructive.base
     return theme.text.action.primary[state]
   }
   return (
     <box
       id={props.id}
       flexShrink={0}
+      // The destructive text color is drawn for the destructive background, so they go together.
+      backgroundColor={props.tone === "destructive" ? theme.background.action.destructive.base : undefined}
+      paddingLeft={props.tone === "destructive" ? 1 : 0}
+      paddingRight={props.tone === "destructive" ? 1 : 0}
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
       onMouseUp={(event) => {

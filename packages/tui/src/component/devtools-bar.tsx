@@ -513,17 +513,22 @@ export function DevToolsBar() {
       >
         <text fg={theme.text.muted}>{t("Teams")}</text>
       </BarItem>
-      <Show when={projects.loaded() && projects.list().length === 0}>
-        <BarItem
-          active={false}
-          onClick={() => {
-            close()
-            openProjectDialog(dialog, projects.refetch)
-          }}
-        >
-          <text fg={theme.text.action.primary.base}>{t("+ Project")}</text>
-        </BarItem>
-      </Show>
+      {/* A hidden Show leaves a Solid slot node without a zIndex among the bar's children, and opentui's
+          zIndex sort then let the backdrop land above the open panel and take its clicks. The wrapper keeps
+          that slot node out of the bar. */}
+      <box flexDirection="row">
+        <Show when={projects.loaded() && projects.list().length === 0}>
+          <BarItem
+            active={false}
+            onClick={() => {
+              close()
+              openProjectDialog(dialog, projects.refetch)
+            }}
+          >
+            <text fg={theme.text.action.primary.base}>{t("+ Project")}</text>
+          </BarItem>
+        </Show>
+      </box>
       <BarItem
         active={false}
         onClick={() => {
@@ -577,7 +582,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
   return (
     <box
       position="relative"
-      zIndex={props.active ? 2500 : undefined}
+      zIndex={props.active ? 2500 : 0}
       height={1}
       flexDirection="row"
       paddingLeft={1}
