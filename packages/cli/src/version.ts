@@ -24,6 +24,8 @@ function gitTagVersion(): string | undefined {
       cwd: REPO_ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      // The background service has no console, so a console program it starts unhidden flashes a window.
+      windowsHide: true,
     })
     if (out.status !== 0) return undefined
     const tag = out.stdout.trim().replace(/^v/, "")
@@ -46,6 +48,7 @@ function gitCommit(): string | undefined {
       cwd: REPO_ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
     })
     if (out.status !== 0) return undefined
     return out.stdout.trim() || undefined

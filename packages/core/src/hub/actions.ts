@@ -144,6 +144,8 @@ function spawnRunner(platform: NodeJS.Platform): Runner {
       stdout: "pipe",
       stderr: "pipe",
       env: { ...process.env, [key]: value },
+      // Runs inside the background service, which has no console: unhidden, each run flashes a window.
+      windowsHide: true,
     })
     const [exit, stdout, stderr] = await Promise.all([
       child.exited,

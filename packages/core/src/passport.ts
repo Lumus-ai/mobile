@@ -39,6 +39,8 @@ export async function run(command: string, directory: string, signal?: AbortSign
     stdout: "pipe",
     stderr: "pipe",
     env: { ...guestEnv(), [searchPath.key]: searchPath.value },
+    // Runs inside the background service, which has no console: unhidden, each run flashes a window.
+    windowsHide: true,
   })
   const timer = setTimeout(() => child.kill(), RUN_TIMEOUT_MS)
   const stop = () => child.kill()
@@ -70,7 +72,7 @@ function guestEnv() {
 // Branch, commit and how many files are changed; absent outside a git checkout.
 function git(directory: string) {
   const out = (args: string[]) => {
-    const result = Bun.spawnSync(["git", ...args], { cwd: directory, stdout: "pipe", stderr: "ignore" })
+    const result = Bun.spawnSync(["git", ...args], { cwd: directory, stdout: "pipe", stderr: "ignore", windowsHide: true })
     return result.exitCode === 0 ? result.stdout.toString().trim() : undefined
   }
   const branch = out(["rev-parse", "--abbrev-ref", "HEAD"])
