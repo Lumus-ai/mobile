@@ -4,6 +4,7 @@ import { useLog } from "./log"
 import { useStorage } from "./storage"
 import { useEvent } from "./event"
 import { errorMessage } from "../util/error"
+import { useClient } from "./client"
 import { useExit } from "./exit"
 import { useDialog } from "../ui/dialog"
 import { DialogUpdate } from "../component/dialog-update"
@@ -30,6 +31,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
   init: (props: { updater?: UpdateSource }) => {
     const event = useEvent()
     const exit = useExit()
+    const client = useClient()
     const dialog = useDialog()
     const log = useLog({ component: "update-notification" })
     const [state, setState] = createSignal<UpdateState>()
@@ -90,7 +92,11 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     const restart = () => {
       const current = state()
       if (current?.type !== "installed") return
-      exit()
+      // The background service runs the old code too, and a source install keeps announcing the
+      // same version, so nothing would replace it on the next start: restart it before leaving.
+      void (client.restart?.() ?? Promise.resolve())
+        .catch((error) => log.error("failed to restart the service after an update", { error }))
+        .finally(() => exit())
     }
 
     const open = (origin: "manual" | "notification") => {

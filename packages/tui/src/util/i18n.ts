@@ -191,6 +191,8 @@ const ru: Record<string, string> = {
   "Message the room or /command, enter to send": "Сообщение в комнату или /команда, Enter — отправить",
   Participants: "Участники",
   DoD: "DoD",
+  "DoD not updated since {time}: {reason}": "DoD не обновлялся с {time}: {reason}",
+  "DoD could not be read: {reason}": "Не удалось прочитать DoD: {reason}",
   "{count} taken": "взято {count}",
   take: "взять",
   you: "вы",
@@ -439,6 +441,8 @@ const ru: Record<string, string> = {
   "This build runs from a source checkout. Use an installed Opencode++ release to check for updates.": "Эта сборка запущена из исходников без ветки. Обновления проверяет только установленный релиз Opencode++.",
   "This branch and its copy on GitHub both have new commits. Merge them by hand with git pull.": "И в этой ветке, и в её копии на GitHub есть новые коммиты. Объедини их вручную через git pull.",
   "This branch has no copy on GitHub to update from.": "У этой ветки нет копии на GitHub, обновляться неоткуда.",
+  "This install has commits that are not on GitHub. Run the installer again to replace them.":
+    "В этой установке есть коммиты, которых нет на GitHub. Запустите установщик заново, чтобы заменить их.",
   // Settings
   Settings: "Настройки",
   General: "Основное",

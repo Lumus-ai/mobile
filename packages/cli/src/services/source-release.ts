@@ -6,10 +6,14 @@ import { parseReleaseVersion } from "./updater-action"
 
 // Opencode++ is shared as a git checkout pinned to a release tag (release/1.2.0),
 // installed by opencode-pp-install.sh or .ps1. Such a checkout updates by moving to the
-// newest release tag on its origin. A checkout on a branch is a development tree: it
-// only fast-forwards to its upstream, so local work is never rewritten or merged.
+// newest release tag on its origin. Before the first release the installer checks out its
+// branch detached instead (origin/lan-rooms), and that checkout follows the branch the
+// same way. A checkout on a branch is a development tree: it only fast-forwards to its
+// upstream, so local work is never rewritten or merged.
 
 const PREFIX = "release/"
+// The branch the installer falls back to, under the same override it reads.
+const INSTALL_BRANCH = process.env.OPENCODE_PP_BRANCH || "lan-rooms"
 const checkout = path.resolve(import.meta.dir, "../../../..")
 
 // The release this checkout is pinned to, or undefined for a development tree.
@@ -23,6 +27,12 @@ export async function current(root = checkout) {
     .nothrow()
     .text()
   return version(tag.trim())
+}
+
+// Whether the checkout sits on a commit rather than a branch: an install, pinned to a
+// release or following the installer's branch.
+export async function detached(root = checkout) {
+  return (await $`git -C ${root} symbolic-ref -q HEAD`.quiet().nothrow()).exitCode !== 0
 }
 
 // The newest release published on origin.
@@ -78,6 +88,34 @@ export async function branch(root = checkout): Promise<Branch | undefined> {
   if (!behind) return { type: "current" }
   if (ahead) return { type: "diverged" }
   return { type: "behind", name, behind }
+}
+
+export type Install =
+  | { readonly type: "behind"; readonly branch: string; readonly behind: number }
+  | { readonly type: "current" }
+  | { readonly type: "ahead" }
+
+// Where a detached install that follows the installer's branch stands against origin, after
+// a fetch: the same state running the installer again would move it to.
+export async function install(root = checkout): Promise<Install> {
+  await $`git -C ${root} fetch --quiet --force origin ${INSTALL_BRANCH}`.quiet()
+  const [ahead, behind] = (
+    await $`git -C ${root} rev-list --left-right --count ${"HEAD...origin/" + INSTALL_BRANCH}`.quiet().text()
+  )
+    .trim()
+    .split(/\s+/)
+    .map(Number)
+  if (ahead) return { type: "ahead" }
+  if (!behind) return { type: "current" }
+  return { type: "behind", branch: INSTALL_BRANCH, behind }
+}
+
+// What the installer does without a release: the branch's newest commit, detached, and the
+// dependencies the terminal app needs. Uncommitted edits stay; git refuses the checkout if
+// the incoming commits touch them.
+export async function follow(root = checkout) {
+  await $`git -C ${root} checkout --quiet --detach ${"origin/" + INSTALL_BRANCH}`.quiet()
+  await $`${process.execPath} install --frozen-lockfile --filter ./packages/cli`.cwd(root).quiet()
 }
 
 // Fast-forwards the branch to its upstream and installs what the new code needs.

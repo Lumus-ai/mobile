@@ -504,7 +504,11 @@ const make = Effect.gen(function* () {
   const apply = Effect.fn("cli.updater.apply")(function* (version: string) {
     if (OPENCODE_LOCAL)
       return yield* Effect.tryPromise({
-        try: async () => ((await SourceRelease.current()) ? SourceRelease.apply(version) : SourceRelease.pull()),
+        try: async () => {
+          if (parseReleaseVersion(version)) return SourceRelease.apply(version)
+          if (await SourceRelease.detached()) return SourceRelease.follow()
+          return SourceRelease.pull()
+        },
         catch: (cause) =>
           new UpgradeError(
             {
@@ -550,11 +554,7 @@ const make = Effect.gen(function* () {
   // so the TUI can translate them.
   const developmentBranch = Effect.fnUntraced(function* () {
     const status = yield* Effect.promise(() => SourceRelease.branch())
-    if (!status)
-      return {
-        type: "unavailable" as const,
-        message: "This build runs from a source checkout. Use an installed Opencode++ release to check for updates.",
-      }
+    if (!status) return yield* installedBranch()
     if (status.type === "behind") return { type: "available" as const, version: `${status.name} +${status.behind}` }
     if (status.type === "current") return undefined
     return {
@@ -563,6 +563,20 @@ const make = Effect.gen(function* () {
         status.type === "diverged"
           ? "This branch and its copy on GitHub both have new commits. Merge them by hand with git pull."
           : "This branch has no copy on GitHub to update from.",
+    }
+  })
+
+  // A detached install not pinned to a release, as the installer leaves one before the first
+  // release: it moves to the first release once one is out, and follows its branch until then.
+  const installedBranch = Effect.fnUntraced(function* () {
+    const newest = yield* Effect.tryPromise(() => SourceRelease.latest()).pipe(Effect.orElseSucceed(() => undefined))
+    if (newest) return { type: "available" as const, version: newest }
+    const status = yield* Effect.promise(() => SourceRelease.install())
+    if (status.type === "behind") return { type: "available" as const, version: `${status.branch} +${status.behind}` }
+    if (status.type === "current") return undefined
+    return {
+      type: "unavailable" as const,
+      message: "This install has commits that are not on GitHub. Run the installer again to replace them.",
     }
   })
 
