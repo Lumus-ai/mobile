@@ -280,7 +280,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           (renderer) => Effect.sync(() => destroyRenderer(renderer)),
         )
       })
-      renderer.setMaxListeners(15)
+      // Every mounted useTerminalDimensions adds a resize listener, and the project, notes,
+      // room and mascot panels push a normal screen past upstream's 15. The budget still
+      // catches a real leak, which grows without bound.
+      renderer.setMaxListeners(32)
       if (basicSymbolsNeeded()) renderer.addPostProcessFn(replaceMissingGlyphs)
       const clipboard = yield* Effect.acquireRelease(
         Effect.sync(() => createTuiClipboard(renderer)),
