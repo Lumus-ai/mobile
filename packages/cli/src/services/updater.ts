@@ -6,11 +6,10 @@ import { Context, Duration, Effect, FileSystem, Layer, Option, Ref, Schema } fro
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
-import { stripVTControlCharacters } from "node:util"
 import { RetainedImage } from "./retained-image"
 import { SourceRelease } from "./source-release"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
-import { errorMessage } from "../util/error"
+import { conciseDetail, errorDetail } from "./updater-error"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew"] as const
 
@@ -56,35 +55,7 @@ const installNames: Record<Method, string> = {
   brew: "Homebrew",
 }
 
-function conciseDetail(input: string) {
-  const lines = stripVTControlCharacters(input)
-    .trim()
-    .replaceAll("\r", "\n")
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0)
-  const tail = lines.slice(-12).join("\n")
-  const clipped = tail.length > 2_000
-  const detail = clipped ? `…${tail.slice(-1_999)}` : tail
-  if (!detail) return
-  if (lines.length <= 12 && !clipped) return detail
-  return `${detail}\n\nOutput shortened to the last 12 lines.`
-}
 
-function errorDetail(cause: unknown): string {
-  if (cause instanceof AppProcess.AppProcessError) {
-    const stderr = conciseDetail(cause.stderr ?? "")
-    if (stderr) return stderr
-    if (cause.cause !== undefined) return errorDetail(cause.cause)
-    return cause.message
-  }
-  if (cause instanceof Error) {
-    const detail = cause.cause === undefined ? undefined : errorDetail(cause.cause)
-    if (!detail || detail === cause.message) return cause.message
-    return `${cause.message}: ${detail}`
-  }
-  return errorMessage(cause)
-}
 
 function resultDetail(result: { code: number; stdout: string; stderr: string }) {
   return (
