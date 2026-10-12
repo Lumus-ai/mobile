@@ -92,7 +92,6 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/which": "3.0.4",
-    "@vscode/ripgrep": "1.18.0",
     "drizzle-kit": "catalog:"
   },
   "dependencies": {
@@ -116,6 +115,7 @@
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
     "@standard-schema/spec": "catalog:",
+    "@vscode/ripgrep": "1.18.0",
     "bun-pty": "0.4.9",
     "diff": "catalog:",
     "drizzle-orm": "catalog:",
