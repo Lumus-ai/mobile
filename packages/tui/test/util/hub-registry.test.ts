@@ -73,6 +73,28 @@ test("default probe mirrors the alias-aware host probe", () => {
     expect(terminal.present).toBe(Hub.HubHost.shellFor(terminal.name) !== undefined)
 })
 
+test("installed manual tools stay visible but are not managed by an unsupported package manager", () => {
+  const installed = hubRegistryStatus({
+    platform: "linux",
+    probe: () => true,
+    terminalProbe: () => true,
+    manager: "apt",
+  })
+  expect(installed.tools.find((row) => row.tool === "semgrep")).toMatchObject({
+    installed: true,
+    manageable: false,
+  })
+
+  const absent = hubRegistryStatus({
+    platform: "linux",
+    probe: (tool) => tool !== "semgrep",
+    terminalProbe: () => true,
+    manager: "apt",
+  })
+  expect(absent.tools.map((row) => row.tool)).not.toContain("semgrep")
+  expect(absent.missing.map((row) => row.tool)).not.toContain("semgrep")
+})
+
 test("terminal readiness is independent of the executable registry probe", () => {
   const status = hubRegistryStatus({
     platform: "linux",
