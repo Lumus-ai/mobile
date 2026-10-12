@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { spawnSync } from "node:child_process"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
@@ -11,11 +12,18 @@ import { testEffect } from "./lib/effect"
 import { tempLocationLayer } from "./fixture/location"
 
 const it = testEffect(AppNodeBuilder.build(Ripgrep.node, [Location.node.replace(tempLocationLayer)]))
+const hasSystemRipgrep =
+  spawnSync(process.platform === "win32" ? "where.exe" : "which", [process.platform === "win32" ? "rg.exe" : "rg"], {
+    stdio: "ignore",
+  }).status === 0
+// The test harness deliberately blocks all network access. The runtime normally downloads rg on first use,
+// so skip executable-integration tests when a developer has not installed rg locally.
+const live = hasSystemRipgrep ? it.live : it.live.skip
 
 describe("Ripgrep", () => {
   for (const hidden of [undefined, false, true]) {
     for (const limit of hidden ? [10] : [1, 10]) {
-      it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
+      live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
         Effect.gen(function* () {
           const tmp = yield* tmpdirScoped()
           yield* Effect.promise(() =>
@@ -43,7 +51,7 @@ describe("Ripgrep", () => {
     }
   }
 
-  it.live("globs files as an array", () =>
+  live("globs files as an array", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -59,7 +67,7 @@ describe("Ripgrep", () => {
     ),
   )
 
-  it.live("greps files with include filtering", () =>
+  live("greps files with include filtering", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -83,7 +91,7 @@ describe("Ripgrep", () => {
     ),
   )
 
-  it.live("keeps ignored files out of catch-all find results", () =>
+  live("keeps ignored files out of catch-all find results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -104,7 +112,7 @@ describe("Ripgrep", () => {
     ),
   )
 
-  it.live("never includes git metadata", () =>
+  live("never includes git metadata", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -136,7 +144,7 @@ describe("Ripgrep", () => {
     ),
   )
 
-  it.live("excludes protected directory trees from catch-all find results", () =>
+  live("excludes protected directory trees from catch-all find results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -160,7 +168,7 @@ describe("Ripgrep", () => {
     ),
   )
 
-  it.live("returns a bounded preview for matches on oversized lines", () =>
+  live("returns a bounded preview for matches on oversized lines", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
