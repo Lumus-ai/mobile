@@ -106,6 +106,7 @@ const it = testEffect(
       Bus.node,
       Job.node,
       Session.node,
+      SessionInbox.node,
       SessionExecution.node,
       LocationServiceMap.node,
       Orchestra.node,
