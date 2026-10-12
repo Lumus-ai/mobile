@@ -101,6 +101,9 @@ const PACKAGE: Record<string, Partial<Record<Manager, string>>> = {
 const ONLY: Record<string, readonly Manager[]> = {
   "apt-cache": ["apt"],
   "dpkg-query": ["apt"],
+  // Semgrep is only provided by the system package managers here through Homebrew;
+  // elsewhere it requires a separate pip-based installation.
+  semgrep: ["brew"],
   // Arch ships PowerShell only through the AUR, which pacman cannot install.
   pwsh: ["apt", "dnf", "brew", "winget", "choco", "scoop"],
 }
@@ -115,9 +118,10 @@ export function manualInstall(tool: string, manager: Manager | undefined) {
 }
 
 export function installable(tool: string, manager: Manager | undefined) {
+  if (manager === undefined) return true
   const only = ONLY[tool]
-  if (!only) return true
-  return manager !== undefined && only.includes(manager)
+  if (only) return only.includes(manager)
+  return packageFor(manager, tool) !== undefined
 }
 
 const BINARY: Record<Manager, string> = {
