@@ -50,8 +50,11 @@ const executionNode = makeGlobalNode({
         if (!session || session.agent === Orchestra.agent) return
         const pending = yield* inbox.list(sessionID)
         const task = pending.find((item) => item.type === "user" && item.payload.metadata?.orchestra !== undefined)
-        const taskDelivered = task !== undefined && !deferTaskDelivery.has(sessionID)
-        if (taskDelivered) yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: task.id })
+        let taskDelivered = false
+        if (task && !deferTaskDelivery.has(sessionID)) {
+          yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: task.id })
+          taskDelivered = true
+        }
         const assistantMessageID = SessionMessage.ID.create()
         yield* bus.publish(SessionEvent.Step.Started, {
           sessionID,
