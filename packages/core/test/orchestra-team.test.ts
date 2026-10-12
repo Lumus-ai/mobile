@@ -15,6 +15,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Orchestra } from "@opencode/core/orchestra"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionStore } from "@opencode/core/session/store"
@@ -31,6 +32,8 @@ import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 
 const model = Model.Ref.make({ id: Model.ID.make("member"), providerID: Provider.ID.make("test") })
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+// Test-only control for a worker run that finishes before its queued team task is promoted.
+const deferTaskDelivery = new Set<Session.ID>()
 
 // Stands in for the runner: a woken team session answers with its title and ends
 // its run the way the title asks ("fails", "stops at shutdown" or succeeds).
@@ -41,9 +44,14 @@ const executionNode = makeGlobalNode({
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
+      const inbox = yield* SessionInbox.Service
       const run = Effect.fn("OrchestraTeamTest.run")(function* (sessionID: Session.ID) {
         const session = yield* store.get(sessionID)
         if (!session || session.agent === Orchestra.agent) return
+        const pending = yield* inbox.list(sessionID)
+        const task = pending.find((item) => item.type === "user" && item.payload.metadata?.orchestra !== undefined)
+        const taskDelivered = task !== undefined && !deferTaskDelivery.has(sessionID)
+        if (taskDelivered) yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: task.id })
         const assistantMessageID = SessionMessage.ID.create()
         yield* bus.publish(SessionEvent.Step.Started, {
           sessionID,
@@ -57,7 +65,7 @@ const executionNode = makeGlobalNode({
           sessionID,
           assistantMessageID,
           ordinal: 0,
-          text: `${session.title}: answer`,
+          text: `${session.title}: ${taskDelivered ? "task answer" : "unrelated answer"}`,
         })
         yield* bus.publish(SessionEvent.Step.Ended, {
           sessionID,
@@ -151,7 +159,7 @@ describe("Orchestra team", () => {
       )
       expect(report).toContain(`session="${developer.id}"`)
       expect(report).toContain('state="done"')
-      expect(report).toContain("Developer: answer")
+      expect(report).toContain("Developer: task answer")
       expect(yield* orchestra.pending(developer.id)).toBeUndefined()
 
       // a second project in the same directory brings its own orchestrator, which joins neither team
@@ -188,6 +196,38 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   )
 
+  it.live("does not report an unrelated completion for an undispatched queued task", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-task-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Task tracking", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      yield* Effect.acquireRelease(
+        Effect.sync(() => deferTaskDelivery.add(worker.id)),
+        () => Effect.sync(() => deferTaskDelivery.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      yield* Effect.sleep("50 millis")
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      const blocked = yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Do another task" }).pipe(Effect.flip)
+      expect(blocked.message).toContain("outstanding task")
+
+      deferTaskDelivery.delete(worker.id)
+      yield* sessions.resume(worker.id)
+      const [report] = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((found) => found.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(report).toContain("Developer: task answer")
+      expect(report).not.toContain("Developer: unrelated answer")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
   it.live("failed runs are reported and shutdowns wait for the resumed run", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))
@@ -330,6 +370,8 @@ describe("Orchestra team", () => {
       expect(yield* evaluate(role.agent, "read")).toBe("allow")
       expect(yield* evaluate(Orchestra.role("developer"), "edit")).toBe("allow")
       expect(yield* evaluate(Orchestra.agent, "edit")).toBe("deny")
+      expect(yield* evaluate(Orchestra.agent, "subagent")).toBe("deny")
+      expect(yield* evaluate(Orchestra.role("developer"), "subagent")).toBe("deny")
 
       yield* orchestra.removeRole(role.id)
       yield* agents.get(role.agent).pipe(
