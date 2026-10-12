@@ -9,6 +9,7 @@ import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { which } from "../util/which.js"
+import { rgPath } from "@vscode/ripgrep"
 
 export namespace RipgrepBinary {
   const VERSION = "15.1.0"
@@ -100,6 +101,10 @@ export namespace RipgrepBinary {
 
             const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
             if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
+
+            // The npm package ships a verified binary for the installed platform. Prefer it
+            // over runtime network access (which is unavailable in offline/test environments).
+            if (yield* fs.isFile(rgPath).pipe(Effect.orDie)) return rgPath
 
             const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
             const config = PLATFORM[platformKey]
