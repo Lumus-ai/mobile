@@ -95,6 +95,15 @@ describe("Hub install/remove actions", () => {
     expect(remove.ok).toBe(true)
   })
 
+  test("registry only advertises automatic installs supported by the selected manager", () => {
+    expect(Hub.installable("rsync", "winget")).toBe(false)
+    expect(Hub.installable("semgrep", "apt")).toBe(false)
+    expect(Hub.installable("semgrep", "pacman")).toBe(false)
+    expect(Hub.installable("semgrep", "brew")).toBe(true)
+    // With no detected manager, the inventory can still show missing tools.
+    expect(Hub.installable("semgrep", undefined)).toBe(true)
+  })
+
   test("winget skips tools it has no package id for instead of guessing", async () => {
     await using bin = await fakeBin({ winget: "exit 0" })
     const { runner, calls } = recorder({ exit: 0, stdout: "", stderr: "" })
