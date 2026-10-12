@@ -45,7 +45,11 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   // (for example, an OPENCODE_CONFIG_DIR pinned to that checkout). In that
   // case it also defines the traversal boundary, otherwise preserve ancestor
   // config discovery across the VCS project boundary.
-  const globalInsideProject = isWithin(resolvedProject, globalRoots[0])
+  // A pinned project-local OpenCode config is a traversal boundary only when
+  // the config root is actually the checkout's .opencode directory. Test/runtime
+  // fixtures may place their isolated global config in a child named "global".
+  const globalInsideProject =
+    path.basename(globalRoots[0]) === ".opencode" && isWithin(resolvedProject, globalRoots[0])
   const locationInsideHome = isWithin(resolvedHome, resolvedLocation)
   const directories = yield* Effect.gen(function* () {
     const result: typeof upward = []
