@@ -5,7 +5,10 @@ import { hubRegistryStatus } from "../../src/util/hub-registry"
 // Entries that apply to the machine running the tests: the same filter the
 // status function applies internally, recomputed here from the catalog only.
 const platformEntries = () => Hub.all.filter((entry) => Hub.supportsPlatform(entry, process.platform))
-const requiredTools = () => new Set(platformEntries().flatMap((entry) => entry.requires ?? []))
+const offeredEntries = (probe: (tool: string) => boolean, manager = Hub.detectManager()) =>
+  platformEntries().filter((entry) =>
+    (entry.requires ?? []).every((tool) => probe(tool) || Hub.installable(tool, manager)),
+  )
 
 test("probe that finds every tool reports the whole catalog ready", () => {
   const status = hubRegistryStatus({ probe: () => true, terminalProbe: () => true })
@@ -33,13 +36,15 @@ test("installed and missing partition every requirement for any probe", () => {
   const probes = [(tool: string) => true, (tool: string) => tool !== "jq", (tool: string) => tool === "rg"]
   for (const probe of probes) {
     const status = hubRegistryStatus({ probe, manager: "apt" })
+    const entries = offeredEntries(probe, "apt")
+    const required = new Set(entries.flatMap((entry) => entry.requires ?? []))
     const accounted = new Set([...status.installed, ...status.missing.map((entry) => entry.tool)])
-    expect([...accounted].sort()).toEqual([...requiredTools()].sort())
+    expect([...accounted].sort()).toEqual([...required].sort())
     expect(status.installed.filter((tool) => status.missing.some((entry) => entry.tool === tool))).toEqual([])
     expect(status.categories.reduce((sum, category) => sum + category.ready, 0)).toBe(status.ready)
     expect(status.categories.reduce((sum, category) => sum + category.total, 0)).toBe(status.total)
     const expectedBlocked = new Map<string, number>()
-    for (const entry of platformEntries()) {
+    for (const entry of entries) {
       for (const tool of entry.requires ?? []) {
         if (!probe(tool)) expectedBlocked.set(tool, (expectedBlocked.get(tool) ?? 0) + 1)
       }
@@ -120,9 +125,10 @@ test("an enabled map turns rows on and an explicit false keeps everything else o
 
 test("tool rows account for every required tool with its blocked entry count", () => {
   for (const probe of [(tool: string) => true, (tool: string) => tool !== "rg"]) {
-    const status = hubRegistryStatus({ probe })
+    const manager = Hub.detectManager()
+    const status = hubRegistryStatus({ probe, manager })
     const expected = new Map<string, number>()
-    for (const entry of platformEntries()) {
+    for (const entry of offeredEntries(probe, manager)) {
       for (const tool of entry.requires ?? []) expected.set(tool, (expected.get(tool) ?? 0) + 1)
     }
     expect(new Map(status.tools.map((row) => [row.tool, row.entries]))).toEqual(expected)
