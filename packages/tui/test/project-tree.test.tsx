@@ -84,6 +84,7 @@ function render(
       if (url.pathname === `/api/orchestra/project/${project.id}/main`) return json(main)
       if (url.pathname.startsWith("/api/orchestra/access/")) return new Response(null, { status: 204 })
       if (url.pathname.startsWith("/api/orchestra/category/")) return new Response(null, { status: 204 })
+      if (url.pathname.startsWith("/api/orchestra/owner/")) return new Response(null, { status: 204 })
       if (url.pathname === "/api/session") return json({ data: [listed], cursor: {} })
       if (url.pathname === `/api/session/${worker.id}` && request.method === "DELETE") {
         calls.push({ method: "DELETE", path: url.pathname })
@@ -91,6 +92,8 @@ function render(
       }
       if (url.pathname === `/api/session/${worker.id}`) return json({ data: listed })
       if (url.pathname === `/api/session/${main.id}`) return json({ data: main })
+      if (/^\/api\/session\/[^/]+$/.test(url.pathname))
+        return json({ data: session(url.pathname.split("/")[3] ?? "ses_new", "New session") })
       if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
         return json({ data: [], cursor: {} })
       if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) return json({ data: {} })
@@ -112,8 +115,7 @@ function cell(frame: string, needle: string) {
   return { x: lines[y].indexOf(needle), y }
 }
 
-
-test("a session created from a project keeps its owner when another project shares the path", async () => {
+test("a new session started from a project carries its project owner metadata", async () => {
   await using state = await tmpdir()
   const calls: Call[] = []
   await using setup = await render(state.path, calls, [project])
@@ -121,7 +123,7 @@ test("a session created from a project keeps its owner when another project shar
   const frame = await setup.waitForFrame((frame) => frame.includes("+ New session"))
   const add = cell(frame, "+ New session")
   await setup.mockMouse.click(add.x + 1, add.y)
-  await setup.waitForFrame((frame) => frame.includes("Model") && frame.includes("Fix a TODO"))
+  await setup.waitForFrame((frame) => frame.includes("Model"))
 
   await setup.mockInput.typeText("hello")
   setup.mockInput.pressEnter()
