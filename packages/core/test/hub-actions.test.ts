@@ -104,6 +104,16 @@ describe("Hub install/remove actions", () => {
     expect(Hub.installable("semgrep", undefined)).toBe(true)
   })
 
+  test("install planner refuses unsupported packages instead of falling back to the binary name", async () => {
+    await using apt = await fakeBin({ "apt-get": "exit 0" })
+    const semgrep = await withPath(apt.path, () => Hub.planFor(["semgrep"], "linux"))
+    expect(semgrep).toBeUndefined()
+
+    await using winget = await fakeBin({ winget: "exit 0" })
+    const rsync = await withPath(winget.path, () => Hub.planFor(["rsync"], "win32"))
+    expect(rsync).toBeUndefined()
+  })
+
   test("winget skips tools it has no package id for instead of guessing", async () => {
     await using bin = await fakeBin({ winget: "exit 0" })
     const { runner, calls } = recorder({ exit: 0, stdout: "", stderr: "" })
