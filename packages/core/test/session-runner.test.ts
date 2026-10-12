@@ -87,6 +87,7 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { HubInstructions } from "@opencode/core/hub/instructions"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
@@ -416,6 +417,7 @@ const layer = Layer.unwrap(
       LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
       SessionRunnerModel.node.replace(models),
       InstructionBuiltIns.node.replace(systemContext),
+      HubInstructions.node.replace(Layer.mock(HubInstructions.Service, { load: () => Instructions.empty })),
       InstructionDiscovery.node.replace(instructionContext),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
       SkillInstructions.node.replace(skillInstructions),
