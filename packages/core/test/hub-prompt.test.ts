@@ -57,6 +57,16 @@ describe("renderHubHints", () => {
     expect(withTerminals).toContain("Terminals: bash, nu")
   })
 
+  test("stale enabled keys are not advertised as tools without catalog recipes", () => {
+    const text = renderHubHints({
+      state: stateOf({ mlr: true, orphanedTool: true }),
+      availability: ["mlr", "orphanedTool"],
+    })
+
+    expect(text).toContain("- mlr —")
+    expect(text).not.toContain("- orphanedTool")
+  })
+
   test("eligible tools are listed in sorted order", () => {
     const text = renderHubHints({
       state: stateOf({ mlr: true, rg: true, jq: true }),
