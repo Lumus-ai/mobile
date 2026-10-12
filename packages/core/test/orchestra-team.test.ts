@@ -96,7 +96,7 @@ const executionNode = makeGlobalNode({
       })
     }),
   ),
-  deps: [Bus.node, SessionStore.node],
+  deps: [Bus.node, SessionStore.node, SessionInbox.node],
 })
 
 const it = testEffect(
