@@ -288,7 +288,7 @@ export function planFor(
   if (tools.length === 0) return undefined
   let best: { manager: Manager; covered: string[] } | undefined
   for (const manager of detected(platform, bin)) {
-    const covered = tools.filter((tool) => packageFor(manager, tool) !== undefined)
+    const covered = tools.filter((tool) => installable(tool, manager) && packageFor(manager, tool) !== undefined)
     if (!best || covered.length > best.covered.length) best = { manager, covered }
     if (covered.length === tools.length) break
   }
