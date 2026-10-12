@@ -89,6 +89,7 @@
     "@parcel/watcher-win32-arm64": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
     "@tsconfig/bun": "catalog:",
+    "@vscode/ripgrep": "1.18.0",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/which": "3.0.4",
