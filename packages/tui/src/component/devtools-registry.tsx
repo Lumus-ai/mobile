@@ -388,7 +388,7 @@ export function RegistryPanel(props: {
           disabled={busy() !== undefined}
           onClick={() =>
             void setSwitch(
-              status().tools.map((row) => row.tool),
+              Array.from(new Set([...Hub.all.flatMap((entry) => entry.requires ?? []), ...Object.keys(enabled())])),
               false,
             )
           }
