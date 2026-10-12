@@ -1,6 +1,7 @@
 export * as Orchestra from "./orchestra.js"
 
 import { Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 import path from "node:path"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -13,7 +14,7 @@ import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
 import { Session } from "./session.js"
 import { SessionEvent } from "@opencode/schema/session-event"
-import type { SessionMessage } from "./session/message.js"
+import { SessionMessage } from "./session/message.js"
 
 export const agent = Orchestra.agent
 export const role = Orchestra.role
@@ -128,15 +129,21 @@ const ROLE = "orchestra/role/"
 const TEMPLATE = "orchestra/template/"
 // The project that opened a session. Without it, every project in one directory would share one team.
 const OWNER = "orchestra/owner/"
-// Reports longer than this are cut; the orchestrator reads the rest with the sessions tool.
-const REPORT_LIMIT = 6000
+// Reports carry enough evidence to decide the next step without copying a whole worker session.
+const REPORT_LIMIT = 16_000
 // How many recent top-level sessions are scanned when listing a project.
 const SCAN_LIMIT = 500
 const decodeProject = Schema.decodeUnknownOption(Project)
 const decodeAccess = Schema.decodeUnknownOption(Access)
 const decodeProjectID = Schema.decodeUnknownOption(ProjectID)
 // A task that is waiting for its report: which main session to deliver it to and when it was sent.
-const Task = Schema.Struct({ main: SessionID, sent: Schema.Number })
+const Task = Schema.Struct({
+  main: SessionID,
+  sent: Schema.Number,
+  // Optional for compatibility with tasks written by earlier versions.
+  messageID: SessionMessage.ID.pipe(Schema.optional),
+  reportID: SessionMessage.ID.pipe(Schema.optional),
+})
 const decodeTask = Schema.decodeUnknownOption(Task)
 // Saved roles and templates keep when they were first created, so custom ones list in creation order.
 const StoredRole = Schema.Struct({ ...Orchestra.RoleSpec.fields, created: Schema.Number })
@@ -154,6 +161,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
     const sessions = yield* Session.Service
     const fs = yield* FSUtil.Service
     const bus = yield* Bus.Service
+    // Serialize task assignment per worker while allowing different workers to run in parallel.
+    const dispatchLocks = KeyedMutex.makeUnsafe<SessionID>()
 
     const projects = Effect.fn("Orchestra.projects")(function* () {
       const result = yield* kv.scan({ prefix: PROJECT, limit: 1000 })
@@ -221,31 +230,63 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
       Effect.gen(function* () {
         const task = decodeTask(yield* kv.get(TASK + sessionID))
         if (Option.isNone(task)) return
-        yield* kv.remove(TASK + sessionID)
         const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
-        if (!session) return
+        if (!session) {
+          yield* kv.remove(TASK + sessionID)
+          return
+        }
+
+        // A worker may finish unrelated work while its dispatched task is still queued.
+        // Do not consume the task marker or report that unrelated answer upstream.
+        const taskMessage = task.value.messageID
+          ? yield* sessions.message({ sessionID, messageID: task.value.messageID })
+          : undefined
+        if (task.value.messageID && taskMessage?.message.type !== "user") return
+
         const recent = yield* sessions
-          .messages({ sessionID, limit: 20, order: "desc" })
+          .messages({
+            sessionID,
+            limit: 20,
+            order: "desc",
+            ...(task.value.messageID
+              ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
+              : {}),
+          })
           .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
         const answer = recent.flatMap(finalText).at(0) ?? "(no text answer)"
         const body =
           answer.length > REPORT_LIMIT
-            ? `${answer.slice(0, REPORT_LIMIT)}\n… (cut; read the session for the rest)`
+            ? `${answer.slice(0, REPORT_LIMIT)}\n… (cut; read the worker session for the rest)`
             : answer
         const title = session.title ?? sessionID
-        yield* sessions
+        const reportID = task.value.reportID ?? SessionMessage.ID.create()
+        // Persist the report ID before admission so retries cannot append duplicate reports.
+        if (!task.value.reportID)
+          yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
+        const admitted = yield* sessions
           .synthetic({
+            id: reportID,
             sessionID: task.value.main,
+            resume: false,
             description: `${title}: ${state}`,
             text: [
-              `<team-report session="${sessionID}" title="${title}" role="${session.agent ?? "default"}" state="${state}">`,
+              `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${title}" role="${session.agent ?? "default"}" state="${state}">`,
               ...(detail ? [detail] : []),
               body,
               "</team-report>",
             ].join("\n"),
-            metadata: { source: "team", sessionID, state },
+            metadata: {
+              source: "team",
+              sessionID,
+              state,
+              ...(task.value.messageID ? { taskID: task.value.messageID } : {}),
+            },
           })
-          .pipe(Effect.ignore)
+          .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
+        // Keep the task outstanding if report admission failed; retry can reuse reportID.
+        if (!admitted) return
+        yield* kv.remove(TASK + sessionID)
+        yield* sessions.resume(task.value.main).pipe(Effect.ignore)
       })
 
     // A shutdown interruption is resumed after restart, so its report waits for the real end.
@@ -420,18 +461,36 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
       }),
       dispatch: Effect.fn("Orchestra.dispatch")(function* (input) {
         if (!input.project.main) return
-        // Recorded before the prompt so a run that ends at once still finds its task.
-        yield* kv.set(TASK + input.sessionID, Schema.encodeSync(Task)({ main: input.project.main, sent: Date.now() }))
-        yield* sessions
-          .prompt({
-            sessionID: input.sessionID,
-            text: input.text,
-            metadata: { orchestra: { project: input.project.id, from: input.project.main } },
-          })
-          .pipe(
-            Effect.tapError(() => kv.remove(TASK + input.sessionID)),
-            Effect.mapError((error) => new DispatchError({ message: String(error) })),
-          )
+        yield* dispatchLocks.withLock(input.sessionID)(
+          Effect.gen(function* () {
+            const key = TASK + input.sessionID
+            const existing = decodeTask(yield* kv.get(key))
+            if (Option.isSome(existing))
+              return yield* new DispatchError({
+                message: `Session ${input.sessionID} already has an outstanding task. Wait for its <team-report> before sending another.`,
+              })
+
+            const messageID = SessionMessage.ID.create()
+            const reportID = SessionMessage.ID.create()
+            // Queue work instead of interrupting whatever the worker is doing right now.
+            yield* kv.set(
+              key,
+              Schema.encodeSync(Task)({ main: input.project.main, sent: Date.now(), messageID, reportID }),
+            )
+            yield* sessions
+              .prompt({
+                sessionID: input.sessionID,
+                id: messageID,
+                delivery: "queue",
+                text: input.text,
+                metadata: { orchestra: { project: input.project.id, from: input.project.main, taskID: messageID } },
+              })
+              .pipe(
+                Effect.tapError(() => kv.remove(key)),
+                Effect.mapError((error) => new DispatchError({ message: String(error) })),
+              )
+          }),
+        )
       }),
       pending: Effect.fn("Orchestra.pending")(function* (sessionID) {
         return Option.getOrUndefined(Option.map(decodeTask(yield* kv.get(TASK + sessionID)), (task) => task.sent))
