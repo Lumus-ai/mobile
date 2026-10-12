@@ -34,13 +34,11 @@ describe("renderHubHints", () => {
   })
 
   test("block stays within 40 lines and 2000 characters with an explicit marker", () => {
-    const enabled: Record<string, boolean> = {}
-    const availability: string[] = []
-    for (let i = 0; i < 200; i++) {
-      enabled[`tool${i}`] = true
-      availability.push(`tool${i}`)
-    }
-    const text = renderHubHints({ state: stateOf(enabled), availability })
+    const tools = [
+      ...new Set(Hub.all.filter((entry) => Hub.supportsPlatform(entry)).flatMap((entry) => entry.requires ?? [])),
+    ]
+    const enabled = Object.fromEntries(tools.map((tool) => [tool, true]))
+    const text = renderHubHints({ state: stateOf(enabled), availability: tools })
     expect(text.length).toBeLessThanOrEqual(2000)
     expect(text.split("\n").length).toBeLessThanOrEqual(40)
     expect(text).toContain("more tools — details through the hub tool")
