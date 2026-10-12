@@ -85,6 +85,7 @@ export function RegistryPanel(props: {
     // belong to this panel, not to the status probe.
     return hubRegistryStatus({
       probe: options.probe,
+      terminalProbe: options.terminalProbe,
       platform: options.platform,
       manager: options.manager,
       enabled: enabled(),
