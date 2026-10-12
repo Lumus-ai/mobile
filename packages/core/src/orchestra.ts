@@ -460,7 +460,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         yield* kv.set(CATEGORY + sessionID, name)
       }),
       dispatch: Effect.fn("Orchestra.dispatch")(function* (input) {
-        if (!input.project.main) return
+        const main = input.project.main
+        if (!main) return
         yield* dispatchLocks.withLock(input.sessionID)(
           Effect.gen(function* () {
             const key = TASK + input.sessionID
@@ -475,7 +476,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
             // Queue work instead of interrupting whatever the worker is doing right now.
             yield* kv.set(
               key,
-              Schema.encodeSync(Task)({ main: input.project.main, sent: Date.now(), messageID, reportID }),
+              Schema.encodeSync(Task)({ main, sent: Date.now(), messageID, reportID }),
             )
             yield* sessions
               .prompt({
@@ -483,7 +484,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
                 id: messageID,
                 delivery: "queue",
                 text: input.text,
-                metadata: { orchestra: { project: input.project.id, from: input.project.main, taskID: messageID } },
+                metadata: { orchestra: { project: input.project.id, from: main, taskID: messageID } },
               })
               .pipe(
                 Effect.tapError(() => kv.remove(key)),
