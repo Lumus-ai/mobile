@@ -32,6 +32,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   )
   const resolvedLocation = yield* fs.resolve(location.directory)
   const resolvedProject = yield* fs.resolve(location.project.directory)
+  const resolvedHome = yield* fs.resolve(global.home)
   const isWithin = (root: string, candidate: string) => {
     const relative = path.relative(root, candidate)
     return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
@@ -40,14 +41,30 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     resolvedLocation === globalRoots[0] || options?.project === false
       ? []
       : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
-  // Project discovery is scoped to the current checkout. Global sources are
-  // added separately below, and parent directories outside this project must
-  // not leak unrelated user or machine configuration into the session.
+  // The explicit global config may itself live inside a project checkout
+  // (for example, an OPENCODE_CONFIG_DIR pinned to that checkout). In that
+  // case it also defines the traversal boundary, otherwise preserve ancestor
+  // config discovery across the VCS project boundary.
+  const globalInsideProject = isWithin(resolvedProject, globalRoots[0])
+  const locationInsideHome = isWithin(resolvedHome, resolvedLocation)
   const directories = yield* Effect.gen(function* () {
     const result: typeof upward = []
     for (const directory of upward) {
       const resolved = yield* fs.resolve(directory)
-      if (isWithin(resolvedProject, resolved)) result.push(directory)
+      if (globalInsideProject) {
+        if (isWithin(resolvedProject, resolved)) result.push(directory)
+        continue
+      }
+      if (locationInsideHome) {
+        if (
+          isWithin(resolvedHome, resolved) &&
+          (options?.global !== false || resolved !== resolvedHome)
+        ) {
+          result.push(directory)
+        }
+        continue
+      }
+      result.push(directory)
     }
     return result
   })
