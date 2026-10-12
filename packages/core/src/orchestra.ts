@@ -264,11 +264,13 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         // Persist the report ID before admission so retries cannot append duplicate reports.
         if (!task.value.reportID)
           yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
+        // Remove the outstanding marker before synthetic admission wakes the orchestrator.
+        // The lock blocks a new dispatch until admission succeeds or the task is restored.
+        yield* kv.remove(TASK + sessionID)
         const admitted = yield* sessions
           .synthetic({
             id: reportID,
             sessionID: task.value.main,
-            resume: false,
             description: `${title}: ${state}`,
             text: [
               `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${title}" role="${session.agent ?? "default"}" state="${state}">`,
@@ -284,13 +286,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
             },
           })
           .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
-        // The lock prevents a new dispatch from racing this hand-off. Clear the task
-        // before waking the orchestrator; if admission fails, restore it for a safe retry.
-        yield* kv.remove(TASK + sessionID)
-        if (!admitted) {
-          yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
-          return
-        }
+        // If admission failed, restore the task so a later completion can retry safely.
+        if (!admitted) yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
       }),
     )
 
