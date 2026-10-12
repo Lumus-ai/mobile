@@ -130,7 +130,7 @@ function project(
 ) {
   return Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
-    const outputCommand = process.platform === "win32" ? "Write-Output ready" : "printf ready"
+    const outputCommand = process.platform === "win32" ? "[Console]::Out.Write(\'ready\')" : "printf ready"
     const definition = {
       description: "Review code",
       template: "Review $ARGUMENTS: !`" + outputCommand + "`",
