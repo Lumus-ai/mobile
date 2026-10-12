@@ -67,14 +67,21 @@ export function RegistryPanel(props: {
 
   // A click that lands before the state file resolves is the operator's newest
   // intent, so the slow read must not overwrite it.
-  let enabledInteracted = false
   let terminalInteracted = false
+  // Any switch changed before hydration is replayed over the saved state. A value
+  // of undefined explicitly removes a key after a failed write restored defaults.
+  const pendingSwitches = new Map<string, boolean | undefined>()
   // A failed optimistic write may roll back only tools untouched by a newer click.
   let switchSequence = 0
   const latestSwitch = new Map<string, number>()
   onMount(async () => {
     const state = await HubState.read({ directory: options.directory })
-    if (!enabledInteracted) setEnabled(state.enabled)
+    const merged = { ...state.enabled }
+    for (const [tool, value] of pendingSwitches) {
+      if (value === undefined) delete merged[tool]
+      else merged[tool] = value
+    }
+    setEnabled(merged)
     if (!terminalInteracted) setTerminal(state.terminal)
     setRevision((value) => value + 1)
   })
@@ -192,7 +199,10 @@ export function RegistryPanel(props: {
   const setSwitch = async (tools: readonly string[], next: boolean) => {
     enabledInteracted = true
     const intent = ++switchSequence
-    for (const tool of tools) latestSwitch.set(tool, intent)
+    for (const tool of tools) {
+      latestSwitch.set(tool, intent)
+      pendingSwitches.set(tool, next)
+    }
 
     // Optimistic: the switch reflects the click immediately, and the atomic
     // bulk write controls the next session's prompt block.
@@ -206,8 +216,10 @@ export function RegistryPanel(props: {
         setEnabled((state) => {
           const rollback = { ...state }
           for (const tool of current) {
-            if (durable.enabled[tool] === undefined) delete rollback[tool]
-            else rollback[tool] = durable.enabled[tool]
+            const value = durable.enabled[tool]
+            pendingSwitches.set(tool, value)
+            if (value === undefined) delete rollback[tool]
+            else rollback[tool] = value
           }
           return rollback
         })
