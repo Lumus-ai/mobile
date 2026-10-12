@@ -212,6 +212,30 @@ test("the switch turns a tool on for the model and writes it to hub.json", async
   }
 })
 
+test("All off also clears saved switches that are outside the current registry rows", async () => {
+  await using tmp = await tmpdir()
+  const stale = "orphanedLegacyTool"
+  const target = hubRegistryStatus({ probe }).tools.find((row) => row.installed)!.tool
+  await HubState.setEnabled(stale, true, { directory: tmp.path })
+  await HubState.setEnabled(target, true, { directory: tmp.path })
+
+  const app = await render({ probe, directory: tmp.path })
+  try {
+    const frame = await app.waitForFrame(
+      (frame) => frame.includes(`[on] ${target}`) && frame.includes("All off"),
+    )
+    const lines = frame.split("\n")
+    const row = lines.findIndex((line) => line.includes("All off"))
+    await app.mockMouse.click(lines[row]!.indexOf("All off") + 2, row)
+
+    await app.waitForFrame((frame) => rowValue(frame, "For the model") === "0/" + hubRegistryStatus({ probe }).tools.length)
+    expect(await untilEnabled(tmp.path, target, false)).toBe(true)
+    expect(await untilEnabled(tmp.path, stale, false)).toBe(true)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("pager moves to the second page of tools", async () => {
   await using tmp = await tmpdir()
   const app = await render({ probe, directory: tmp.path })
