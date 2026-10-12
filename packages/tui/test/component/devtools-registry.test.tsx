@@ -195,6 +195,26 @@ test("remove needs a second click on the same button before it runs", async () =
   }
 })
 
+test("a manually installed tool stays visible without an unsafe Remove action", async () => {
+  await using tmp = await tmpdir()
+  const app = await render({
+    probe: () => true,
+    platform: "linux",
+    manager: "apt",
+    terminalProbe: () => true,
+    directory: tmp.path,
+  })
+  try {
+    await app.mockInput.typeText("semgrep")
+    const frame = await app.waitForFrame((frame) => frame.includes("semgrep") && frame.includes("installed (manual)"))
+    const row = frame.split("\n").find((line) => line.includes("semgrep") && line.includes("installed (manual)"))
+    expect(row).toBeDefined()
+    expect(row).not.toContain("Remove")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("the switch turns a tool on for the model and writes it to hub.json", async () => {
   await using tmp = await tmpdir()
   const app = await render({ probe, manager: registryManager, directory: tmp.path })
