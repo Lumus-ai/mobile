@@ -29,14 +29,16 @@ export type Hints = {
 // so the prompt path stays synchronous and testable without mocks.
 export function renderHubHints(hints: Hints): string {
   const available = new Set(hints.availability)
+  const required = entriesByTool()
+  // Ignore stale settings and executable backends such as nu/pwsh: only catalog
+  // dependencies that actually unlock recipes belong in the model's tool list.
   const eligible = Object.keys(hints.state.enabled)
-    .filter((tool) => hinted(hints.state, tool) && available.has(tool))
+    .filter((tool) => hinted(hints.state, tool) && available.has(tool) && required.has(tool))
     .sort()
   // Opt-in default: with nothing enabled the prompt stays byte-identical to
   // what it was before this feature existed.
   if (eligible.length === 0) return ""
 
-  const required = entriesByTool()
   const lines = [HEADER]
   if (hints.terminals?.length) lines.push(`Terminals: ${hints.terminals.join(", ")}`)
   for (const tool of eligible) lines.push(toolLine(tool, required.get(tool) ?? []))
