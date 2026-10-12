@@ -79,7 +79,11 @@ function toolLine(tool: string, entries: readonly Entry[]): string {
 // so the caller can append the overflow marker (reserved as one extra line).
 function fit(lines: string[], pinned: number): number {
   let dropped = 0
-  while (lines.length + 1 > MAX_LINES || lines.join("\n").length > MAX_CHARS) {
+  const marker = (count: number) => `… ${count} more tools — details through the hub tool`
+  while (
+    lines.length + 1 > MAX_LINES ||
+    lines.join("\n").length + (dropped > 0 ? marker(dropped).length + 1 : 0) > MAX_CHARS
+  ) {
     if (lines.length <= pinned) break
     lines.pop()
     dropped++
