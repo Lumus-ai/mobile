@@ -47,7 +47,12 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
         const result: typeof upward = []
         for (const directory of upward) {
           const resolved = yield* fs.resolve(directory)
-          if (isWithin(resolvedHome, resolved)) result.push(directory)
+          if (
+            isWithin(resolvedHome, resolved) &&
+            (options?.global !== false || resolved !== resolvedHome)
+          ) {
+            result.push(directory)
+          }
         }
         return result
       })
