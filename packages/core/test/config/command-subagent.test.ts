@@ -130,7 +130,12 @@ function project(
 ) {
   return Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
-    const definition = { description: "Review code", template: "Review $ARGUMENTS: !`printf ready`", ...command }
+    const outputCommand = process.platform === "win32" ? "Write-Output ready" : "printf ready"
+    const definition = {
+      description: "Review code",
+      template: "Review $ARGUMENTS: !`" + outputCommand + "`",
+      ...command,
+    }
     yield* Effect.promise(() =>
       Bun.write(
         path.join(tmp.path, "opencode.json"),
