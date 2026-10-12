@@ -37,6 +37,7 @@ import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
+const directory = process.cwd()
 let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
 let selections: Array<Session.Info["model"]> = []
@@ -118,7 +119,7 @@ const it = testEffect(
       llmClient.replace(client),
       Model.node.replace(smallModels),
       SessionRunnerModel.node.replace(models),
-      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make(directory) })),
       PluginSupervisor.node.replace(Layer.empty),
     ],
   ),
@@ -129,7 +130,7 @@ const insertSession = (id: Session.ID, title?: string, created?: number, model?:
     const { db } = yield* Database.Service
     yield* db
       .insert(ProjectTable)
-      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make(directory), sandboxes: [] })
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
@@ -139,7 +140,7 @@ const insertSession = (id: Session.ID, title?: string, created?: number, model?:
         id,
         project_id: Project.ID.global,
         slug: id,
-        directory: "/project",
+        directory,
         title,
         model,
         time_created: created,
@@ -386,7 +387,7 @@ it.effect("generates a title for an explicitly requested child session", () =>
     const { db } = yield* Database.Service
     yield* db
       .insert(ProjectTable)
-      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make(directory), sandboxes: [] })
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
@@ -397,7 +398,7 @@ it.effect("generates a title for an explicitly requested child session", () =>
         project_id: Project.ID.global,
         parent_id: Session.ID.make("ses_title_parent"),
         slug: sessionID,
-        directory: "/project",
+        directory,
         version: "test",
       })
       .onConflictDoNothing()
