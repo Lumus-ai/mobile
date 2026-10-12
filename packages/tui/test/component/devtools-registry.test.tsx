@@ -16,6 +16,8 @@ import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 // rg is absent so the first row carries an install button; every other catalog
 // tool resolves, so the rest of the page carries remove buttons.
 const probe = (tool: string) => tool !== "rg"
+const registryManager: Hub.Manager =
+  process.platform === "win32" ? "winget" : process.platform === "darwin" ? "brew" : "apt"
 
 async function render(options: RegistryPanelOptions & { onShell?: (shell: string) => void }) {
   const app = await testRender(
@@ -68,8 +70,8 @@ function cell(app: Awaited<ReturnType<typeof render>>, tool: string, needle: str
 
 test("registry panel shows readiness, terminals and a paged tool list", async () => {
   await using tmp = await tmpdir()
-  const status = hubRegistryStatus({ probe, terminalProbe: () => true })
-  const app = await render({ probe, terminalProbe: () => true, directory: tmp.path })
+  const status = hubRegistryStatus({ probe, terminalProbe: () => true, manager: registryManager })
+  const app = await render({ probe, terminalProbe: () => true, manager: registryManager, directory: tmp.path })
   try {
     const frame = app.captureCharFrame()
     expect(frame).toContain("Registry")
@@ -97,6 +99,7 @@ test("install button runs the action and refreshes the row", async () => {
   const calls: string[] = []
   const app = await render({
     probe,
+    manager: registryManager,
     directory: tmp.path,
     install: async (tool) => {
       calls.push(tool)
@@ -104,7 +107,7 @@ test("install button runs the action and refreshes the row", async () => {
     },
   })
   try {
-    const target = hubRegistryStatus({ probe }).tools.find((row) => !row.installed)
+    const target = hubRegistryStatus({ probe, manager: registryManager }).tools.find((row) => !row.installed && row.manageable)
     expect(target?.tool).toBe("rg")
     const { x, y } = cell(app, target!.tool, "Install")
     await app.mockMouse.click(x, y)
@@ -123,7 +126,7 @@ test("a pending install shows the pending marker until the result arrives", asyn
   const gate = new Promise<Hub.ActionResult>((resolve) => {
     release = resolve
   })
-  const app = await render({ probe, directory: tmp.path, install: () => gate })
+  const app = await render({ probe, manager: registryManager, directory: tmp.path, install: () => gate })
   try {
     const { x, y } = cell(app, "rg", "Install")
     await app.mockMouse.click(x, y)
@@ -140,6 +143,7 @@ test("failed install shows the command in the note and the reason in a toast", a
   await using tmp = await tmpdir()
   const app = await render({
     probe,
+    manager: registryManager,
     directory: tmp.path,
     install: async () => ({
       ok: false,
@@ -167,6 +171,7 @@ test("remove needs a second click on the same button before it runs", async () =
   const calls: string[] = []
   const app = await render({
     probe,
+    manager: registryManager,
     directory: tmp.path,
     remove: async (tool) => {
       calls.push(tool)
@@ -174,7 +179,7 @@ test("remove needs a second click on the same button before it runs", async () =
     },
   })
   try {
-    const target = hubRegistryStatus({ probe }).tools.find((row) => row.installed)
+    const target = hubRegistryStatus({ probe, manager: registryManager }).tools.find((row) => row.installed && row.manageable)
     expect(target).toBeDefined()
     const { x, y } = cell(app, target!.tool, "Remove")
     await app.mockMouse.click(x, y)
@@ -192,9 +197,9 @@ test("remove needs a second click on the same button before it runs", async () =
 
 test("the switch turns a tool on for the model and writes it to hub.json", async () => {
   await using tmp = await tmpdir()
-  const app = await render({ probe, directory: tmp.path })
+  const app = await render({ probe, manager: registryManager, directory: tmp.path })
   try {
-    const tools = hubRegistryStatus({ probe }).tools
+    const tools = hubRegistryStatus({ probe, manager: registryManager }).tools
     const first = tools[0].tool
     const { x, y } = cell(app, first, "[off]")
     await app.mockMouse.click(x, y)
@@ -238,9 +243,9 @@ test("All off also clears saved switches that are outside the current registry r
 
 test("pager moves to the second page of tools", async () => {
   await using tmp = await tmpdir()
-  const app = await render({ probe, directory: tmp.path })
+  const app = await render({ probe, manager: registryManager, directory: tmp.path })
   try {
-    const status = hubRegistryStatus({ probe })
+    const status = hubRegistryStatus({ probe, manager: registryManager })
     const secondPage = status.tools[12].tool
     await app.waitForFrame((frame) => !frame.includes(secondPage))
     const { x, y } = cell(app, "Search", "›")
@@ -318,6 +323,7 @@ test("a mirror 404 offers a system update that clears the warning", async () => 
   let updates = 0
   const app = await render({
     probe,
+    manager: registryManager,
     directory: tmp.path,
     install: async () => ({
       ok: false,
