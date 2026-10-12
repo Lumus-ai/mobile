@@ -1,6 +1,7 @@
 export * as HubInstructions from "./instructions.js"
 
-import { Effect, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Instructions } from "../instructions/index.js"
 import { available } from "./resolve.js"
 import { HubState } from "./state.js"
@@ -56,3 +57,15 @@ export const make = (options: Options = {}): Instructions.List =>
 // Backends with a working shell on this machine, in this platform's order:
 // on Windows bash only counts when Git Bash is installed.
 const terminalBackends = (): string[] => HubHost.backends()
+
+
+export interface Interface {
+  /** Builds a fresh instruction source that reads the current opt-in Hub state. */
+  readonly load: () => Instructions.List
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/HubInstructions") {}
+
+const layer = Layer.sync(Service, () => Service.of({ load: () => make() }))
+
+export const node = makeGlobalNode({ service: Service, layer, deps: [] })
