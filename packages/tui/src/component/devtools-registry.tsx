@@ -117,7 +117,7 @@ export function RegistryPanel(props: {
   const current = createMemo(() => Math.min(page(), pages() - 1))
   const rows = createMemo(() => visible().slice(current() * PAGE_SIZE, current() * PAGE_SIZE + PAGE_SIZE))
   const selected = () => rows()[Math.min(cursor(), rows().length - 1)]
-  const missing = createMemo(() => status().tools.filter((row) => !row.installed))
+  const missing = createMemo(() => status().tools.filter((row) => !row.installed && row.manageable))
   const isOn = (tool: string) => enabled()[tool] === true
   // Without a choice the hub prefers nu, then pwsh, then bash, whichever is installed.
   const aiTerminal = () => {
@@ -266,7 +266,7 @@ export function RegistryPanel(props: {
         group: "Registry",
         run: () => {
           const row = selected()
-          if (!row) return
+          if (!row || !row.manageable) return
           if (row.installed) return onRemove(row.tool)
           onInstall(row.tool)
         },
@@ -517,15 +517,21 @@ function ToolRow(props: {
       <Show when={props.working}>
         <text fg={theme.text.muted}>…</text>
       </Show>
-      <Show when={!props.working && props.tool.installed}>
+      <Show when={!props.working && props.tool.installed && props.tool.manageable}>
         <Button disabled={props.pending} onLeave={props.onDisarm} onClick={props.onRemove}>
           {props.armed ? t("Remove?") : t("Remove")}
         </Button>
       </Show>
-      <Show when={!props.working && !props.tool.installed}>
+      <Show when={!props.working && props.tool.installed && !props.tool.manageable}>
+        <text fg={theme.text.muted}>{t("installed (manual)")}</text>
+      </Show>
+      <Show when={!props.working && !props.tool.installed && props.tool.manageable}>
         <Button disabled={props.pending} onClick={props.onInstall}>
           {t("Install")}
         </Button>
+      </Show>
+      <Show when={!props.working && !props.tool.installed && !props.tool.manageable}>
+        <text fg={theme.text.muted}>{t("no installer here")}</text>
       </Show>
     </box>
   )
