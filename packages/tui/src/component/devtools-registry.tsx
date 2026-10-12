@@ -191,23 +191,27 @@ export function RegistryPanel(props: {
 
   const setSwitch = async (tools: readonly string[], next: boolean) => {
     enabledInteracted = true
-    const previous = enabled()
     const intent = ++switchSequence
     for (const tool of tools) latestSwitch.set(tool, intent)
 
     // Optimistic: the switch reflects the click immediately, and the atomic
     // bulk write controls the next session's prompt block.
-    setEnabled({ ...previous, ...Object.fromEntries(tools.map((tool) => [tool, next])) })
-    await HubState.setEnabledMany(tools, next, { directory: options.directory }).catch((error: unknown) => {
-      setEnabled((current) => {
-        const rollback = { ...current }
-        for (const tool of tools) {
-          if (latestSwitch.get(tool) !== intent) continue
-          if (previous[tool] === undefined) delete rollback[tool]
-          else rollback[tool] = previous[tool]
-        }
-        return rollback
-      })
+    setEnabled((current) => ({ ...current, ...Object.fromEntries(tools.map((tool) => [tool, next])) }))
+    await HubState.setEnabledMany(tools, next, { directory: options.directory }).catch(async (error: unknown) => {
+      const current = tools.filter((tool) => latestSwitch.get(tool) === intent)
+      if (current.length > 0) {
+        // Roll back to durable state, not the previous optimistic snapshot: an earlier
+        // pending click may itself have failed while this click was waiting in the queue.
+        const durable = await HubState.read({ directory: options.directory })
+        setEnabled((state) => {
+          const rollback = { ...state }
+          for (const tool of current) {
+            if (durable.enabled[tool] === undefined) delete rollback[tool]
+            else rollback[tool] = durable.enabled[tool]
+          }
+          return rollback
+        })
+      }
       toast.show({ message: error instanceof Error ? error.message : String(error), variant: "error" })
     })
   }
