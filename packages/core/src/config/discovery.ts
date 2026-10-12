@@ -31,7 +31,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     fs.resolve(item),
   )
   const resolvedLocation = yield* fs.resolve(location.directory)
-  const resolvedHome = yield* fs.resolve(global.home)
+  const resolvedProject = yield* fs.resolve(location.project.directory)
   const isWithin = (root: string, candidate: string) => {
     const relative = path.relative(root, candidate)
     return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
@@ -40,23 +40,17 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     resolvedLocation === globalRoots[0] || options?.project === false
       ? []
       : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
-  // When a project lives under the user's home, do not walk above that boundary.
-  // This prevents parent directories from injecting unrelated ecosystem config.
-  const directories = isWithin(resolvedHome, resolvedLocation)
-    ? yield* Effect.gen(function* () {
-        const result: typeof upward = []
-        for (const directory of upward) {
-          const resolved = yield* fs.resolve(directory)
-          if (
-            isWithin(resolvedHome, resolved) &&
-            (options?.global !== false || resolved !== resolvedHome)
-          ) {
-            result.push(directory)
-          }
-        }
-        return result
-      })
-    : upward
+  // Project discovery is scoped to the current checkout. Global sources are
+  // added separately below, and parent directories outside this project must
+  // not leak unrelated user or machine configuration into the session.
+  const directories = yield* Effect.gen(function* () {
+    const result: typeof upward = []
+    for (const directory of upward) {
+      const resolved = yield* fs.resolve(directory)
+      if (isWithin(resolvedProject, resolved)) result.push(directory)
+    }
+    return result
+  })
   const discovered = yield* Effect.forEach(directories, (directory) =>
     Effect.gen(function* () {
       // Resolve the parent too: missing children must honor symlinked global roots.
