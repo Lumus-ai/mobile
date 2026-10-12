@@ -28,6 +28,18 @@ const pendingWrites = new Map<string, Promise<void>>()
 // A missing, unreadable, or foreign-shaped file means "nothing enabled": the hub is
 // opt-in, so a broken state file must degrade to an empty prompt block, not fail.
 export async function read(options: Options = {}): Promise<State> {
+  const key = path.resolve(file(options))
+  while (true) {
+    const pending = pendingWrites.get(key)
+    if (!pending) return readDisk(options)
+    await pending
+    // Another mutation may have queued while this read was waiting. Keep waiting
+    // so callers never refresh the UI from a snapshot older than an in-flight write.
+    if (pendingWrites.get(key) === pending) continue
+  }
+}
+
+async function readDisk(options: Options): Promise<State> {
   const text = await fs.readFile(file(options), "utf8").catch(() => undefined)
   if (text === undefined) return { version: 1, enabled: {} }
   return Option.getOrElse(decodeState(text), () => ({ version: 1, enabled: {} }))
@@ -53,7 +65,7 @@ function update(options: Options, change: (state: State) => State): Promise<void
   const key = path.resolve(file(options))
   const previous = pendingWrites.get(key) ?? Promise.resolve()
   const operation = previous.then(async () => {
-    const state = await read(options)
+    const state = await readDisk(options)
     await write(change(state), options)
   })
   const settled = operation.then(() => undefined, () => undefined)
