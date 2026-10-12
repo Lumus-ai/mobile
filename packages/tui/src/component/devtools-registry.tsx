@@ -68,6 +68,7 @@ export function RegistryPanel(props: {
   // A click that lands before the state file resolves is the operator's newest
   // intent, so the slow read must not overwrite it.
   let terminalInteracted = false
+  let terminalSequence = 0
   // Any switch changed before hydration is replayed over the saved state. A value
   // of undefined explicitly removes a key after a failed write restored defaults.
   const pendingSwitches = new Map<string, boolean | undefined>()
@@ -129,10 +130,15 @@ export function RegistryPanel(props: {
 
   const chooseTerminal = (name: Hub.Backend) => {
     terminalInteracted = true
+    const intent = ++terminalSequence
     setTerminal(name)
-    void HubState.setTerminal(name, { directory: options.directory }).catch((error: unknown) =>
-      toast.show({ message: error instanceof Error ? error.message : String(error), variant: "error" }),
-    )
+    void HubState.setTerminal(name, { directory: options.directory }).catch(async (error: unknown) => {
+      if (terminalSequence === intent) {
+        const durable = await HubState.read({ directory: options.directory })
+        setTerminal(durable.terminal)
+      }
+      toast.show({ message: error instanceof Error ? error.message : String(error), variant: "error" })
+    })
     props.onShell?.(name)
   }
 
