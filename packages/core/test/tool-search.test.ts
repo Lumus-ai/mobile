@@ -44,7 +44,14 @@ const matchesGlob = (pattern: string, file: string) => {
     normalized.replaceAll("/**/", "/"),
     normalized.startsWith("**/") ? normalized.slice(3) : "**/" + normalized,
   ]
-  return variants.some((candidate) => new Bun.Glob(candidate).match(file))
+  if (variants.some((candidate) => new Bun.Glob(candidate).match(file))) return true
+  // Bun's glob matcher may reject a wildcard path segment beginning with a dot.
+  // In hidden=true cases, retry after stripping the dot marker from each segment.
+  const withoutDotPrefix = file
+    .split("/")
+    .map((segment) => (segment.startsWith(".") ? segment.slice(1) : segment))
+    .join("/")
+  return withoutDotPrefix !== file && variants.some((candidate) => new Bun.Glob(candidate).match(withoutDotPrefix))
 }
 
 async function filesUnder(root: string, hidden = true): Promise<string[]> {
