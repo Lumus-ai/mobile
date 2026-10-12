@@ -227,7 +227,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
     })
 
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped", detail?: string): Effect.Effect<void> =>
-      Effect.gen(function* () {
+      dispatchLocks.withLock(sessionID)(
+        Effect.gen(function* () {
         const task = decodeTask(yield* kv.get(TASK + sessionID))
         if (Option.isNone(task)) return
         const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
@@ -283,11 +284,15 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
             },
           })
           .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
-        // Keep the task outstanding if report admission failed; retry can reuse reportID.
-        if (!admitted) return
+        // The lock prevents a new dispatch from racing this hand-off. Clear the task
+        // before waking the orchestrator; if admission fails, restore it for a safe retry.
         yield* kv.remove(TASK + sessionID)
-        yield* sessions.resume(task.value.main).pipe(Effect.ignore)
-      })
+        if (!admitted) {
+          yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
+          return
+        }
+      }),
+    )
 
     // A shutdown interruption is resumed after restart, so its report waits for the real end.
     yield* bus
