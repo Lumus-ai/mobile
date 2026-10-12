@@ -188,6 +188,10 @@ describe("Agent", () => {
         "title",
       ])
       expect((yield* agent.get(Agent.defaultID))?.system).toBeUndefined()
+      const orchestrator = yield* agent.get(Agent.ID.make("orchestrator"))
+      expect(orchestrator?.system).toContain("actual selected model's advertised context window")
+      expect(orchestrator?.system).toContain("A report is evidence to inspect, not proof by itself")
+      expect(orchestrator?.system).not.toContain("trust its stated checks")
       const permissions = (yield* agent.get(Agent.defaultID))?.permissions ?? []
       const compaction = yield* agent.get(Agent.ID.make("compaction"))
       expect(compaction?.mode).toBe("primary")
