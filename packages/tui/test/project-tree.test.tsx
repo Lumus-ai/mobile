@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { SessionOwnerMetadataKey } from "@opencode/schema/orchestra"
 import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
@@ -56,6 +57,22 @@ function render(
           path: url.pathname,
           body: request.method === "GET" ? undefined : await request.json().catch(() => undefined),
         })
+      if (url.pathname === "/api/session" && request.method === "POST") {
+        const body = (await request.json()) as {
+          id: string
+          title?: string
+          location?: { directory: string }
+          metadata?: Record<string, unknown>
+        }
+        calls.push({ method: "POST", path: url.pathname, body })
+        return json({
+          data: {
+            ...session(body.id, body.title ?? "New session"),
+            ...body,
+            location: body.location ?? { directory },
+          },
+        })
+      }
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/orchestra/project" && request.method === "POST")
         return json({ ...project, id: "prj_new", name: "Created" })
@@ -76,6 +93,9 @@ function render(
       if (url.pathname === `/api/session/${main.id}`) return json({ data: main })
       if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
         return json({ data: [], cursor: {} })
+      if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) return json({ data: {} })
+      if (/^\/api\/session\/[^/]+\/(agent|model)$/.test(url.pathname))
+        return new Response(null, { status: 204 })
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
@@ -91,6 +111,26 @@ function cell(frame: string, needle: string) {
   if (y < 0) throw new Error(`no ${needle} on screen`)
   return { x: lines[y].indexOf(needle), y }
 }
+
+
+test("a session created from a project keeps its owner when another project shares the path", async () => {
+  await using state = await tmpdir()
+  const calls: Call[] = []
+  await using setup = await render(state.path, calls, [project])
+
+  const frame = await setup.waitForFrame((frame) => frame.includes("+ New session"))
+  const add = cell(frame, "+ New session")
+  await setup.mockMouse.click(add.x + 1, add.y)
+  await setup.waitForFrame((frame) => frame.includes("Model") && frame.includes("Fix a TODO"))
+
+  await setup.mockInput.typeText("hello")
+  setup.mockInput.pressEnter()
+  await setup.waitFor(() => calls.some((call) => call.method === "POST" && call.path === "/api/session"))
+
+  expect(calls.find((call) => call.method === "POST" && call.path === "/api/session")?.body).toMatchObject({
+    metadata: { [SessionOwnerMetadataKey]: { projectID: project.id } },
+  })
+})
 
 test("the left panel lists the operator's projects with the orchestrator and sessions by category at their access level", async () => {
   await using state = await tmpdir()

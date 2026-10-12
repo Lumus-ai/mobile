@@ -1,5 +1,6 @@
 import { Prompt, type PromptRef } from "../component/prompt"
 import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
+import { SessionOwnerMetadataKey } from "@opencode/schema/orchestra"
 import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
@@ -106,6 +107,7 @@ export function Home() {
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0} position="relative">
           <Prompt
             ref={bind}
+            metadata={route.project ? { [SessionOwnerMetadataKey]: { projectID: route.project } } : undefined}
             placeholders={placeholder}
             disabled={forms().length > 0}
             onCreate={(sessionID, request) => {

@@ -67,8 +67,12 @@ export function ProjectTree(props: { width: number }) {
   // only on the hovered session.
   const narrow = () => props.width < 36
   const shared = createMemo(() => new Set((rooms.latest ?? []).map((room) => room.sessionID)))
-  const owner = (session: { id: string; location: { directory: string } }) =>
-    Orchestra.ownerOf(projects(), session.location.directory, projectList.owner(session.id))
+  const owner = (session: Pick<SessionInfo, "id" | "location" | "metadata">) =>
+    Orchestra.ownerOf(
+      projects(),
+      session.location.directory,
+      projectList.owner(session.id) ?? Orchestra.sessionOwner(session.metadata),
+    )
 
   const sessionProject = () => {
     const session = current()

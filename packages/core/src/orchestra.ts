@@ -22,6 +22,7 @@ export type Access = Orchestra.Access
 export const allows = Orchestra.allows
 export const contains = Orchestra.contains
 export const ownerOf = Orchestra.ownerOf
+export const sessionOwner = Orchestra.sessionOwner
 export const Project = Orchestra.Project
 export type Project = Orchestra.Project
 export const ProjectID = Orchestra.ProjectID
@@ -186,7 +187,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
     })
 
     const owns = Effect.fn("Orchestra.owns")(function* (project: Project, session: SessionSchema.Info) {
-      const claimed = Option.getOrUndefined(decodeProjectID(yield* kv.get(OWNER + session.id)))
+      const claimed =
+        Option.getOrUndefined(decodeProjectID(yield* kv.get(OWNER + session.id))) ?? Orchestra.sessionOwner(session.metadata)
       return Orchestra.ownerOf(yield* projects(), session.location.directory, claimed)?.id === project.id
     })
 
@@ -379,12 +381,14 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         const claims = yield* owners()
         const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
         // Another project in the same directory has its own orchestrator; it never joins this team.
-        return recent.filter(
-          (session) =>
+        return recent.filter((session) => {
+          const claimed = claims[session.id] ?? Orchestra.sessionOwner(session.metadata)
+          return (
             session.id !== project.main &&
             session.agent !== Orchestra.agent &&
-            Orchestra.ownerOf(all, session.location.directory, claims[session.id])?.id === project.id,
-        )
+            Orchestra.ownerOf(all, session.location.directory, claimed)?.id === project.id
+          )
+        })
       }),
       owns,
       owners,

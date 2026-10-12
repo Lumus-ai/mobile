@@ -33,6 +33,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
+import type { Session } from "@opencode/schema/session"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
@@ -79,6 +80,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   muted?: boolean
+  metadata?: Session.Metadata
   onSubmit?: () => void
   // A submit created a new session; `request` settles when the server has it.
   onCreate?: (sessionID: string, request: Promise<unknown>) => void
@@ -1238,6 +1240,7 @@ export function Prompt(props: PromptProps) {
         id: newSessionID,
         location: directory ? { directory } : location,
         agent: agent.id,
+        metadata: props.metadata,
         model: {
           providerID: selection.providerID,
           id: selection.modelID,

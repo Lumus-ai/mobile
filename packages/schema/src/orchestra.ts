@@ -1,10 +1,11 @@
 export * as Orchestra from "./orchestra.js"
 
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { Agent } from "./agent.js"
 import { ascending } from "./identifier.js"
 import { statics } from "./schema.js"
 import { SessionID } from "./session-id.js"
+import type { SessionMetadata } from "./session-metadata.js"
 
 // What a project's main session may do with another session of the project.
 // Each level includes the ones before it: hidden < read < write < full.
@@ -36,6 +37,20 @@ export const ProjectID = Schema.String.check(Schema.isStartsWith("prj")).pipe(
   statics((schema) => ({ create: () => schema.make("prj_" + ascending()) })),
 )
 export type ProjectID = typeof ProjectID.Type
+
+// A session created from a project's own entry point carries its intended owner
+// in the creation payload, so shared-directory projects never have to infer it
+// from the path while a separate owner record is being saved.
+export const SessionOwnerMetadataKey = "opencode-pp:project-owner"
+export const SessionOwnerMetadata = Schema.Struct({ projectID: ProjectID }).annotate({
+  identifier: "Orchestra.SessionOwnerMetadata",
+})
+const decodeSessionOwner = Schema.decodeUnknownOption(SessionOwnerMetadata)
+
+export function sessionOwner(metadata?: SessionMetadata) {
+  if (!metadata) return undefined
+  return Option.getOrUndefined(decodeSessionOwner(metadata[SessionOwnerMetadataKey]))?.projectID
+}
 
 // A project the operator created: a name and a directory. Its sessions are the
 // ones it opened and the others in that directory or below it (see ownerOf);
