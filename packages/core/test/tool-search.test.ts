@@ -11,6 +11,8 @@ import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
 import { Ripgrep } from "@opencode/core/ripgrep"
+import { Entry, Match } from "@opencode/schema/filesystem"
+import { RelativePath } from "@opencode/core/schema"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { GlobTool } from "@opencode/core/tool/plugin/glob"
@@ -34,6 +36,119 @@ const grepToolNode = makeLocationNode({
 })
 const sessionID = Session.ID.make("ses_search_tool_test")
 
+// Keep tool-contract tests offline and deterministic; native ripgrep process/JSON
+// behavior is exercised separately by ripgrep.test.ts when rg is installed.
+const matchesGlob = (pattern: string, file: string) => {
+  const normalized = pattern.replaceAll("\\", "/")
+  const variants = [
+    normalized,
+    normalized.replaceAll("/**/", "/"),
+    normalized.startsWith("**/") ? normalized.slice(3) : "**/" + normalized,
+  ]
+  return variants.some((candidate) => new Bun.Glob(candidate).match(file))
+}
+
+async function filesUnder(root: string, hidden = true): Promise<string[]> {
+  const result: string[] = []
+  const visit = async (directory: string, prefix: string): Promise<void> => {
+    const entries = await fs.readdir(directory, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.name === ".git" || entry.name === "node_modules") continue
+      if (!hidden && entry.name.startsWith(".")) continue
+      const relative = prefix ? prefix + "/" + entry.name : entry.name
+      const absolute = path.join(directory, entry.name)
+      if (entry.isDirectory()) await visit(absolute, relative)
+      else if (entry.isFile()) result.push(relative.replaceAll("\\", "/"))
+    }
+  }
+  await visit(root, "")
+  return result.sort()
+}
+
+const fakeRipgrep = Layer.succeed(
+  Ripgrep.Service,
+  Ripgrep.Service.of({
+    glob: (input) =>
+      Effect.tryPromise({
+        try: async () =>
+          (await filesUnder(input.cwd, input.hidden === true))
+            .filter((file) => matchesGlob(input.pattern, file))
+            .filter((file) => !(input.exclude ?? []).some((pattern) => matchesGlob(pattern, file)))
+            .slice(0, input.limit)
+            .map((file) => Entry.make({ path: RelativePath.make(file), type: "file" })),
+        catch: (cause) => new Ripgrep.Error({ message: String(cause), cause }),
+      }),
+    find: (input) =>
+      Effect.tryPromise({
+        try: async () =>
+          (await filesUnder(input.cwd, input.hidden === true))
+            .filter((file) => input.pattern === "*" || matchesGlob(input.pattern, file))
+            .filter((file) => !(input.exclude ?? []).some((pattern) => matchesGlob(pattern, file)))
+            .slice(0, input.limit)
+            .map((file) => Entry.make({ path: RelativePath.make(file), type: "file" })),
+        catch: (cause) => new Ripgrep.Error({ message: String(cause), cause }),
+      }),
+    grep: (input) =>
+      Effect.suspend(() => {
+        let expression: RegExp
+        try {
+          let source = input.pattern
+          if (input.literal) {
+            source = source
+              .split("")
+              .map((character) => (character === "$" || /[.*+?^{}()|[\]\\]/.test(character) ? "\\" + character : character))
+              .join("")
+          }
+          expression = new RegExp(source, input.caseSensitive === false ? "gi" : "g")
+        } catch (cause) {
+          const message = input.pattern === "[" ? "unclosed character class" : String(cause)
+          return Effect.fail(new Ripgrep.InvalidPatternError({ pattern: input.pattern, message }))
+        }
+        return Effect.tryPromise({
+          try: async () => {
+            const all = await filesUnder(input.cwd, true)
+            const files = all.filter((file) => {
+              if (input.file && file !== input.file.replaceAll("\\", "/")) return false
+              if (input.include && !matchesGlob(input.include, file)) return false
+              return true
+            })
+            const result: Match[] = []
+            for (const file of files) {
+              const contents = await fs.readFile(path.join(input.cwd, file), "utf8")
+              const lines = contents.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g)?.filter(Boolean) ?? []
+              let offset = 0
+              for (let index = 0; index < lines.length; index++) {
+                const text = lines[index]!
+                expression.lastIndex = 0
+                const submatches: Array<{ text: string; start: number; end: number }> = []
+                let match: RegExpExecArray | null
+                while ((match = expression.exec(text)) !== null) {
+                  submatches.push({ text: match[0], start: match.index, end: match.index + match[0].length })
+                  if (!match[0].length) expression.lastIndex++
+                }
+                if (submatches.length) {
+                  result.push(
+                    Match.make({
+                      entry: Entry.make({ path: RelativePath.make(file), type: "file" }),
+                      line: index + 1,
+                      offset,
+                      text,
+                      submatches,
+                    }),
+                  )
+                  if (result.length >= input.limit) return result
+                }
+                offset += Buffer.byteLength(text, "utf8")
+              }
+            }
+            return result
+          },
+          catch: (cause) => new Ripgrep.Error({ message: String(cause), cause }),
+        })
+      }),
+  }),
+)
+
 const withTools = <A, E, R>(
   directory: string,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
@@ -48,6 +163,7 @@ const withTools = <A, E, R>(
         Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
         ),
+        Ripgrep.node.replace(fakeRipgrep),
         Permission.node.replace(
           permissionLayer({
             assert: (input) =>
