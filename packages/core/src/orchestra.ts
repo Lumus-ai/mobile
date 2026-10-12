@@ -229,65 +229,65 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped", detail?: string): Effect.Effect<void> =>
       dispatchLocks.withLock(sessionID)(
         Effect.gen(function* () {
-        const task = decodeTask(yield* kv.get(TASK + sessionID))
-        if (Option.isNone(task)) return
-        const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
-        if (!session) {
-          yield* kv.remove(TASK + sessionID)
-          return
-        }
+          const task = decodeTask(yield* kv.get(TASK + sessionID))
+          if (Option.isNone(task)) return
+          const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
+          if (!session) {
+            yield* kv.remove(TASK + sessionID)
+            return
+          }
 
-        // A worker may finish unrelated work while its dispatched task is still queued.
-        // Do not consume the task marker or report that unrelated answer upstream.
-        const taskMessage = task.value.messageID
-          ? yield* sessions.message({ sessionID, messageID: task.value.messageID })
-          : undefined
-        if (task.value.messageID && taskMessage?.message.type !== "user") return
+          // A worker may finish unrelated work while its dispatched task is still queued.
+          // Do not consume the task marker or report that unrelated answer upstream.
+          const taskMessage = task.value.messageID
+            ? yield* sessions.message({ sessionID, messageID: task.value.messageID })
+            : undefined
+          if (task.value.messageID && taskMessage?.message.type !== "user") return
 
-        const recent = yield* sessions
-          .messages({
-            sessionID,
-            limit: 20,
-            order: "desc",
-            ...(task.value.messageID
-              ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
-              : {}),
-          })
-          .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
-        const answer = recent.flatMap(finalText).at(0) ?? "(no text answer)"
-        const body =
-          answer.length > REPORT_LIMIT
-            ? `${answer.slice(0, REPORT_LIMIT)}\n… (cut; read the worker session for the rest)`
-            : answer
-        const title = session.title ?? sessionID
-        const reportID = task.value.reportID ?? SessionMessage.ID.create()
-        // Persist the report ID before admission so retries cannot append duplicate reports.
-        if (!task.value.reportID)
-          yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
-        // Remove the outstanding marker before synthetic admission wakes the orchestrator.
-        // The lock blocks a new dispatch until admission succeeds or the task is restored.
-        yield* kv.remove(TASK + sessionID)
-        const admitted = yield* sessions
-          .synthetic({
-            id: reportID,
-            sessionID: task.value.main,
-            description: `${title}: ${state}`,
-            text: [
-              `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${title}" role="${session.agent ?? "default"}" state="${state}">`,
-              ...(detail ? [detail] : []),
-              body,
-              "</team-report>",
-            ].join("\n"),
-            metadata: {
-              source: "team",
+          const recent = yield* sessions
+            .messages({
               sessionID,
-              state,
-              ...(task.value.messageID ? { taskID: task.value.messageID } : {}),
-            },
-          })
-          .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
-        // If admission failed, restore the task so a later completion can retry safely.
-        if (!admitted) yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
+              limit: 20,
+              order: "desc",
+              ...(task.value.messageID
+                ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
+                : {}),
+            })
+            .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+          const answer = recent.flatMap(finalText).at(0) ?? "(no text answer)"
+          const body =
+            answer.length > REPORT_LIMIT
+              ? `${answer.slice(0, REPORT_LIMIT)}\n… (cut; read the worker session for the rest)`
+              : answer
+          const title = session.title ?? sessionID
+          const reportID = task.value.reportID ?? SessionMessage.ID.create()
+          // Persist the report ID before admission so retries cannot append duplicate reports.
+          if (!task.value.reportID)
+            yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
+          // Remove the outstanding marker before synthetic admission wakes the orchestrator.
+          // The lock blocks a new dispatch until admission succeeds or the task is restored.
+          yield* kv.remove(TASK + sessionID)
+          const admitted = yield* sessions
+            .synthetic({
+              id: reportID,
+              sessionID: task.value.main,
+              description: `${title}: ${state}`,
+              text: [
+                `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${title}" role="${session.agent ?? "default"}" state="${state}">`,
+                ...(detail ? [detail] : []),
+                body,
+                "</team-report>",
+              ].join("\n"),
+              metadata: {
+                source: "team",
+                sessionID,
+                state,
+                ...(task.value.messageID ? { taskID: task.value.messageID } : {}),
+              },
+            })
+            .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
+          // If admission failed, restore the task so a later completion can retry safely.
+          if (!admitted) yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
       }),
     )
 
