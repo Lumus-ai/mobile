@@ -8,6 +8,8 @@ export type RegistryTool = {
   entries: number
   installed: boolean
   enabled: boolean
+  // Only true when the selected package manager can install/remove this binary.
+  manageable: boolean
 }
 
 export type RegistryStatus = {
@@ -80,7 +82,7 @@ export function hubRegistryStatus(options?: RegistryOptions): RegistryStatus {
       manual: Hub.manualInstall(name, manager),
     })),
     categories: categoryCounts(entries, present),
-    tools: toolRows(entries, present, enabled),
+    tools: toolRows(entries, present, enabled, manager),
     install: plan?.command,
   }
 }
@@ -93,6 +95,7 @@ function toolRows(
   entries: readonly Hub.Entry[],
   present: ReadonlySet<string>,
   enabled: Readonly<Record<string, boolean>>,
+  manager: Hub.Manager | undefined,
 ): RegistryTool[] {
   // The switch shown here is the hint block's flag, so it reads the shared
   // predicate rather than re-deriving the rule and drifting from the prompt.
@@ -106,6 +109,7 @@ function toolRows(
     entries: count,
     installed: present.has(tool),
     enabled: Hub.hinted(state, tool),
+    manageable: manager !== undefined && Hub.installable(tool, manager),
   })).sort((a, b) => Number(a.installed) - Number(b.installed) || b.entries - a.entries || a.tool.localeCompare(b.tool))
 }
 
