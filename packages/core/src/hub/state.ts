@@ -21,6 +21,10 @@ export type Options = {
   readonly directory?: string
 }
 
+// Atomic rename protects a single write from partial content, but concurrent
+// read-modify-writes can still start from the same snapshot and overwrite one another.
+const pendingWrites = new Map<string, Promise<void>>()
+
 // A missing, unreadable, or foreign-shaped file means "nothing enabled": the hub is
 // opt-in, so a broken state file must degrade to an empty prompt block, not fail.
 export async function read(options: Options = {}): Promise<State> {
@@ -29,13 +33,35 @@ export async function read(options: Options = {}): Promise<State> {
   return Option.getOrElse(decodeState(text), () => ({ version: 1, enabled: {} }))
 }
 
-export async function setEnabled(id: string, enabled: boolean, options: Options = {}): Promise<void> {
-  const state = await read(options)
-  await write({ ...state, enabled: { ...state.enabled, [id]: enabled } }, options)
+export function setEnabled(id: string, enabled: boolean, options: Options = {}): Promise<void> {
+  return setEnabledMany([id], enabled, options)
 }
 
-export async function setTerminal(terminal: NonNullable<State["terminal"]>, options: Options = {}): Promise<void> {
-  await write({ ...(await read(options)), terminal }, options)
+export function setEnabledMany(ids: readonly string[], enabled: boolean, options: Options = {}): Promise<void> {
+  if (ids.length === 0) return Promise.resolve()
+  return update(options, (state) => ({
+    ...state,
+    enabled: { ...state.enabled, ...Object.fromEntries(ids.map((id) => [id, enabled])) },
+  }))
+}
+
+export function setTerminal(terminal: NonNullable<State["terminal"]>, options: Options = {}): Promise<void> {
+  return update(options, (state) => ({ ...state, terminal }))
+}
+
+function update(options: Options, change: (state: State) => State): Promise<void> {
+  const key = path.resolve(file(options))
+  const previous = pendingWrites.get(key) ?? Promise.resolve()
+  const operation = previous.then(async () => {
+    const state = await read(options)
+    await write(change(state), options)
+  })
+  const settled = operation.then(() => undefined, () => undefined)
+  pendingWrites.set(key, settled)
+  void settled.then(() => {
+    if (pendingWrites.get(key) === settled) pendingWrites.delete(key)
+  })
+  return operation
 }
 
 async function write(next: State, options: Options) {

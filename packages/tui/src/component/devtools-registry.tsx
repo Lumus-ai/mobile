@@ -67,14 +67,15 @@ export function RegistryPanel(props: {
 
   // A click that lands before the state file resolves is the operator's newest
   // intent, so the slow read must not overwrite it.
-  let interacted = false
-  // Queues hub.json writes: a second click before the first lands would
-  // otherwise read-modify-write the file concurrently and lose an update.
-  let writes: Promise<void> = Promise.resolve()
+  let enabledInteracted = false
+  let terminalInteracted = false
+  // A failed optimistic write may roll back only tools untouched by a newer click.
+  let switchSequence = 0
+  const latestSwitch = new Map<string, number>()
   onMount(async () => {
     const state = await HubState.read({ directory: options.directory })
-    if (!interacted) setEnabled(state.enabled)
-    setTerminal(state.terminal)
+    if (!enabledInteracted) setEnabled(state.enabled)
+    if (!terminalInteracted) setTerminal(state.terminal)
     setRevision((value) => value + 1)
   })
 
@@ -110,13 +111,16 @@ export function RegistryPanel(props: {
   const missing = createMemo(() => status().tools.filter((row) => !row.installed))
   const isOn = (tool: string) => enabled()[tool] === true
   // Without a choice the hub prefers nu, then pwsh, then bash, whichever is installed.
-  const aiTerminal = () =>
-    terminal() ??
-    (["nu", "pwsh", "bash"] as const).find((name) =>
+  const aiTerminal = () => {
+    const chosen = terminal()
+    if (chosen && status().terminals.some((item) => item.name === chosen && item.present)) return chosen
+    return (["nu", "pwsh", "bash"] as const).find((name) =>
       status().terminals.some((item) => item.name === name && item.present),
     )
+  }
 
   const chooseTerminal = (name: Hub.Backend) => {
+    terminalInteracted = true
     setTerminal(name)
     void HubState.setTerminal(name, { directory: options.directory }).catch((error: unknown) =>
       toast.show({ message: error instanceof Error ? error.message : String(error), variant: "error" }),
@@ -185,18 +189,26 @@ export function RegistryPanel(props: {
   }
 
   const setSwitch = async (tools: readonly string[], next: boolean) => {
-    interacted = true
+    enabledInteracted = true
     const previous = enabled()
-    // Optimistic: the switch reflects the click immediately, and the file write
-    // only decides the next session's prompt block.
+    const intent = ++switchSequence
+    for (const tool of tools) latestSwitch.set(tool, intent)
+
+    // Optimistic: the switch reflects the click immediately, and the atomic
+    // bulk write controls the next session's prompt block.
     setEnabled({ ...previous, ...Object.fromEntries(tools.map((tool) => [tool, next])) })
-    const write = tools.reduce(
-      (chain, tool) => chain.then(() => HubState.setEnabled(tool, next, { directory: options.directory })),
-      writes,
-    )
-    writes = write.catch(() => undefined)
-    // A failed write hands back the previous selection.
-    await write.catch(() => setEnabled(previous))
+    await HubState.setEnabledMany(tools, next, { directory: options.directory }).catch((error: unknown) => {
+      setEnabled((current) => {
+        const rollback = { ...current }
+        for (const tool of tools) {
+          if (latestSwitch.get(tool) !== intent) continue
+          if (previous[tool] === undefined) delete rollback[tool]
+          else rollback[tool] = previous[tool]
+        }
+        return rollback
+      })
+      toast.show({ message: error instanceof Error ? error.message : String(error), variant: "error" })
+    })
   }
 
   const move = (delta: number) => {

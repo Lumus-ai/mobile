@@ -68,8 +68,8 @@ function cell(app: Awaited<ReturnType<typeof render>>, tool: string, needle: str
 
 test("registry panel shows readiness, terminals and a paged tool list", async () => {
   await using tmp = await tmpdir()
-  const status = hubRegistryStatus({ probe })
-  const app = await render({ probe, directory: tmp.path })
+  const status = hubRegistryStatus({ probe, terminalProbe: () => true })
+  const app = await render({ probe, terminalProbe: () => true, directory: tmp.path })
   try {
     const frame = app.captureCharFrame()
     expect(frame).toContain("Registry")
@@ -257,9 +257,10 @@ test("the AI terminal can be installed and chosen", async () => {
   const installed: string[] = []
   const shells: string[] = []
   // pwsh is installed, nu is not; apt can install it
-  const terminals = (tool: string) => tool !== "nu"
+  const terminalProbe = (backend: Hub.Backend) => backend !== "nu"
   const app = await render({
-    probe: terminals,
+    probe,
+    terminalProbe,
     manager: "apt",
     directory: tmp.path,
     install: async (tool) => {

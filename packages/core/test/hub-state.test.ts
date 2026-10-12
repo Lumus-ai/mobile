@@ -48,6 +48,24 @@ describe("Hub tool enable state", () => {
   })
 })
 
+test("parallel registry updates preserve every switch and terminal choice", async () => {
+  await using tmp = await tmpdir()
+  const options = { directory: tmp.path }
+
+  await Promise.all([
+    Hub.setEnabled("alpha", true, options),
+    Hub.setEnabledMany(["beta", "gamma"], true, options),
+    Hub.setTerminal("nu", options),
+    Hub.setEnabled("delta", false, options),
+  ])
+
+  expect(await Hub.read(options)).toEqual({
+    version: 1,
+    enabled: { alpha: true, beta: true, gamma: true, delta: false },
+    terminal: "nu",
+  })
+})
+
 describe("Hub terminal choice", () => {
   test("choosing a terminal keeps the switches and switches keep the terminal", async () => {
     await using tmp = await tmpdir()

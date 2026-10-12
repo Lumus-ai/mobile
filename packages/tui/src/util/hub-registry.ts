@@ -27,6 +27,7 @@ export type RegistryStatus = {
 
 export type RegistryOptions = {
   probe?: (tool: string) => boolean
+  terminalProbe?: (backend: Hub.Backend) => boolean
   platform?: NodeJS.Platform
   // `hub.json` as read by the caller. The hint block is opt-in: only a tool the
   // operator switched on is advertised to the model, so an absent key counts as
@@ -45,7 +46,7 @@ export function hubRegistryStatus(options?: RegistryOptions): RegistryStatus {
   // A terminal is present when its backend has a shell to run in: on Windows
   // bash means Git Bash, never the WSL launcher in System32.
   const terminal =
-    options?.probe ?? ((backend: Hub.Backend) => Hub.HubHost.shellFor(backend, { platform }) !== undefined)
+    options?.terminalProbe ?? ((backend: Hub.Backend) => Hub.HubHost.shellFor(backend, { platform }) !== undefined)
   const enabled = options?.enabled ?? {}
   const manager = options?.manager ?? Hub.detectManager(platform)
   const supported = Hub.all.filter((entry) => Hub.supportsPlatform(entry, platform))

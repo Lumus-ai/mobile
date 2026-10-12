@@ -8,7 +8,7 @@ const platformEntries = () => Hub.all.filter((entry) => Hub.supportsPlatform(ent
 const requiredTools = () => new Set(platformEntries().flatMap((entry) => entry.requires ?? []))
 
 test("probe that finds every tool reports the whole catalog ready", () => {
-  const status = hubRegistryStatus({ probe: () => true })
+  const status = hubRegistryStatus({ probe: () => true, terminalProbe: () => true })
   expect(status.total).toBe(platformEntries().length)
   expect(status.ready).toBe(status.total)
   expect(status.missing).toEqual([])
@@ -19,7 +19,7 @@ test("probe that finds every tool reports the whole catalog ready", () => {
 })
 
 test("one absent tool blocks its entries and produces an install command", () => {
-  const status = hubRegistryStatus({ probe: (tool) => tool !== "jq" })
+  const status = hubRegistryStatus({ probe: (tool) => tool !== "jq", terminalProbe: () => true })
   const jq = status.missing.find((entry) => entry.tool === "jq")
   expect(jq?.entries).toBeGreaterThan(0)
   expect(status.ready).toBeLessThan(status.total)
@@ -68,13 +68,27 @@ test("default probe mirrors the alias-aware host probe", () => {
     expect(terminal.present).toBe(Hub.HubHost.shellFor(terminal.name) !== undefined)
 })
 
+test("terminal readiness is independent of the executable registry probe", () => {
+  const status = hubRegistryStatus({
+    platform: "linux",
+    probe: () => false,
+    terminalProbe: (backend) => backend === "bash",
+    manager: undefined,
+  })
+  expect(status.terminals.map((item) => [item.name, item.present])).toEqual([
+    ["bash", true],
+    ["nu", false],
+    ["pwsh", false],
+  ])
+})
+
 test("terminal order follows the platform", () => {
-  expect(hubRegistryStatus({ platform: "win32", probe: () => true }).terminals.map((t) => t.name)).toEqual([
+  expect(hubRegistryStatus({ platform: "win32", probe: () => true, terminalProbe: () => true }).terminals.map((t) => t.name)).toEqual([
     "pwsh",
     "bash",
     "nu",
   ])
-  expect(hubRegistryStatus({ platform: "linux", probe: () => true }).terminals.map((t) => t.name)).toEqual([
+  expect(hubRegistryStatus({ platform: "linux", probe: () => true, terminalProbe: () => true }).terminals.map((t) => t.name)).toEqual([
     "bash",
     "nu",
     "pwsh",
@@ -82,7 +96,7 @@ test("terminal order follows the platform", () => {
 })
 
 test("tool rows default to off, stay unique and lead with the most actionable tool", () => {
-  const status = hubRegistryStatus({ probe: (tool) => tool !== "jq" })
+  const status = hubRegistryStatus({ probe: (tool) => tool !== "jq", terminalProbe: () => true })
   const names = status.tools.map((row) => row.tool)
   expect(new Set(names).size).toBe(names.length)
   // the absent tool sorts ahead of every installed one
