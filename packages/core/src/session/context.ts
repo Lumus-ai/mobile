@@ -90,6 +90,7 @@ const layer = Layer.effect(
     const request = yield* SessionModelRequest.Service
     const referenceInstructions = yield* ReferenceInstructions.Service
     const skillInstructions = yield* SkillInstructions.Service
+    const hubInstructions = yield* HubInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
 
@@ -153,7 +154,7 @@ const layer = Layer.effect(
         // the date and environment, which vary by day and directory.
         instructions: Instructions.combine([
           CodeModeInstructions.make(loaded.tools.codeModeCatalog),
-          HubInstructions.make(),
+          hubInstructions.load(),
           loaded.mcp,
           loaded.references,
           loaded.skills,
@@ -210,6 +211,7 @@ export const node = makeLocationNode({
     SessionModelRequest.node,
     SessionStore.node,
     SkillInstructions.node,
+    HubInstructions.node,
     Tool.node,
   ],
 })
