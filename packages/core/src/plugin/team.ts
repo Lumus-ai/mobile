@@ -6,7 +6,13 @@ import { Effect, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { Orchestra } from "../orchestra.js"
 
-const TEAM = `You are one session of a project's AI team. Tasks usually come from the project's Orchestrator session, which leads the team; treat them like requests from the operator. Do exactly the task you are given and stay inside its limits. Your final message is sent back to the Orchestrator as your report, so end every task with it: first line done / partly done / not done, then what changed (files), how you checked it (command and real result), and anything left or risky. Keep it short; details stay in this session. Every step is a slow model call, so work in few steps: make independent tool calls together in one step, run a check once unless its result is in doubt, and do not investigate questions outside the task; name them in the report instead.`
+const TEAM = `You are one session of a project's AI team. Your task comes from the project's Orchestrator; follow its objective, file scope, constraints, and acceptance criteria. Do not silently expand the task or edit files assigned to another worker. You cannot see the Orchestrator conversation, so ask for missing prerequisites when they block safe progress.
+
+Use the actual model's advertised context window. When long context is available, trace relevant callers, types, architecture notes, adjacent implementations, and tests before deciding; do not assume every model has a one-million-token window. Prefer focused source references and findings over copying giant files or logs into the report. Parallelize independent read-only searches where useful, but never make conflicting edits.
+
+Do not spawn nested subagents; report through this team session so work stays visible to the Orchestrator. Run every relevant check available, including focused regression tests and type checks when appropriate. Never claim a check passed if it was not run; include exact commands and observed results, and label unrun checks as NOT RUN with the reason. If a check fails, investigate the failure rather than hiding it.
+
+End with a concise structured report: first line DONE, PARTLY DONE, or NOT DONE; then files changed and key decisions; checks run with commands and real results; and remaining risks, blockers, or checks not run. Keep detailed evidence in this session so the Orchestrator can request it without bloating every task report.`
 
 // Registers every team role, built-in or the operator's own, as a "team-" agent.
 // The operator edits roles at runtime, so the agents are rebuilt on every change.
@@ -32,15 +38,24 @@ export const Plugin = define({
           item.system = role.rules ? `${TEAM}\n\n${role.rules}` : TEAM
           item.mode = "primary"
           if (role.model) item.model = Model.Ref.parse(role.model)
-          item.permissions.push({ action: "question", resource: "*", effect: "allow" })
+          item.permissions.push(
+            { action: "question", resource: "*", effect: "allow" },
+            { action: "subagent", resource: "*", effect: "deny" },
+          )
           if (role.readOnly) item.permissions.push({ action: "edit", resource: "*", effect: "deny" })
         })
     })
-    // Config permissions are appended after plugin ones and the last match wins, so a
-    // global `edit: allow` would undo the rule above and the Orchestrator's own deny. Both
-    // are deliberate, so they are enforced after every rule has been evaluated.
+    // Config permissions are appended after plugin permissions and the last match wins.
+    // Enforce team boundaries after all user-defined rules have been evaluated.
     yield* ctx.permission.hook("evaluate", (event) =>
       Effect.sync(() => {
+        if (event.action === "subagent") {
+          if (event.agent !== Orchestra.agent && !team.roles.some((role) => role.agent === event.agent)) return
+          event.effect = "deny"
+          event.message =
+            "The Orchestrator and team roles must delegate through the sessions tool; nested subagents bypass team tracking"
+          return
+        }
         if (event.action !== "edit") return
         if (event.agent === Orchestra.agent) {
           event.effect = "deny"
