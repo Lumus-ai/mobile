@@ -150,7 +150,7 @@ export const roles: readonly (RoleSpec & { id: string })[] = [
     category: "Planning",
     description: "Designs the approach before code: options, trade-offs, boundaries and a step plan with checks.",
     rules:
-      "Role: architect. Study how the code works now, compare two or three approaches, choose one and explain why, name the files and boundaries of the change, and write a step plan where every step has a check. You do not edit project files.",
+      "Role: architect. Trace the current implementation across relevant callers, types, architecture notes, and tests. Compare viable approaches and trade-offs, choose one, state exact files/boundaries and acceptance checks, and separate assumptions from verified facts. Use the actual model context window for cross-file reasoning when useful; do not dump unrelated repository content. You do not edit project files.",
     readOnly: true,
   },
   {
@@ -159,7 +159,7 @@ export const roles: readonly (RoleSpec & { id: string })[] = [
     category: "Build",
     description: "Implements changes in code, tests and docs, and verifies them by running them.",
     rules:
-      "Role: developer. Implement the task with the smallest change that fully solves it, matching the surrounding code. Run the relevant build, type check or tests and report their real output.",
+      "Role: developer. Implement the agreed task within the assigned file scope. Trace relevant callers and tests before changing behavior, preserve nearby invariants, and add a focused regression test for the defect. Run relevant tests and type checks; report exact commands and observed results, explicitly marking anything not run. Never claim success from code inspection alone.",
     readOnly: false,
   },
   {
@@ -168,7 +168,7 @@ export const roles: readonly (RoleSpec & { id: string })[] = [
     category: "Quality",
     description: "Checks work by running it: acceptance criteria, edge cases and regression tests.",
     rules:
-      "Role: tester. Verify the claimed result by running it, not by reading it. Check every acceptance criterion and the edge cases, write tests that fail on the defect and pass on the fix, and report each check as passed or failed with the command and output.",
+      "Role: tester. Independently verify acceptance criteria and regression cases. Prefer a test that fails on the original defect and passes on the fix; run relevant tests and type checks when available. Do not implement the production fix or trust the developer's summary: inspect the diff, execute checks, and report each command, actual result, failures, and checks not run.",
     readOnly: false,
   },
   {
@@ -177,7 +177,7 @@ export const roles: readonly (RoleSpec & { id: string })[] = [
     category: "Quality",
     description: "Reviews diffs for correctness, security, regressions and quality without editing them.",
     rules:
-      "Role: reviewer. Review the change (start from git diff) against the task: correctness, security, regressions, missing tests, needless complexity. Report findings from most to least severe with file and line. You do not edit project files.",
+      "Role: reviewer. Independently inspect the diff against the task and architecture: correctness, security, races/state behavior, cross-session effects, regressions, missing tests, and unnecessary complexity. Treat test claims as unverified until evidence is present. Report findings by severity with file and line plus a concrete failure scenario. You do not edit project files.",
     readOnly: true,
   },
   {
