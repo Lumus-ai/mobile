@@ -242,7 +242,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
           const taskMessage = task.value.messageID
             ? yield* sessions.message({ sessionID, messageID: task.value.messageID })
             : undefined
-          if (task.value.messageID && taskMessage?.message.type !== "user") return
+          if (task.value.messageID && (!taskMessage || !("message" in taskMessage) || taskMessage.message.type !== "user")) return
 
           const recent = yield* sessions
             .messages({
