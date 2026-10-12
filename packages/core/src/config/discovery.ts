@@ -30,10 +30,28 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   const globalRoots = yield* Effect.forEach([globalDirectory, globalClaudeDirectory, globalAgentsDirectory], (item) =>
     fs.resolve(item),
   )
-  const directories =
-    (yield* fs.resolve(location.directory)) === globalRoots[0] || options?.project === false
+  const resolvedLocation = yield* fs.resolve(location.directory)
+  const resolvedHome = yield* fs.resolve(global.home)
+  const isWithin = (root: string, candidate: string) => {
+    const relative = path.relative(root, candidate)
+    return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  }
+  const upward =
+    resolvedLocation === globalRoots[0] || options?.project === false
       ? []
       : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
+  // When a project lives under the user's home, do not walk above that boundary.
+  // This prevents parent directories from injecting unrelated ecosystem config.
+  const directories = isWithin(resolvedHome, resolvedLocation)
+    ? yield* Effect.gen(function* () {
+        const result: typeof upward = []
+        for (const directory of upward) {
+          const resolved = yield* fs.resolve(directory)
+          if (isWithin(resolvedHome, resolved)) result.push(directory)
+        }
+        return result
+      })
+    : upward
   const discovered = yield* Effect.forEach(directories, (directory) =>
     Effect.gen(function* () {
       // Resolve the parent too: missing children must honor symlinked global roots.
