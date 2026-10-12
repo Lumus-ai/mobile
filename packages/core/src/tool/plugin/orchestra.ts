@@ -15,8 +15,8 @@ export const name = "sessions"
 const description = [
   "Run this project's AI team: the other sessions of the project, each a separate chat with its own role.",
   "Only the project's main session (the orchestrator) has this tool.",
-  "Actions: list shows the team by category with each session's role, status, access and whether a report is outstanding;",
-  "send gives a session a task and starts its model; its final answer comes back to you automatically as a <team-report> message, so end your turn instead of waiting;",
+  "Actions: list shows the team by category with each session's role, status, access and whether a task is outstanding;",
+  "send queues a task without interrupting the worker's current work; its task-linked <team-report> arrives automatically when it finishes. Each worker can have only one outstanding task: wait for its report before sending another. Do not poll.",
   "read returns a session's latest messages; create opens a new team session with a role and a category and can give it a first task; stop interrupts a running session.",
   "Access per session is hidden < read < write < full: read allows list and read, write adds send, full adds stop. Sessions you create get full access.",
 ].join("\n")
@@ -111,7 +111,7 @@ export const Plugin = {
             `access ${row.access}`,
             ...(row.sent === undefined
               ? []
-              : [`report due (task sent ${Math.round((now - row.sent) / 60_000)} min ago)`]),
+              : [`task outstanding (sent ${Math.round((now - row.sent) / 60_000)} min ago)`]),
           ].join(" · "),
       )
     })
@@ -130,9 +130,9 @@ export const Plugin = {
               if (!project)
                 return yield* new ToolFailure({ message: "Only a project's main session can manage sessions" })
               const dispatch = (sessionID: SessionSchema.ID, text: string) =>
-                orchestra
-                  .dispatch({ project, sessionID, text })
-                  .pipe(Effect.mapError((error) => new ToolFailure({ message: "Could not send the task", error })))
+                orchestra.dispatch({ project, sessionID, text }).pipe(
+                  Effect.mapError((error) => new ToolFailure({ message: `Could not send task: ${error.message}`, error })),
+                )
 
               switch (input.action) {
                 case "list":
