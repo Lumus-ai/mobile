@@ -53,7 +53,7 @@ export function parseDodBoard(source: string): DodTask[] {
         id: leaf.id.trim(),
         title: typeof leaf.what === "string" && leaf.what.trim() ? leaf.what.trim() : leaf.id.trim(),
         state: typeof leaf.task_state === "string" && leaf.task_state.trim() ? leaf.task_state.trim() : "NOT_STARTED",
-        done: steps.filter((step) => /^\\s*\\[(x|X)\\]/.test(step)).length,
+        done: steps.filter((step) => /^\s*\[(x|X)\]/.test(step)).length,
         total: steps.length,
       },
     ]
