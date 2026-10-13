@@ -33,6 +33,84 @@ const it = testEffect(
 )
 
 describe("SessionExecution lifecycle", () => {
+  it.effect("resumes an idle top-level session with durable wake-intended Inbox work", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const admission = yield* SessionInbox.Service
+      const sessionID = Session.ID.make("ses_inbox_only_restart")
+      yield* seedSessions(database, [sessionID])
+      const inboxID = SessionMessage.ID.create()
+      yield* admission.admit({
+        id: inboxID,
+        sessionID,
+        item: {
+          type: "user",
+          payload: SessionInbox.UserPayload.make({ text: "Queued before wake", resumeOnStart: true }),
+          delivery: "queue",
+        },
+      })
+
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID: current }) =>
+          Effect.gen(function* () {
+            drained.push(current)
+            yield* SessionInbox.promote(database.db, bus, current, "input")
+          }).pipe(Effect.asVoid),
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* restart.resumeSuspendedSessions
+      yield* execution.awaitIdle(sessionID)
+      expect(drained).toEqual([sessionID])
+      expect(yield* SessionInbox.list(database.db, sessionID)).toHaveLength(0)
+
+      // A second boot sweep does not redeliver already consumed work.
+      yield* restart.resumeSuspendedSessions
+      expect(drained).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("does not wake an idle session for a non-resumable synthetic notice", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const admission = yield* SessionInbox.Service
+      const sessionID = Session.ID.make("ses_inbox_no_wake_restart")
+      yield* seedSessions(database, [sessionID])
+      yield* admission.admit({
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "synthetic",
+          payload: SessionInbox.SyntheticPayload.make({
+            text: "Background shell state",
+            metadata: { source: "shell", state: "cancelled" },
+            resumeOnStart: false,
+          }),
+          delivery: "steer",
+        },
+      })
+
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID: current }) => Effect.sync(() => void drained.push(current)),
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* restart.resumeSuspendedSessions
+
+      expect(drained).toEqual([])
+      expect(yield* SessionInbox.list(database.db, sessionID)).toHaveLength(1)
+    }),
+  )
+
   test("classifies success and typed failure terminals", () => {
     expect(SessionExecution.terminal(Exit.succeed(undefined))).toEqual({ type: "succeeded" })
     expect(

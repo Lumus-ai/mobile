@@ -226,6 +226,40 @@ export const layer = (options?: Options) =>
                 .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
             { concurrency: "unbounded", discard: true },
           )
+
+          // A crash can land after InboxEnqueued commits but before the caller rings the
+          // execution doorbell. Such a session has no execution claim, so the suspended-claim
+          // sweep above cannot find it. Reconcile durable wake intent for top-level Sessions.
+          // Child Sessions remain owned by Job/subagent recovery and are deliberately excluded.
+          const activeAfterRecovery = yield* execution.active
+          const claimedAfterRecovery = new Set(yield* store.listSuspended())
+          const roots = (yield* sessions.list({ parentID: null })).data
+          yield* Effect.forEach(
+            roots.filter(
+              (session) =>
+                !activeAfterRecovery.has(session.id) && !claimedAfterRecovery.has(session.id),
+            ),
+            Effect.fnUntraced(function* (session) {
+              const pending = yield* sessions
+                .inbox(session.id)
+                .pipe(Effect.orElseSucceed((): SessionInbox.Info[] => []))
+              const shouldResume = pending.some((item) => {
+                if (item.type === "move" || item.type === "compaction") return true
+                if (item.type === "user") return item.payload.resumeOnStart ?? true
+                // Legacy synthetic rows predate the explicit flag. Preserve their old no-wake
+                // behavior for shell notifications; other synthetic inputs are actionable.
+                return item.payload.resumeOnStart ?? (item.payload.metadata?.source !== "shell")
+              })
+              if (!shouldResume) return
+              // Recheck after reading Inbox so concurrent delivery or a new durable claim wins.
+              const active = yield* execution.active
+              if (active.has(session.id)) return
+              const claimed = yield* store.listSuspended()
+              if (claimed.includes(session.id)) return
+              yield* execution.resume(session.id).pipe(Effect.ignore, Effect.forkIn(scope))
+            }),
+            { concurrency: "unbounded", discard: true },
+          )
           // Async observers consult this set at delivery; later completions wake parents normally.
           suspended.clear()
         }),

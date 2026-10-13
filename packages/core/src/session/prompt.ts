@@ -24,6 +24,7 @@ export type Input = {
   skills?: PromptInput.Prompt["skills"]
   metadata?: Record<string, unknown>
   delivery?: SessionInbox.Delivery
+  resume?: boolean
 }
 
 export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
@@ -84,6 +85,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
           skills: selected?.length ? selected : undefined,
         }),
         metadata: event.metadata,
+        resumeOnStart: request.input.resume !== false,
       }),
       delivery: SessionInbox.Delivery.make(event.delivery),
     } satisfies SessionInbox.Item

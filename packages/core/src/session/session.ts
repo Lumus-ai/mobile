@@ -294,6 +294,7 @@ export const make = Effect.fn("Session.make")(function* () {
             payload: SessionInbox.SyntheticPayload.make({
               text: input.text,
               description: input.description,
+              resumeOnStart: input.resume !== false,
               metadata: input.metadata,
             }),
             delivery: SessionInbox.Delivery.make(input.delivery ?? "steer"),

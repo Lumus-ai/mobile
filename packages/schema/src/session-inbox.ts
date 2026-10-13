@@ -14,6 +14,9 @@ export type Delivery = typeof Delivery.Type
 export interface UserPayload extends Schema.Schema.Type<typeof UserPayload> {}
 export const UserPayload = Schema.Struct({
   ...Prompt.fields,
+  // Whether startup recovery may wake a session if admission committed but the caller
+  // crashed before SessionExecution.wake(). Absent legacy values are treated conservatively by type.
+  resumeOnStart: Schema.Boolean.pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
 }).annotate({ identifier: "Session.Inbox.UserPayload" })
 
@@ -21,6 +24,8 @@ export interface SyntheticPayload extends Schema.Schema.Type<typeof SyntheticPay
 export const SyntheticPayload = Schema.Struct({
   text: Schema.String,
   description: Schema.String.pipe(optional),
+  // Shell/background notices can be persisted without waking an otherwise idle session.
+  resumeOnStart: Schema.Boolean.pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
 }).annotate({ identifier: "Session.Inbox.SyntheticPayload" })
 
