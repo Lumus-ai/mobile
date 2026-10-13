@@ -146,7 +146,11 @@ export function RoomDodRows(props: {
           await Bun.sleep(FEED_RETRY_MS)
           continue
         }
-        if (feed.events.length === 0) continue
+        if (feed.events.length === 0) {
+          // A host normally long-polls; back off if an adapter returns an empty feed immediately.
+          await Bun.sleep(FEED_RETRY_MS)
+          continue
+        }
         // A host that restarted numbers its events anew, so its feed replaces what was shown.
         const fresh = feed.events[0].seq <= state.after
         state.after = feed.events.at(-1)!.seq
