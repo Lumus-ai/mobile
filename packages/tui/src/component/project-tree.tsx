@@ -57,9 +57,33 @@ export function ProjectTree(props: { width: number }) {
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const [access, setAccess] = createStore<Record<string, OrchestraAccess>>({})
   const [category, setCategory] = createStore<Record<string, string | undefined>>({})
-  const [hover, setHover] = createSignal<string>()
-  // Deleting is permanent, so the first click only arms the button and the second deletes.
-  const [armed, setArmed] = createSignal<string>()
+  const [hover, setHoverState] = createSignal<string>()
+  // Destructive actions require two clicks. Do not disarm them just because a label reflows
+  // under the pointer after the first click; terminals can emit mouse-out during that reflow.
+  const [armed, setArmedState] = createSignal<string>()
+  let armTimer: ReturnType<typeof setTimeout> | undefined
+  const clearArmed = () => {
+    if (armTimer !== undefined) clearTimeout(armTimer)
+    armTimer = undefined
+    setArmedState()
+  }
+  const arm = (id: string) => {
+    if (armTimer !== undefined) clearTimeout(armTimer)
+    setArmedState(id)
+    armTimer = setTimeout(() => {
+      if (armed() === id) setArmedState()
+      armTimer = undefined
+    }, 4_000)
+  }
+  const setHover = (id: string | undefined) => {
+    setHoverState(id)
+    // Moving onto another actual row/action cancels confirmation; transient leave events
+    // during layout changes do not, because they carry no new hover target.
+    if (id !== undefined && armed() && id !== armed()) clearArmed()
+  }
+  onCleanup(() => {
+    if (armTimer !== undefined) clearTimeout(armTimer)
+  })
   // Hidden as soon as the delete succeeds; the server's deleted event drops the record later.
   const [removed, setRemoved] = createStore<Record<string, boolean>>({})
 
@@ -158,8 +182,8 @@ export function ProjectTree(props: { width: number }) {
     ))
 
   const remove = (sessionID: string) => {
-    if (armed() !== sessionID) return setArmed(sessionID)
-    setArmed()
+    if (armed() !== sessionID) return arm(sessionID)
+    clearArmed()
     void client.api.session
       .remove({ sessionID })
       .then(() => {
@@ -177,8 +201,8 @@ export function ProjectTree(props: { width: number }) {
 
   // Leaving tells the host and forgets the token here; the host keeps the room and its chat.
   const leave = (room: JoinedRoom) => {
-    if (armed() !== roomKey(room)) return setArmed(roomKey(room))
-    setArmed()
+    if (armed() !== roomKey(room)) return arm(roomKey(room))
+    clearArmed()
     if (viewing(room)) route.navigate({ type: "home" })
     void tellHostLeft(room)
     void unlinkRoom(client.api, room)
@@ -189,8 +213,8 @@ export function ProjectTree(props: { width: number }) {
 
   // Closing a room stops sharing its session: the session stays, every guest token stops working.
   const stopHosting = (roomID: string) => {
-    if (armed() !== `hosted:${roomID}`) return setArmed(`hosted:${roomID}`)
-    setArmed()
+    if (armed() !== `hosted:${roomID}`) return arm(`hosted:${roomID}`)
+    clearArmed()
     void client.api.room
       .remove({ roomID })
       .then(() => roomListChanged())
@@ -263,8 +287,6 @@ export function ProjectTree(props: { width: number }) {
                 </box>
                 <HoverAction
                   id={`project-edit:${project.id}`}
-                  paddingLeft={1}
-                  paddingRight={1}
                   onMouseEnter={() => setHover(project.id)}
                   onMouseLeave={() => setHover(project.id)}
                   onClick={() => edit(project)}
@@ -324,8 +346,6 @@ export function ProjectTree(props: { width: number }) {
                             <Show when={!narrow() || hover() === session.id}>
                               <HoverAction
                                 id={`session-category:${session.id}`}
-                                paddingLeft={1}
-                                paddingRight={1}
                                 onMouseEnter={() => setHover(session.id)}
                                 onMouseLeave={() => setHover(session.id)}
                                 onClick={() => categorize(session.id)}
@@ -347,13 +367,8 @@ export function ProjectTree(props: { width: number }) {
                             </Show>
                             <HoverAction
                               id={`session-delete:${session.id}`}
-                              paddingLeft={1}
-                              paddingRight={1}
                               onMouseEnter={() => setHover(session.id)}
-                              onMouseLeave={() => {
-                                setHover(session.id)
-                                setArmed()
-                              }}
+                              onMouseLeave={() => setHover(session.id)}
                               onClick={() => remove(session.id)}
                             >
                               <text fg={armed() === session.id ? theme.text.feedback.error.base : theme.text.muted}>
@@ -421,13 +436,8 @@ export function ProjectTree(props: { width: number }) {
                   </box>
                   <HoverAction
                     id={`hosted-close:${room.id}`}
-                    paddingLeft={1}
-                    paddingRight={1}
                     onMouseEnter={() => setHover(`hosted:${room.id}`)}
-                    onMouseLeave={() => {
-                      setHover(`hosted:${room.id}`)
-                      setArmed()
-                    }}
+                    onMouseLeave={() => setHover(`hosted:${room.id}`)}
                     onClick={() => stopHosting(room.id)}
                   >
                     <text
@@ -473,13 +483,8 @@ export function ProjectTree(props: { width: number }) {
                   </box>
                   <HoverAction
                     id={`room-leave:${roomKey(room)}`}
-                    paddingLeft={1}
-                    paddingRight={1}
                     onMouseEnter={() => setHover(roomKey(room))}
-                    onMouseLeave={() => {
-                      setHover(roomKey(room))
-                      setArmed()
-                    }}
+                    onMouseLeave={() => setHover(roomKey(room))}
                     onClick={() => leave(room)}
                   >
                     <text
@@ -548,7 +553,6 @@ function MultiplayerActions(props: {
         <HoverAction
           id={action.id}
           paddingLeft={1}
-          paddingRight={1}
           onMouseEnter={() => props.setHover(action.id)}
           onMouseLeave={() => props.setHover(undefined)}
           onClick={() => props.onOpen(action.window)}

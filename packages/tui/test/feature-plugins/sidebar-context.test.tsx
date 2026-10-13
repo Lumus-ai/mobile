@@ -144,7 +144,7 @@ test("only the explicit Open button launches the existing DoD task panel and kee
     // The preview chevron is a separate control: it must not launch the task panel.
     const toggleX = lines[y].indexOf("▸")
     expect(toggleX).toBeGreaterThanOrEqual(0)
-    app.mockMouse.click(toggleX, y)
+    await app.mockMouse.click(toggleX, y)
     await app.renderOnce()
     expect(opened).toEqual([])
 
@@ -153,7 +153,7 @@ test("only the explicit Open button launches the existing DoD task panel and kee
     lines = frame.split("\n")
     y = lines.findIndex((line) => line.includes("DoD"))
     const titleX = lines[y].indexOf("DoD")
-    app.mockMouse.click(titleX, y)
+    await app.mockMouse.click(titleX, y)
     await app.renderOnce()
     expect(opened).toEqual([])
 
@@ -162,7 +162,7 @@ test("only the explicit Open button launches the existing DoD task panel and kee
     y = lines.findIndex((line) => line.includes("DoD"))
     const openX = lines[y].indexOf("[Open]")
     expect(openX).toBeGreaterThanOrEqual(0)
-    app.mockMouse.click(openX, y)
+    await app.mockMouse.click(openX, y)
     await app.renderOnce()
     expect(opened).toEqual(["opencode.sidebar.dod"])
   } finally {
