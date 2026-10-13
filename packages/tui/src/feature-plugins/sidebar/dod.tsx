@@ -107,8 +107,8 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
   const layout = useCompactLayout()
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
   const [open, setOpen] = createSignal(false)
-  const [hoveredAction, setHoveredAction] = createSignal<"title" | "open">()
-  const actionHoverColor = () => theme.text.action?.primary?.hovered ?? theme.text.base
+  const [hoveredAction, setHoveredAction] = createSignal<"open">()
+  const actionHoverColor = () => theme.text.action?.primary?.hovered ?? theme.increase(actionColor, 2)
   let revision = 0
 
   const directory = () =>
@@ -183,22 +183,8 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
           {open() ? "▾" : "▸"}
         </text>
         <box flexDirection="row" alignItems="center" gap={1} flexGrow={1} minWidth={0}>
-          <box
-            id="sidebar.dod.open"
-            flexGrow={1}
-            minWidth={0}
-            onMouseOver={() => setHoveredAction("title")}
-            onMouseOut={() => setHoveredAction(undefined)}
-            onMouseUp={(event) => {
-              event.stopPropagation()
-              openDodPanel(props.context)
-            }}
-          >
-            <text
-              fg={hoveredAction() === "title" ? actionHoverColor() : actionColor}
-              wrapMode="none"
-              truncate
-            >
+          <box flexGrow={1} minWidth={0}>
+            <text fg={actionColor} wrapMode="none" truncate>
               <b>{t("DoD")}</b>
             </text>
           </box>
@@ -210,7 +196,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
             flexShrink={0}
             paddingLeft={1}
             paddingRight={1}
-            backgroundColor={hoveredAction() === "open" ? theme.background?.action?.primary?.hovered : undefined}
+            backgroundColor={hoveredAction() === "open" ? (theme.background?.action?.primary?.hovered ?? theme.increase(theme.background.base, 2)) : undefined}
             onMouseOver={() => setHoveredAction("open")}
             onMouseOut={() => setHoveredAction(undefined)}
             onMouseUp={(event) => {
