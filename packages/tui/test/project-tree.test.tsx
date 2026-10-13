@@ -131,7 +131,8 @@ test("a new session started from a project carries its project owner metadata", 
     { maxPasses: 100 },
   )
   const add = cell(frame, "+ New session")
-  await setup.mockMouse.click(add.x + 1, add.y)
+  // Click a visible character, not the whitespace after the plus sign.
+  await setup.mockMouse.click(add.x + 2, add.y)
   // Wait for Home's prompt to render instead of requiring the renderer to become visually idle.
   // Background updates may keep scheduling frames even though the prompt is ready for input.
   await setup.waitForFrame((frame) =>
