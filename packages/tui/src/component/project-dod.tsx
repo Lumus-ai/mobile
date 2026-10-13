@@ -93,7 +93,7 @@ function bar(tasks: DodTask[]) {
   return "█".repeat(filled) + "░".repeat(BAR - filled)
 }
 
-function taskColor(state: string, theme: ReturnType<typeof useTheme>) {
+function taskColor(state: string, theme: ReturnType<ReturnType<typeof useTheme>["surface"]>) {
   if (state === "DONE") return theme.text.feedback.success.base
   if (state === "IN_PROGRESS") return theme.text.feedback.info.base
   if (state === "BLOCKED") return theme.text.feedback.warning.base
@@ -137,7 +137,7 @@ export function ProjectDodEntry(props: { directory: string }) {
       paddingRight={1}
       paddingTop={1}
       paddingBottom={1}
-      backgroundColor={theme.background.panel}
+      backgroundColor={theme.background.raised.base}
       onMouseUp={(event) => {
         event.stopPropagation()
         open()
@@ -218,7 +218,7 @@ export function ProjectDodDialog(props: { directory: string }) {
           <For each={groups()}>
             {(group) => (
               <box gap={1}>
-                <text fg={theme.text.secondary} attributes={TextAttributes.BOLD}>{group}</text>
+                <text fg={theme.text.muted} attributes={TextAttributes.BOLD}>{group}</text>
                 <For each={tasks().filter((item) => item.stage === group)}>
                   {(item) => (
                     <box flexDirection="row" gap={1} paddingLeft={1}>
