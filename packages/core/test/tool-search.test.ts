@@ -94,7 +94,7 @@ const fakeRipgrep = Layer.succeed(
         catch: (cause) => new Ripgrep.Error({ message: String(cause), cause }),
       }),
     grep: (input) =>
-      Effect.suspend<Match[], Ripgrep.Error | Ripgrep.InvalidPatternError>(() => {
+      Effect.suspend<Match[], Ripgrep.Error | Ripgrep.InvalidPatternError, never>(() => {
         let expression: RegExp
         try {
           let source = input.pattern
