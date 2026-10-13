@@ -57,6 +57,12 @@ it.live("operator projects own the sessions under their directory and one main s
     expect(main.id).toBe(project.main)
     expect((yield* call(`/api/orchestra/project/${project.id}/main`, "POST")).body.id).toBe(main.id)
 
+    // The project's main session is a durable control plane, not an ordinary deletable chat.
+    const deleteMain = yield* call(`/api/session/${main.id}`, "DELETE")
+    expect(deleteMain.status).toBe(400)
+    expect(deleteMain.body.message).toContain("main orchestrator")
+    expect((yield* call(`/api/session/${main.id}`)).status).toBe(200)
+
     expect((yield* call(`/api/orchestra/access/${deep.id}`, "PUT", { access: "write" })).status).toBe(204)
     const listed = (yield* call(`/api/orchestra/project/${project.id}/session`)).body
     // sessions below the directory belong to it; the main session and other directories do not

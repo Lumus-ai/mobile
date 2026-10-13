@@ -298,12 +298,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.delete("session.remove", "/api/session/:sessionID", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
+        error: [SessionNotFoundError, InvalidRequestError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.remove",
           summary: "Delete session",
-          description: "Delete a session and its child sessions.",
+          description:
+            "Delete a session and its child sessions. A project's main orchestrator session cannot be deleted while its project exists.",
         }),
       ),
     )
