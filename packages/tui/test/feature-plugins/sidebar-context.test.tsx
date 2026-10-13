@@ -132,16 +132,31 @@ test("DoD heading and explicit Open button launch the existing task panel withou
 
   try {
     await app.renderOnce()
-    const frame = app.captureCharFrame()
+    let frame = app.captureCharFrame()
     expect(frame).toContain("DoD")
-    const lines = frame.split("\n")
-    const y = lines.findIndex((line) => line.includes("DoD"))
+    let lines = frame.split("\n")
+    let y = lines.findIndex((line) => line.includes("DoD"))
     expect(y).toBeGreaterThanOrEqual(0)
-    const x = lines[y].indexOf("DoD")
-    app.mockMouse.click(x, y)
+
+    // The preview chevron is a separate control: it must not launch the task panel.
+    const toggleX = lines[y].indexOf("▸")
+    expect(toggleX).toBeGreaterThanOrEqual(0)
+    app.mockMouse.click(toggleX, y)
+    await app.renderOnce()
+    expect(opened).toEqual([])
+
+    // Both the DoD label and the explicit Open button launch the one existing panel.
+    frame = app.captureCharFrame()
+    lines = frame.split("\n")
+    y = lines.findIndex((line) => line.includes("DoD"))
+    const titleX = lines[y].indexOf("DoD")
+    app.mockMouse.click(titleX, y)
     await app.renderOnce()
     expect(opened).toEqual(["opencode.sidebar.dod"])
 
+    frame = app.captureCharFrame()
+    lines = frame.split("\n")
+    y = lines.findIndex((line) => line.includes("DoD"))
     const openX = lines[y].indexOf("[Open]")
     expect(openX).toBeGreaterThanOrEqual(0)
     app.mockMouse.click(openX, y)
