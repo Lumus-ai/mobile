@@ -15,11 +15,33 @@ export const name = "sessions"
 const description = [
   "Run this project's AI team: the other sessions of the project, each a separate chat with its own role.",
   "Only the project's main session (the orchestrator) has this tool.",
+  "Before creating a worker, inspect the roster and reuse an existing writable session with the needed role. Action create reuses an existing session of that role by default; set newInstance=true only when an additional parallel worker is deliberately needed.",
+  "Do not call HTTP endpoints directly or invent /api/orchestra routes for team management. Use this tool. If a team action returns an endpoint or API error, report the actual error instead of creating a replacement session.",
   "Actions: list shows the team by category with each session's role, status, access and whether a task is outstanding;",
   "send queues a task without interrupting the worker's current work; its task-linked <team-report> arrives automatically when it finishes. Each worker can have only one outstanding task: wait for its report before sending another. Do not poll.",
-  "read returns a session's latest messages; create opens a new team session with a role and a category and can give it a first task; stop interrupts a running session.",
+  "read returns a session's latest messages; create reuses an existing session with the requested role or creates one if none exists, and can give it a first task; stop interrupts a running session.",
   "Access per session is hidden < read < write < full: read allows list and read, write adds send, full adds stop. Sessions you create get full access.",
 ].join("\n")
+
+type WorkerRow = {
+  role: string
+  access: Orchestra.Access
+  session: { id: string; title?: string }
+}
+
+export function reusableWorker<T extends WorkerRow>(
+  rows: ReadonlyArray<T>,
+  role: string,
+  pending: ReadonlySet<string>,
+) {
+  const matches = rows.filter((row) => row.role === role)
+  const writable = matches.filter((row) => Orchestra.allows(row.access, "write"))
+  return {
+    matches,
+    writable,
+    session: writable.find((row) => !pending.has(row.session.id)),
+  }
+}
 
 export const Input = Schema.Struct({
   action: Schema.Literals(["list", "read", "send", "create", "stop"]),
@@ -33,6 +55,10 @@ export const Input = Schema.Struct({
   }),
   category: Schema.optionalKey(Schema.String).annotate({
     description: "Category of the session to create, e.g. Planning, Build or Quality",
+  }),
+  newInstance: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Normally omit this: create reuses an existing writable session with this role. Set true only when a separate parallel worker is deliberately needed.",
   }),
   limit: Schema.optionalKey(Schema.Int).annotate({ description: "How many recent messages read returns (default 10)" }),
 })
@@ -163,6 +189,39 @@ export const Plugin = {
                     return yield* new ToolFailure({
                       message: `${input.role ? `Unknown role ${input.role}` : "Pass a role"}. Roles: ${roles.map((role) => role.id).join(", ")}`,
                     })
+
+                  // Reuse the project's existing worker by role before creating anything.
+                  // A new instance is an explicit opt-in, not the default response to a new task.
+                  if (!input.newInstance) {
+                    const rows = yield* team(project)
+                    const matching = rows.filter((row) => row.role === role.id)
+                    if (matching.length > 0) {
+                      const pending = new Set<string>()
+                      for (const row of matching) {
+                        if ((yield* orchestra.pending(row.session.id)) !== undefined) pending.add(row.session.id)
+                      }
+                      const reusable = reusableWorker(rows, role.id, pending)
+                      if (reusable.session) {
+                        const existing = reusable.session.session
+                        if (input.text?.trim()) yield* dispatch(existing.id, input.text)
+                        return {
+                          sessionID: existing.id,
+                          output: input.text?.trim()
+                            ? `Reused existing ${role.name} session ${existing.title ?? existing.id}; task queued. Its report will arrive here when it finishes.`
+                            : `Reused existing ${role.name} session ${existing.title ?? existing.id}. No new session was created; use action send to assign work.`,
+                        }
+                      }
+                      if (reusable.writable.length === 0) {
+                        return yield* new ToolFailure({
+                          message: `An existing ${role.name} session has no write access. Do not create a duplicate to bypass permissions; ask the operator to raise its access to write or full.`,
+                        })
+                      }
+                      return yield* new ToolFailure({
+                        message: `All existing ${role.name} sessions have an outstanding task. Wait for a <team-report> before sending more work. No duplicate session was created.`,
+                      })
+                    }
+                  }
+
                   // A role without its own model runs on the orchestrator's, the one the operator picked,
                   // rather than the server's first catalog model.
                   const main = yield* sessions.get(context.sessionID).pipe(Effect.option)
@@ -234,6 +293,11 @@ export const Plugin = {
                       `${row.session.title ?? "(untitled)"} ${row.session.id} · role ${row.role} · access ${row.access}`,
                   ),
                 ].join("\n"),
+            "",
+            "Team workflow rules (mandatory):",
+            "- Reuse an existing session with the needed role via action send; do not create a duplicate just because the task is new or a worker is busy.",
+            "- Action create reuses an existing writable session of the requested role by default. Only use newInstance=true when an additional parallel worker is specifically necessary.",
+            "- Do not call HTTP endpoints directly or guess /api/orchestra routes. If a tool/API error occurs, report its exact message and do not create a replacement session as a workaround.",
             "",
             "Roles you can create a session with (action create, role id):",
             ...roles.map((role) => `- ${role.id} (${role.name}, ${role.category}): ${role.description}`),
