@@ -203,7 +203,6 @@ export function RegistryPanel(props: {
   }
 
   const setSwitch = async (tools: readonly string[], next: boolean) => {
-    enabledInteracted = true
     const intent = ++switchSequence
     for (const tool of tools) {
       latestSwitch.set(tool, intent)
