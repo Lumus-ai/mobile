@@ -52,8 +52,15 @@ const executionNode = makeGlobalNode({
       const inbox = yield* SessionInbox.Service
       const run = Effect.fn("OrchestraTeamTest.run")(function* (sessionID: Session.ID) {
         const session = yield* store.get(sessionID)
-        if (!session || session.agent === Orchestra.agent) return
+        if (!session) return
         const pending = yield* inbox.list(sessionID)
+        const move = pending.find((item) => item.type === "move")
+        if (move) {
+          yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: move.id })
+          yield* bus.publish(SessionEvent.Moved, { sessionID, ...move.payload })
+          return
+        }
+        if (session.agent === Orchestra.agent) return
         const task = pending.find((item) => item.type === "user" && item.payload.metadata?.orchestra !== undefined)
         let taskDelivered = false
         if (task && !deferTaskDelivery.has(sessionID)) {
@@ -262,6 +269,44 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   )
 
+  it.live("moves the main orchestrator and owned sessions with the project directory", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-move-")))
+      const source = path.join(tmp.path, "source")
+      const sourceNested = path.join(source, "src")
+      const destination = path.join(tmp.path, "destination")
+      const destinationNested = path.join(destination, "src")
+      yield* Effect.promise(() =>
+        Promise.all([
+          import("node:fs/promises").then(({ mkdir }) => mkdir(sourceNested, { recursive: true })),
+          import("node:fs/promises").then(({ mkdir }) => mkdir(destinationNested, { recursive: true })),
+        ]),
+      )
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Move", directory: source, template: "bugfix" })
+      const nested = yield* sessions.create({
+        location: { directory: AbsolutePath.make(sourceNested) },
+        title: "Nested worker",
+        agent: Orchestra.role("developer"),
+      })
+      yield* orchestra.claim(nested.id, project.id)
+      yield* orchestra.setAccess(nested.id, "full")
+      const originalMembers = yield* orchestra.sessions(project.id)
+
+      const updated = yield* orchestra.update(project.id, { name: "Moved", directory: destination })
+      expect(updated).toMatchObject({ name: "Moved", directory: destination, main: project.main })
+      expect((yield* sessions.get(project.main!)).location.directory).toBe(AbsolutePath.make(destination))
+      expect((yield* sessions.get(project.main!)).title).toBe("Moved · Orchestrator")
+      for (const member of originalMembers)
+        expect((yield* sessions.get(member.id)).location.directory).toBe(AbsolutePath.make(destination))
+      expect((yield* sessions.get(nested.id)).location.directory).toBe(AbsolutePath.make(destinationNested))
+      const currentMembers = yield* orchestra.sessions(project.id)
+      expect(currentMembers.map((session) => session.id).toSorted()).toEqual(
+        [...originalMembers.map((session) => session.id), nested.id].toSorted(),
+      )
+    }).pipe(Effect.scoped),
+  ),
   it.live("a dispatched task reports back to the orchestrator when its run ends", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))

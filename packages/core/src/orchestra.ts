@@ -65,6 +65,13 @@ export class DirectoryError extends Schema.TaggedError<DirectoryError>()("Orches
   directory: Schema.String,
 }) {}
 
+export class ProjectMoveError extends Schema.TaggedError<ProjectMoveError>()("Orchestra.ProjectMoveError", {
+  projectID: Schema.String,
+  sessionID: Schema.String,
+  directory: Schema.String,
+  message: Schema.String,
+}) {}
+
 export interface Interface {
   readonly projects: () => Effect.Effect<ReadonlyArray<Project>>
   // Always opens the project's main orchestrator; with a template, also opens one session per team member.
@@ -76,7 +83,7 @@ export interface Interface {
   readonly update: (
     id: ProjectID,
     input: { name?: string; directory?: string },
-  ) => Effect.Effect<Project, ProjectNotFoundError | DirectoryError>
+  ) => Effect.Effect<Project, ProjectNotFoundError | DirectoryError | ProjectMoveError | Dod.DodError>
   // Forgets the project; its sessions and its main session stay.
   readonly remove: (id: ProjectID) => Effect.Effect<void, ProjectNotFoundError>
   // The project's stable main session. Repairs legacy projects which predate eager creation.
@@ -219,6 +226,21 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       return Orchestra.ownerOf(yield* projects(), session.location.directory, claimed)?.id === project.id
     })
 
+    const projectSessions = Effect.fn("Orchestra.projectSessions")(function* (project: Project) {
+      const all = yield* projects()
+      const claims = yield* owners()
+      const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
+      // Another project in the same directory has its own orchestrator; it never joins this team.
+      return recent.filter((session) => {
+        const claimed = claims[session.id] ?? Orchestra.sessionOwner(session.metadata)
+        return (
+          session.id !== project.main &&
+          session.agent !== Orchestra.agent &&
+          Orchestra.ownerOf(all, session.location.directory, claimed)?.id === project.id
+        )
+      })
+    })
+
     // When a main Session is deleted, its replacement has a new ID. Keep any outstanding
     // worker tasks reachable by transferring only markers that target a missing main and are
     // demonstrably owned by this project. Never redirect work away from another live main.
@@ -358,6 +380,67 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           return main
         }),
       )
+
+    const moveFailure = (project: Project, session: SessionSchema.Info, directory: string, error: unknown) =>
+      new ProjectMoveError({
+        projectID: project.id,
+        sessionID: session.id,
+        directory,
+        message: `Could not move session "${session.title ?? session.id}" to "${directory}": ${String(error)}`,
+      })
+
+    // A project path change is also a workspace migration for the sessions it owns. Move
+    // those that lived under the old root, preserve a relative subdirectory when it exists
+    // in the new workspace, and keep explicitly external sessions at their own locations.
+    // The project record is saved only after every required move has settled successfully.
+    const moveProjectSessions = Effect.fnUntraced(function* (project: Project, destination: string) {
+      const oldRoot = yield* fs.resolve(project.directory)
+      const nextRoot = yield* fs.resolve(destination)
+      if (oldRoot === nextRoot) return
+
+      const members = yield* projectSessions(project)
+      const main = project.main
+        ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
+        : undefined
+      // Move the workers first and the main session last so the control plane remains at
+      // the old root until the rest of the team has completed its workspace handoff.
+      const candidates = [...members, ...(main ? [main] : [])]
+      for (const session of candidates) {
+        // Once included in this project, a session must remain owned by it after its
+        // directory changes and no longer matches the previous root's path rule.
+        yield* kv.set(OWNER + session.id, project.id)
+        const currentDirectory = yield* fs.resolve(session.location.directory)
+        let targetDirectory: string
+        if (session.id === project.main) {
+          targetDirectory = destination
+        } else {
+          const relative = path.relative(oldRoot, currentDirectory)
+          const inside =
+            relative === "" ||
+            (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+          if (!inside) continue
+          const mapped = relative ? path.resolve(destination, relative) : destination
+          targetDirectory = relative && (yield* fs.isDir(mapped)) ? mapped : destination
+        }
+        const targetRoot = yield* fs.resolve(targetDirectory)
+        if (currentDirectory === targetRoot) continue
+
+        const failure = (error: unknown) => moveFailure(project, session, targetDirectory, error)
+        yield* sessions
+          .move({
+            sessionID: session.id,
+            directory: AbsolutePath.make(targetDirectory),
+            delivery: "queue",
+          })
+          .pipe(Effect.mapError(failure))
+        yield* sessions.wait(session.id).pipe(Effect.mapError(failure))
+        const moved = yield* sessions.get(session.id).pipe(Effect.mapError(failure))
+        const actualRoot = yield* fs.resolve(moved.location.directory)
+        if (actualRoot !== targetRoot) {
+          return yield* failure(new Error(`Session location remained at ${moved.location.directory}`))
+        }
+      }
+    })
 
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped" | "recovered", detail?: string): Effect.Effect<void> =>
       dispatchLocks.withLock(sessionID)(
@@ -719,15 +802,19 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         return { ...project, main: main.id }
       }),
       update: Effect.fn("Orchestra.update")(function* (id, input) {
-        // Serialize metadata changes with main-session initialization. Otherwise a concurrent
-        // rename could be saved between reservation and Session.create and leave a stale title.
+        // Older project records may not yet have a main pointer. Repair them before entering
+        // the update lock so a directory change cannot strand an orphaned main at the old root.
+        if (input.directory !== undefined) yield* ensureMain(id)
+        // Serialize metadata changes with main-session initialization and project removal.
         return yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
             const project = yield* get(id)
+            const nextDirectory = input.directory === undefined ? project.directory : yield* directory(input.directory)
+            if (nextDirectory !== project.directory) yield* moveProjectSessions(project, nextDirectory)
             const updated = yield* save({
               ...project,
               name: input.name?.trim() || project.name,
-              directory: input.directory === undefined ? project.directory : yield* directory(input.directory),
+              directory: nextDirectory,
             })
             // The main session is the project's long-lived identity. Keep its visible title in sync
             // when the project is renamed; ensureMain repairs this too if a crash interrupts the rename.
@@ -767,18 +854,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
         const project = yield* get(id)
-        const all = yield* projects()
-        const claims = yield* owners()
-        const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
-        // Another project in the same directory has its own orchestrator; it never joins this team.
-        return recent.filter((session) => {
-          const claimed = claims[session.id] ?? Orchestra.sessionOwner(session.metadata)
-          return (
-            session.id !== project.main &&
-            session.agent !== Orchestra.agent &&
-            Orchestra.ownerOf(all, session.location.directory, claimed)?.id === project.id
-          )
-        })
+        return yield* projectSessions(project)
       }),
       owns,
       owners,

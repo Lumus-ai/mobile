@@ -12,7 +12,15 @@ it.live("operator projects own the sessions under their directory and one main s
     const app = path.join(tmp.path, "app")
     const nested = path.join(app, "web")
     const other = path.join(tmp.path, "other")
-    yield* Effect.promise(() => Promise.all([mkdir(nested, { recursive: true }), mkdir(other)]))
+    const moved = path.join(tmp.path, "moved")
+    const movedNested = path.join(moved, "web")
+    yield* Effect.promise(() =>
+      Promise.all([
+        mkdir(nested, { recursive: true }),
+        mkdir(other),
+        mkdir(movedNested, { recursive: true }),
+      ]),
+    )
     const handler = yield* ServerFetch.make({
       app: { version: "test" },
       database: { path: ":memory:" },
@@ -69,10 +77,17 @@ it.live("operator projects own the sessions under their directory and one main s
     expect(listed.data.map((item: { id: string }) => item.id).toSorted()).toEqual([top.id, deep.id].toSorted())
     expect(listed.access).toEqual({ [top.id]: "read", [deep.id]: "write" })
 
-    expect((yield* call(`/api/orchestra/project/${project.id}`, "PATCH", { name: "Renamed" })).body.name).toBe(
-      "Renamed",
-    )
+    const updated = (yield* call(`/api/orchestra/project/${project.id}`, "PATCH", {
+      name: "Renamed",
+      directory: moved,
+    })).body
+    expect(updated).toMatchObject({ name: "Renamed", directory: moved, main: main.id })
+    expect((yield* call(`/api/session/${main.id}`)).body.data.location.directory).toBe(moved)
+    expect((yield* call(`/api/session/${top.id}`)).body.data.location.directory).toBe(moved)
+    expect((yield* call(`/api/session/${deep.id}`)).body.data.location.directory).toBe(movedNested)
     expect((yield* call(`/api/orchestra/project/${project.id}/main`, "POST")).body.title).toBe("Renamed · Orchestrator")
+    const movedMembers = (yield* call(`/api/orchestra/project/${project.id}/session`)).body
+    expect(movedMembers.data.map((item: { id: string }) => item.id).toSorted()).toEqual([top.id, deep.id].toSorted())
     expect((yield* call(`/api/orchestra/project/${project.id}`, "DELETE")).status).toBe(204)
     expect((yield* call("/api/orchestra/project")).body).toEqual([])
     // forgetting the project keeps its sessions

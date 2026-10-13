@@ -25,6 +25,10 @@ function badDirectory(error: Orchestra.DirectoryError) {
   )
 }
 
+function badProjectMove(error: Orchestra.ProjectMoveError) {
+  return Effect.fail(new InvalidRequestError({ message: error.message, field: "directory" }))
+}
+
 function badTeam(error: Orchestra.TeamError) {
   return Effect.fail(new InvalidRequestError({ message: error.message, field: error.field }))
 }
@@ -94,6 +98,8 @@ export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (h
           .pipe(
             Effect.catchTag("Orchestra.ProjectNotFoundError", missingProject),
             Effect.catchTag("Orchestra.DirectoryError", badDirectory),
+            Effect.catchTag("Orchestra.ProjectMoveError", badProjectMove),
+            Effect.catchTag("Dod.Error", badDod),
           ),
       )
       .handle(
