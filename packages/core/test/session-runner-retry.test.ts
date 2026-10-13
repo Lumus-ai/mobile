@@ -1,12 +1,15 @@
 import { describe, expect } from "bun:test"
-import { AIError, ProviderInternalError, TransportError } from "@opencode/ai"
+import { AIError, ProviderInternalError, RateLimitError, TransportError } from "@opencode/ai"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/core/provider"
+import type { Bus } from "@opencode/core/bus"
+import { KV } from "@opencode/core/kv"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
-import { Effect } from "effect"
+import { Clock, Duration, Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 
 const timeout = new AIError({
@@ -42,6 +45,79 @@ describe("SessionRunnerRetry.policy", () => {
   it.effect("keeps the general allowance for other transient failures", () =>
     Effect.gen(function* () {
       expect(yield* decisions(internal, 10)).toEqual(Array(10).fill(true))
+    }),
+  )
+})
+
+
+const memoryKV = () => {
+  const values = new Map<string, KV.Value>()
+  const kv: KV.Interface = {
+    get: (key) => Effect.succeed(values.get(key)),
+    set: (key, value) => Effect.sync(() => void values.set(key, value)),
+    remove: (key) => Effect.sync(() => void values.delete(key)),
+    scan: (options) =>
+      Effect.sync(() => {
+        const limit = options.limit ?? 100
+        const keys = [...values.keys()]
+          .filter((key) => key.startsWith(options.prefix) && (options.after === undefined || key > options.after))
+          .sort()
+        const selected = keys.slice(0, limit)
+        return {
+          entries: selected.map((key) => ({ key, value: values.get(key)! })),
+          ...(keys.length > limit && selected.length > 0 ? { next: selected[selected.length - 1] } : {}),
+        }
+      }),
+  }
+  return { kv, values }
+}
+
+const rateLimit = new AIError({
+  reason: new RateLimitError({ message: "Too many requests" }),
+})
+
+const retryBus = { publish: () => Effect.void } as unknown as Bus.Interface
+
+describe("SessionRunnerRetry shared rate-limit gate", () => {
+  it.effect("keeps retrying RateLimit after the ordinary retry budget is exhausted", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_rate_limit")
+      const memory = memoryKV()
+      const retry = yield* SessionRunnerRetry.make(retryBus, sessionID, memory.kv)
+      const results = []
+      for (let i = 0; i < 12; i++) results.push(yield* retry.decide(input(rateLimit)))
+
+      expect(results.every((result) => result.retry)).toBe(true)
+      expect(results[11].attempt).toBeGreaterThan(10)
+      const gates = [...memory.values.entries()].filter(([key]) =>
+        key.startsWith("session-runner:rate-limit:v1:provider:"),
+      )
+      expect(gates.length).toBe(12)
+      const now = yield* Clock.currentTimeMillis
+      expect(Math.max(...gates.map(([, value]) => (value as { retryAt: number }).retryAt))).toBeGreaterThan(now)
+    }),
+  )
+
+  it.effect("waits on a provider gate created by another agent session", () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis
+      const memory = memoryKV()
+      yield* memory.kv.set("session-runner:rate-limit:v1:provider:other-session", {
+        version: 1,
+        providerID: "provider",
+        sessionID: "ses_other",
+        retryAt: now + 1_000,
+        updatedAt: now,
+        consecutive: 2,
+      })
+      const retry = yield* SessionRunnerRetry.make(
+        retryBus,
+        SessionSchema.ID.make("ses_waiting"),
+        memory.kv,
+      )
+      const waiting = yield* Effect.fork(retry.waitForGate("provider"))
+      yield* TestClock.adjust(Duration.millis(1_000))
+      expect(yield* Fiber.join(waiting)).toBe(true)
     }),
   )
 })
