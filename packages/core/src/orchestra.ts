@@ -258,7 +258,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         }),
       )
 
-    const report = (sessionID: SessionID, state: "done" | "failed" | "stopped", detail?: string): Effect.Effect<void> =>
+    const report = (sessionID: SessionID, state: "done" | "failed" | "stopped" | "recovered", detail?: string): Effect.Effect<void> =>
       dispatchLocks.withLock(sessionID)(
         Effect.gen(function* () {
           const task = decodeTask(yield* kv.get(TASK + sessionID))
@@ -291,7 +291,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
           // A worker's execution can finish while its assigned task is only partly complete.
           // Keep that semantic outcome separate from the execution event's terminal state.
           const outcome =
-            state !== "done"
+            state === "failed" || state === "stopped"
               ? state
               : /^PARTLY DONE\b/.test(firstLine)
                 ? "partial"
@@ -309,9 +309,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
           // Persist the report ID before admission so retries cannot append duplicate reports.
           if (!task.value.reportID)
             yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
-          // Remove the outstanding marker before synthetic admission wakes the orchestrator.
-          // The lock blocks a new dispatch until admission succeeds or the task is restored.
-          yield* kv.remove(TASK + sessionID)
+          // Admit the report before clearing the outstanding task marker. If the process
+          // dies between these writes, a retry uses the same reportID and SessionInbox makes
+          // admission idempotent; the task can never vanish without a durable report.
           const admitted = yield* sessions
             .synthetic({
               id: reportID,
@@ -332,10 +332,64 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
               },
             })
             .pipe(Effect.as(true), Effect.orElseSucceed(() => false))
-          // If admission failed, restore the task so a later completion can retry safely.
-          if (!admitted) yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
+          // Keep the task marker until admission succeeds; it is the durable retry record.
+          if (admitted) yield* kv.remove(TASK + sessionID)
+          else yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
       }),
     )
+
+    // Bus subscriptions only observe live events. Reconcile task markers left behind when a
+    // worker completed before its terminal event could be observed by this process.
+    const recoverPending = Effect.fn("Orchestra.recoverPending")(function* () {
+      const read = (after?: string): Effect.Effect<KV.Entry[]> =>
+        kv.scan({ prefix: TASK, after, limit: 1000 }).pipe(
+          Effect.flatMap((result) =>
+            result.next
+              ? read(result.next).pipe(Effect.map((rest) => [...result.entries, ...rest]))
+              : Effect.succeed([...result.entries]),
+          ),
+        )
+      const pending = yield* read()
+      const active = yield* sessions.active
+      yield* Effect.forEach(
+        pending,
+        (entry) =>
+          Effect.gen(function* () {
+            const task = decodeTask(entry.value)
+            if (Option.isNone(task)) return
+            const sessionID = SessionID.make(entry.key.slice(TASK.length))
+            if (active.has(sessionID)) return
+            const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
+            if (!session) {
+              yield* kv.remove(entry.key)
+              return
+            }
+            if (task.value.messageID) {
+              const input = yield* sessions.message({ sessionID, messageID: task.value.messageID })
+              // The task may still be queued while the worker finishes unrelated work.
+              if (input?.type !== "user") return
+            }
+            const recent = yield* sessions
+              .messages({
+                sessionID,
+                limit: 20,
+                order: "desc",
+                ...(task.value.messageID
+                  ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
+                  : {}),
+              })
+              .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+            // Without an answer after the dispatched message, do not report a queued or incomplete task.
+            if (!recent.some((message) => finalText(message).length > 0)) return
+            yield* report(
+              sessionID,
+              "recovered",
+              "Recovered a completed worker task after startup; its execution terminal event was not observed.",
+            )
+          }),
+        { concurrency: "unbounded", discard: true },
+      )
+    })
 
     // A shutdown interruption is resumed after restart, so its report waits for the real end.
     yield* bus
@@ -350,6 +404,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         }),
         Effect.forkScoped({ startImmediately: true }),
       )
+
+    yield* recoverPending().pipe(Effect.forkScoped({ startImmediately: true }))
 
     const changed = yield* PubSub.sliding<void>(16)
 
@@ -481,6 +537,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         yield* kv.set(OWNER + sessionID, projectID)
       }),
       mainOf: Effect.fn("Orchestra.mainOf")(function* (sessionID) {
+        // The orchestrator's next activation is a second recovery checkpoint after startup.
+        yield* recoverPending()
         return (yield* projects()).find((project) => project.main === sessionID)
       }),
       access,

@@ -36,6 +36,8 @@ const model = Model.Ref.make({ id: Model.ID.make("member"), providerID: Provider
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 // Test-only control for a worker run that finishes before its queued team task is promoted.
 const deferTaskDelivery = new Set<Session.ID>()
+// Simulates losing a terminal event while the worker answer remains durable.
+const suppressTerminalEvent = new Set<Session.ID>()
 
 // Stands in for the runner: a woken team session answers with its title and ends
 // its run the way the title asks ("fails", "stops at shutdown" or succeeds).
@@ -79,6 +81,7 @@ const executionNode = makeGlobalNode({
           cost: Money.USD.zero,
           tokens,
         })
+        if (suppressTerminalEvent.has(sessionID)) return
         if (session.title?.includes("fails"))
           return yield* bus.publish(SessionEvent.Execution.Failed, {
             sessionID,
@@ -224,6 +227,40 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   )
 
+  it.live("recovers a completed worker task when its terminal event was missed", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-recovery-")))
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "Recovery", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      yield* Effect.acquireRelease(
+        Effect.sync(() => suppressTerminalEvent.add(worker.id)),
+        () => Effect.sync(() => suppressTerminalEvent.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      yield* Effect.sleep("50 millis")
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // No terminal event arrived. Resolving the main session reconciles durable task state.
+      suppressTerminalEvent.delete(worker.id)
+      yield* orchestra.mainOf(project.main!)
+      const recovered = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(recovered).toHaveLength(1)
+      expect(recovered[0]).toContain('state="recovered"')
+      expect(recovered[0]).toContain("Developer: task answer")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+
+      // Recovery is idempotent after the durable marker has been cleared.
+      yield* orchestra.mainOf(project.main!)
+      expect(yield* reports(project.main!)).toHaveLength(1)
+    }).pipe(Effect.scoped),
+  ),
   it.live("does not report an unrelated completion for an undispatched queued task", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-task-")))
