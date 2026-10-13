@@ -124,7 +124,12 @@ test("a new session started from a project carries its project owner metadata", 
   await using setup = await render(state.path, calls, [project], worker, "full", { width: 140 })
   await setup.ready
 
-  const frame = await setup.waitForFrame((frame) => frame.includes("+ New session"), { maxPasses: 100 })
+  // Wait for the async project expansion too; otherwise its rows can appear between
+  // measuring the button coordinates and clicking, moving the button down the panel.
+  const frame = await setup.waitForFrame(
+    (frame) => frame.includes("+ New session") && frame.includes(worker.title),
+    { maxPasses: 100 },
+  )
   const add = cell(frame, "+ New session")
   await setup.mockMouse.click(add.x + 1, add.y)
   // Wait for Home's prompt to render instead of requiring the renderer to become visually idle.
