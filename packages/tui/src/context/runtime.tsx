@@ -87,3 +87,7 @@ export function useTuiStartup() {
 export function useTuiLifecycle() {
   return required(LifecycleContext, "TuiLifecycleProvider")
 }
+
+export function useTuiLifecycleOptional() {
+  return useContext(LifecycleContext)
+}
