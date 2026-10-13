@@ -79,7 +79,6 @@ const fakeRipgrep = Layer.succeed(
         try: async () =>
           (await filesUnder(input.cwd, input.hidden === true))
             .filter((file) => matchesGlob(input.pattern, file))
-            .filter((file) => !(input.exclude ?? []).some((pattern) => matchesGlob(pattern, file)))
             .slice(0, input.limit)
             .map((file) => Entry.make({ path: RelativePath.make(file), type: "file" })),
         catch: (cause) => new Ripgrep.Error({ message: String(cause), cause }),
@@ -95,7 +94,7 @@ const fakeRipgrep = Layer.succeed(
         catch: (cause) => new Ripgrep.Error({ message: String(cause), cause }),
       }),
     grep: (input) =>
-      Effect.suspend(() => {
+      Effect.suspend<Match[], Ripgrep.Error | Ripgrep.InvalidPatternError>(() => {
         let expression: RegExp
         try {
           let source = input.pattern
