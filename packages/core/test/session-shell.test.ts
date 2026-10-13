@@ -84,9 +84,17 @@ const launch = Effect.fn(function* (fixture: Effect.Success<typeof setup>, name:
     Effect.asVoid,
   )
   yield* Effect.addFinalizer(() => release)
-  // Use the same runner on Windows and POSIX. Session.shell honors user shell settings,
-  // so shell-specific marker commands can fail on machines configured with a different shell.
-  const command = `bun -e "const fs=require('node:fs'); console.log('${name} started'); fs.writeFileSync('${name}.started',''); while (!fs.existsSync('${name}.release')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10); console.log('${name} finished')"`
+  // Put the runner in a file instead of passing inline source through the configured shell.
+  // This avoids nested-quote differences between PowerShell, cmd.exe, and POSIX shells.
+  const script = [
+    'import fs from "node:fs"',
+    `console.log("${name} started")`,
+    `fs.writeFileSync("${name}.started", "")`,
+    `while (!fs.existsSync("${name}.release")) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)`,
+    `console.log("${name} finished")`,
+  ].join("\n")
+  yield* Effect.promise(() => Bun.write(path.join(fixture.tmp.path, `${name}.mjs`), script))
+  const command = `bun ${name}.mjs`
   const caller = yield* fixture.session
     .shell({ sessionID: fixture.created.id, command })
     .pipe(Effect.scoped, Effect.forkScoped)
