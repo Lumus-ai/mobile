@@ -126,9 +126,13 @@ test("a new session started from a project carries its project owner metadata", 
   const frame = await setup.waitForFrame((frame) => frame.includes("+ New session"), { maxPasses: 100 })
   const add = cell(frame, "+ New session")
   await setup.mockMouse.click(add.x + 1, add.y)
-  // Navigating to Home swaps the session view for the prompt; wait for the UI to settle
-  // instead of depending on a model label that is not rendered in this layout.
-  await setup.waitForVisualIdle({ quietFrames: 3 })
+  // Wait for Home's prompt to render instead of requiring the renderer to become visually idle.
+  // Background updates may keep scheduling frames even though the prompt is ready for input.
+  await setup.waitForFrame((frame) =>
+    ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"].some((text) =>
+      frame.includes(text),
+    ),
+  )
 
   await setup.mockInput.typeText("hello")
   setup.mockInput.pressEnter()
