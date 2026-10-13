@@ -195,7 +195,7 @@ describe("Dod", () => {
     await using dir = await project(
       FILE.replace(
         '      - "[ ] write it"\n',
-        '      - "[ ] write it"\n    verification:\n      state: NOT_CHECKED\n      command: "bun test x"   # the oracle\n      evidence:\n        command: "old"\n        exit_code: 1\n',
+        '      - "[x] write it"\n    verification:\n      state: NOT_CHECKED\n      command: "bun test x"   # the oracle\n      evidence:\n        command: "old"\n        exit_code: 1\n',
       ),
     )
     expect(await fails(Dod.command({ directory: dir.path, id: "L-002", owner: alex }))).toBe(
@@ -203,6 +203,14 @@ describe("Dod", () => {
     )
     await run(Dod.take({ directory: dir.path, id: "L-002", owner: alex }))
     expect(await run(Dod.command({ directory: dir.path, id: "L-002", owner: alex }))).toBe("bun test x")
+    expect(await fails(Dod.accept({
+      directory: dir.path,
+      id: "L-002",
+      command: "bun test something-else",
+      exitCode: 0,
+      summary: "forged pass",
+      by: "Alex",
+    }))).toBe('L-002 verification command mismatch; expected "bun test x"')
     expect(await fails(Dod.command({ directory: dir.path, id: "L-003", owner: alex }))).toBe(
       "Take L-003 before submitting it; only its holder submits",
     )
