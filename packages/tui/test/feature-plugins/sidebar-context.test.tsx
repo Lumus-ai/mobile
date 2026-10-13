@@ -112,7 +112,7 @@ test("sidebar shows usage against the model context limit", async () => {
   }
 })
 
-test("DoD launcher remains visible and opens the existing task panel without an action theme color", async () => {
+test("DoD heading and explicit Open button launch the existing task panel without an action theme color", async () => {
   const opened: string[] = []
   const app = await testRender(
     () => (
@@ -141,6 +141,12 @@ test("DoD launcher remains visible and opens the existing task panel without an 
     app.mockMouse.click(x, y)
     await app.renderOnce()
     expect(opened).toEqual(["opencode.sidebar.dod"])
+
+    const openX = lines[y].indexOf("[Open]")
+    expect(openX).toBeGreaterThanOrEqual(0)
+    app.mockMouse.click(openX, y)
+    await app.renderOnce()
+    expect(opened).toEqual(["opencode.sidebar.dod", "opencode.sidebar.dod"])
   } finally {
     app.renderer.destroy()
   }

@@ -187,9 +187,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
           gap={1}
           flexGrow={1}
           minWidth={0}
-          onMouseUp={() => {
-            if (!openDodPanel(props.context)) setOpen(true)
-          }}
+          onMouseUp={() => openDodPanel(props.context)}
         >
           <box flexGrow={1} minWidth={0}>
             <text fg={actionColor} wrapMode="none" truncate>
@@ -199,7 +197,16 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
           <text fg={theme.text.muted} wrapMode="none" truncate>
             {heading()}
           </text>
-          <text fg={actionColor}>↗</text>
+          <text
+            id="sidebar.dod.open-button"
+            fg={actionColor}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              openDodPanel(props.context)
+            }}
+          >
+            {`[${t("Open")}] ↗`}
+          </text>
         </box>
       </box>
 
