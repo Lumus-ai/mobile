@@ -25,7 +25,7 @@ env:
 jobs:
   affected:
     name: affected packages
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.ref_name == 'lan-rooms' && 'ubuntu-latest' || 'blacksmith-4vcpu-ubuntu-2404' }}
     outputs:
       app: ${{ steps.packages.outputs.app }}
     steps:
@@ -63,7 +63,7 @@ jobs:
             host: blacksmith-4vcpu-ubuntu-2404
           - name: windows
             host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
+    runs-on: ${{ github.ref_name == 'lan-rooms' && (matrix.settings.name == 'windows' && 'windows-latest' || 'ubuntu-latest') || matrix.settings.host }}
     defaults:
       run:
         shell: bash
