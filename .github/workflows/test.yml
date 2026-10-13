@@ -46,7 +46,7 @@ jobs:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.ref_name }}" = "lan-rooms" ]; then
             echo "app=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -105,10 +105,12 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
+        if: ${{ !cancelled() }}
         timeout-minutes: 20
         run: |
           # The runners have four vCPUs, and each Bun test process performs its own concurrent work.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Always exercise the full suite on lan-rooms; successive CI-only commits must not narrow the test scope.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.ref_name }}" = "lan-rooms" ]; then
             GITHUB_ACTIONS=false bun turbo test --concurrency=3
             exit 0
           fi
