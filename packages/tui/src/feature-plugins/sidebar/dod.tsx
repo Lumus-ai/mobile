@@ -45,14 +45,18 @@ export function parseDodBoard(source: string): DodTask[] {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return []
     const leaf = raw as Record<string, unknown>
     if (typeof leaf.id !== "string" || !leaf.id.trim()) return []
-    const steps = Array.isArray(leaf.steps) ? leaf.steps.filter((step): step is string => typeof step === "string") : []
-    return [{
-      id: leaf.id.trim(),
-      title: typeof leaf.what === "string" && leaf.what.trim() ? leaf.what.trim() : leaf.id.trim(),
-      state: typeof leaf.task_state === "string" && leaf.task_state.trim() ? leaf.task_state.trim() : "NOT_STARTED",
-      done: steps.filter((step) => /^\\s*\\[(x|X)\\]/.test(step)).length,
-      total: steps.length,
-    }]
+    const steps = Array.isArray(leaf.steps)
+      ? leaf.steps.filter((step): step is string => typeof step === "string")
+      : []
+    return [
+      {
+        id: leaf.id.trim(),
+        title: typeof leaf.what === "string" && leaf.what.trim() ? leaf.what.trim() : leaf.id.trim(),
+        state: typeof leaf.task_state === "string" && leaf.task_state.trim() ? leaf.task_state.trim() : "NOT_STARTED",
+        done: steps.filter((step) => /^\\s*\\[(x|X)\\]/.test(step)).length,
+        total: steps.length,
+      },
+    ]
   })
 }
 
