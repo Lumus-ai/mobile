@@ -154,9 +154,13 @@ function render(
 
 function cell(frame: string, needle: string) {
   const lines = frame.split("\n")
-  const y = lines.findIndex((line) => line.includes(needle))
+  const exact = lines.findIndex((line) => line.includes(needle))
+  // Terminal renderers can substitute a different glyph for a button icon.
+  // Retry against the visible label so mouse tests stay portable across platforms.
+  const label = needle.trim().replace(/^[^\\p{L}\\p{N}]+/u, "").trim()
+  const y = exact >= 0 ? exact : label ? lines.findIndex((line) => line.includes(label)) : -1
   if (y < 0) throw new Error(`no ${needle} on screen:\n${frame}`)
-  return { x: lines[y].indexOf(needle), y }
+  return { x: lines[y].indexOf(exact >= 0 ? needle : label), y }
 }
 
 async function click(setup: Awaited<ReturnType<typeof render>>, needle: string, offset = 0) {
