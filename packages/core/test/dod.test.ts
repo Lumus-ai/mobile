@@ -57,7 +57,7 @@ describe("Dod", () => {
     expect(starter).toContain("task_id: PROJECT-BOARD")
     expect(starter).toContain("leaves: []")
 
-    const custom = "task_id: CUSTOM\\nstages: []\\nleaves: []\\n"
+    const custom = "task_id: CUSTOM\nstages: []\nleaves: []\n"
     await Bun.write(file, custom)
     expect(await run(Dod.initialize(dir.path))).toBe("existing")
     expect(await Bun.file(file).text()).toBe(custom)
