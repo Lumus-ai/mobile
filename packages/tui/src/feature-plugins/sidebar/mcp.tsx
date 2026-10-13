@@ -2,6 +2,7 @@ import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
 import { useT } from "../../util/i18n"
+import { hoverBackground } from "../../ui/hover"
 
 export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
