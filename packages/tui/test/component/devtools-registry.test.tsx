@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
+import { Renderable } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { Hub } from "@opencode/core/hub/index"
 import { HubState } from "@opencode/core/hub/state"
@@ -255,7 +256,45 @@ test("All off also clears saved switches that are outside the current registry r
     const row = lines.findIndex((line) => line.includes("All off"))
     const allOff = lines[row]!.indexOf("All off")
     const x = allOff + Math.floor("All off".length / 2)
+    await app.mockMouse.moveTo(x, row)
+    const hitId = app.renderer.hitTest(x, row)
+    let hit = Renderable.renderablesByNumber.get(hitId)
+    const chain: Array<{ type: string; id: string; x: number; y: number; width: number; height: number }> = []
+    while (hit && chain.length < 8) {
+      chain.push({
+        type: hit.constructor.name,
+        id: hit.id,
+        x: hit.x,
+        y: hit.y,
+        width: hit.width,
+        height: hit.height,
+      })
+      hit = hit.parent instanceof Renderable ? hit.parent : undefined
+    }
     await app.mockMouse.click(x, row)
+    await Bun.sleep(50)
+    const afterFrame = app.captureCharFrame()
+    const counter = rowValue(afterFrame, "For the model")
+    if (counter !== "0/" + hubRegistryStatus({ probe }).tools.length) {
+      throw new Error(
+        "DEBUG All off failed click: " +
+          JSON.stringify(
+            {
+              x,
+              y: row,
+              rowText: lines[row],
+              hitId,
+              chain,
+              targetEnabled: (await HubState.read({ directory: tmp.path })).enabled[target],
+              staleEnabled: (await HubState.read({ directory: tmp.path })).enabled[stale],
+              counter,
+              statusRow: afterFrame.split("\\n").find((line) => line.includes("For the model")),
+            },
+            null,
+            2,
+          ),
+      )
+    }
 
     await app.waitForFrame((frame) => rowValue(frame, "For the model") === "0/" + hubRegistryStatus({ probe }).tools.length)
     expect(await untilEnabled(tmp.path, target, false)).toBe(true)
