@@ -234,22 +234,28 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
               : Effect.succeed([...result.entries]),
           ),
         )
-      const [entries, claims] = yield* Effect.all([read(), owners()])
+      const { entries, claims } = yield* Effect.all({ entries: read(), claims: owners() })
       yield* Effect.forEach(
         entries,
-        (entry) =>
-          Effect.gen(function* () {
-            const task = decodeTask(entry.value)
-            if (Option.isNone(task) || task.value.main === mainID) return
-            const oldMain = yield* sessions.get(task.value.main).pipe(Effect.orElseSucceed(() => undefined))
-            if (oldMain) return
+        (entry) => {
+          const workerID = SessionID.make(entry.key.slice(TASK.length))
+          // Report admission and pointer migration must be serialized: the reporter may be
+          // retrying admission at exactly the moment this replacement main is being created.
+          return dispatchLocks.withLock(workerID)(
+            Effect.gen(function* () {
+              const task = Option.getOrUndefined(decodeTask(yield* kv.get(entry.key)))
+              if (!task || task.main === mainID) return
+              const oldMain = yield* sessions.get(task.main).pipe(Effect.orElseSucceed(() => undefined))
+              if (oldMain) return
 
-            const workerID = SessionID.make(entry.key.slice(TASK.length))
-            const worker = yield* sessions.get(workerID).pipe(Effect.orElseSucceed(() => undefined))
-            const belongs = claims[workerID] === project.id || (worker ? yield* owns(project, worker) : false)
-            if (!belongs) return
-            yield* kv.set(entry.key, Schema.encodeSync(Task)({ ...task.value, main: mainID }))
-          }),
+              const worker = yield* sessions.get(workerID).pipe(Effect.orElseSucceed(() => undefined))
+              let belongs = claims[workerID] === project.id
+              if (!belongs && worker) belongs = yield* owns(project, worker)
+              if (!belongs) return
+              yield* kv.set(entry.key, Schema.encodeSync(Task)({ ...task, main: mainID }))
+            }),
+          )
+        },
         { concurrency: "unbounded", discard: true },
       )
     })
