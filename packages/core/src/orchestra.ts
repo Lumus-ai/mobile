@@ -255,6 +255,19 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
             })
             .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
           const answer = recent.flatMap(finalText).at(0) ?? "(no text answer)"
+          const firstLine = answer.split(/\r?\n/).map((line) => line.trim()).find(Boolean)?.toUpperCase() ?? ""
+          // A worker's execution can finish while its assigned task is only partly complete.
+          // Keep that semantic outcome separate from the execution event's terminal state.
+          const outcome =
+            state !== "done"
+              ? state
+              : /^PARTLY DONE\b/.test(firstLine)
+                ? "partial"
+                : /^NOT DONE\b/.test(firstLine)
+                  ? "incomplete"
+                  : /^DONE\b/.test(firstLine)
+                    ? "complete"
+                    : "unknown"
           const body =
             answer.length > REPORT_LIMIT
               ? `${answer.slice(0, REPORT_LIMIT)}\n… (cut; read the worker session for the rest)`
@@ -273,7 +286,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
               sessionID: task.value.main,
               description: `${title}: ${state}`,
               text: [
-                `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${title}" role="${session.agent ?? "default"}" state="${state}">`,
+                `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${title}" role="${session.agent ?? "default"}" state="${state}" outcome="${outcome}">`,
                 ...(detail ? [detail] : []),
                 body,
                 "</team-report>",
@@ -282,6 +295,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
                 source: "team",
                 sessionID,
                 state,
+                outcome,
                 ...(task.value.messageID ? { taskID: task.value.messageID } : {}),
               },
             })
