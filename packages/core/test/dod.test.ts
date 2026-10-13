@@ -66,7 +66,7 @@ describe("Dod", () => {
     await using dir = await tmpdir()
     const initial = await run(readInitial(Dod.instructions(dir.path)))
     expect(initial.text).toContain("Project DoD status: DISABLED")
-    expect(initial.text).toContain(".opencode/dod.yaml does not exist")
+    expect(initial.text.replaceAll("\\", "/")).toContain(".opencode/dod.yaml does not exist")
     expect(initial.text).not.toContain("Project DoD status: READY")
   })
 
