@@ -4,6 +4,7 @@ import { contextUsage } from "../../util/session"
 import { Locale } from "../../util/locale"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
+import { SidebarDod } from "./dod"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -31,7 +32,9 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
   }
 
   return (
-    <Show when={state() || cost() > 0}>
+    <>
+      <SidebarDod context={props.context} sessionID={props.sessionID} />
+      <Show when={state() || cost() > 0}>
       <box>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text.base}>
@@ -68,7 +71,8 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
           </Show>
         </box>
       </box>
-    </Show>
+      </Show>
+    </>
   )
 }
 
