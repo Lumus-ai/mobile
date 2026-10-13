@@ -413,10 +413,9 @@ describe("SessionExecution lifecycle", () => {
       expect(failures).toHaveLength(1)
       expect(yield* sessions.inbox(sessionID)).toHaveLength(1)
 
-      // Explicit resume is allowed to lift the block.
-      yield* sessions.resume(sessionID)
-      expect(yield* kv.get(resumeBlockedKey(sessionID))).toBeUndefined()
-      expect(drained).toEqual([sessionID])
+      // The block remains until a new explicit user action arrives.
+      expect(yield* kv.get(resumeBlockedKey(sessionID))).toBe(true)
+      expect(drained).toEqual([])
     }),
   )
 

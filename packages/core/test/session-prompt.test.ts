@@ -5,6 +5,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
+import { KV } from "@opencode/core/kv"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -23,6 +24,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
+import { resumeBlockedKey } from "@opencode/core/session/restart-state"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -265,6 +267,22 @@ describe("Session.prompt", () => {
         type: "user",
         payload: { text: "Continue after restart", resumeOnStart: true },
       })
+      expect(wakeCalls).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("clears the restart block when an explicit runnable prompt arrives", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const kv = yield* KV.Service
+      const key = resumeBlockedKey(sessionID)
+      yield* kv.set(key, true)
+      wakeCalls.length = 0
+
+      yield* session.prompt({ sessionID, text: "Retry after restart exhaustion" })
+
+      expect(yield* kv.get(key)).toBeUndefined()
       expect(wakeCalls).toEqual([sessionID])
     }),
   )
