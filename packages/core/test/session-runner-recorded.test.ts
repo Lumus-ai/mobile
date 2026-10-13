@@ -199,6 +199,12 @@ describe("SessionRunnerLLM recorded", () => {
       })
       yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
       yield* IdentityPlugin.Plugin.effect(pluginHost)
+      // A cassette mismatch must fail fast instead of parking this test on a virtual-clock retry delay.
+      yield* hooks.register("session", "retry", (event) =>
+        Effect.sync(() => {
+          event.decision = { retry: false }
+        }),
+      )
       const { db } = yield* Database.Service
       yield* db
         .insert(ProjectTable)
