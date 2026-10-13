@@ -384,8 +384,10 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                   : {}),
               })
               .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
-            // Without an answer after the dispatched message, do not report a queued or incomplete task.
-            if (!recent.some((message) => finalText(message).length > 0)) return
+            // A legacy task without a message ID has no safe delivery proof. For current tasks,
+            // the projected user message plus an idle, non-suspended session proves the work stopped;
+            // even a run with no text answer must produce a report instead of leaking the task marker.
+            if (!task.value.messageID && !recent.some((message) => finalText(message).length > 0)) return
             yield* report(
               sessionID,
               "recovered",
@@ -409,8 +411,6 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         }),
         Effect.forkScoped({ startImmediately: true }),
       )
-
-    yield* recoverPending().pipe(Effect.forkScoped({ startImmediately: true }))
 
     const changed = yield* PubSub.sliding<void>(16)
 
@@ -518,7 +518,11 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         )
       }),
       main: Effect.fn("Orchestra.main")(function* (id) {
-        return yield* ensureMain(id)
+        const session = yield* ensureMain(id)
+        // This request is made after the service graph is ready, so recovered reports may safely
+        // wake the orchestrator while the project panel is opening.
+        yield* recoverPending()
+        return session
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
         const project = yield* get(id)
