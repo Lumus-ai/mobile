@@ -6,6 +6,7 @@ import { LLMClient } from "@opencode/ai"
 import { ListAnchor } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
+import { KV } from "./kv.js"
 import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
 import type { FileSystem } from "./filesystem.js"
@@ -476,6 +477,7 @@ export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.gl
   layer,
   deps: [
     Job.node,
+    KV.node,
     SessionEnvironment.node,
     Database.node,
     Bus.node,

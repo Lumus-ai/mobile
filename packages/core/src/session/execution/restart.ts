@@ -4,9 +4,11 @@ import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../../bus.js"
 import { Job } from "../../job.js"
+import { KV } from "../../kv.js"
 import { Session } from "../../session.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
+import { resumeBlockedKey } from "../restart-state.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
@@ -68,6 +70,7 @@ export const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const store = yield* SessionStore.Service
+      const kv = yield* KV.Service
       const execution = yield* SessionExecution.Service
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
@@ -81,6 +84,9 @@ export const layer = (options?: Options) =>
         const attempts = yield* store.countResume(sessionID)
         if (attempts === undefined) return false
         if (attempts > maxAttempts) {
+          // Persist this before releasing the claim. The inbox-only sweep must not restart
+          // the same parked work after a turn has exhausted its automatic retry budget.
+          yield* kv.set(resumeBlockedKey(sessionID), true)
           // Terminalize instead: the release hook clears the claim and resets the
           // counter atomically with the terminal event.
           yield* bus.publish(
@@ -241,6 +247,9 @@ export const layer = (options?: Options) =>
                 !activeAfterRecovery.has(session.id) && !claimedAfterRecovery.has(session.id),
             ),
             Effect.fnUntraced(function* (session) {
+              // Preserve the exhausted budget across boots until a user explicitly resumes
+              // this Session or adds new runnable input.
+              if ((yield* kv.get(resumeBlockedKey(session.id))) === true) return
               const pending = yield* sessions
                 .inbox(session.id)
                 .pipe(Effect.orElseSucceed((): SessionInbox.Info[] => []))
@@ -271,5 +280,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node],
+  deps: [SessionStore.node, KV.node, SessionExecution.node, Bus.node, Job.node, Session.node],
 })

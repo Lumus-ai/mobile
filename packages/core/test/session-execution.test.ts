@@ -22,6 +22,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { resumeBlockedKey } from "@opencode/core/session/restart-state"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -370,9 +371,22 @@ describe("SessionExecution lifecycle", () => {
     Effect.gen(function* () {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
+      const sessions = yield* Session.Service
+      const kv = yield* KV.Service
+      const admission = yield* SessionInbox.Service
       const sessionID = Session.ID.make("ses_resume_exhausted")
       // A claim from a dead process, already resumed twice without completing.
       yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
+      // Actionable Inbox work must not bypass the exhausted budget once the claim is released.
+      yield* admission.admit({
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "user",
+          payload: SessionInbox.UserPayload.make({ text: "Pending work", resumeOnStart: true }),
+          delivery: "queue",
+        },
+      })
 
       const drained: string[] = []
       const failures: SessionEvent.Execution.Failed[] = []
@@ -390,6 +404,19 @@ describe("SessionExecution lifecycle", () => {
       // The terminal released the claim and reset the counter atomically.
       expect(yield* claims(database)).toEqual({ [sessionID]: false })
       expect(yield* attempts(database, sessionID)).toBe(0)
+      expect(yield* kv.get(resumeBlockedKey(sessionID))).toBe(true)
+      expect(yield* sessions.inbox(sessionID)).toHaveLength(1)
+
+      // The block survives another boot even though terminalization released the claim.
+      yield* restart.resumeSuspendedSessions
+      expect(drained).toEqual([])
+      expect(failures).toHaveLength(1)
+      expect(yield* sessions.inbox(sessionID)).toHaveLength(1)
+
+      // Explicit resume is allowed to lift the block.
+      yield* sessions.resume(sessionID)
+      expect(yield* kv.get(resumeBlockedKey(sessionID))).toBeUndefined()
+      expect(drained).toEqual([sessionID])
     }),
   )
 
