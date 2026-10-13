@@ -415,8 +415,8 @@ test("Participants under Multiplayer lists guests, steps their role and removes 
   })
   const frame = await setup.waitForFrame((frame) => frame.includes("Participants") && frame.includes("Sam"))
   expect(frame).toContain("1/2 online")
-  expect(frame).toMatch(/● Ann +\[Member\] × ban/)
-  expect(frame).toMatch(/○ Sam +\[Viewer\] × ban/)
+  expect(frame).toMatch(/● Ann[ \t]+\[Member\][ \t]+×[ \t]+ban/)
+  expect(frame).toMatch(/○ Sam[ \t]+\[Viewer\][ \t]+×[ \t]+ban/)
   expect(frame).toMatch(/Max +unban/)
 
   const lines = frame.split("\n")
