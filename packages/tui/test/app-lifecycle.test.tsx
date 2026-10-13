@@ -454,6 +454,10 @@ test("vertical session tabs switch to horizontal below readable content width", 
     },
     args: { sessionID: session.id },
     fetch: (url) => {
+      if (url.pathname === "/api/orchestra/project")
+        return json([{ id: "project", name: "Fixture project", directory, created: 1 }])
+      if (url.pathname === "/api/orchestra/project/project/session")
+        return json({ data: [session], access: {}, category: {} })
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (/^\/api\/session\/ses_resize\/(message|inbox|permission)$/.test(url.pathname))
         return json({ data: [], cursor: {} })
