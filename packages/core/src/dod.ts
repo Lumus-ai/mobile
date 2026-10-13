@@ -35,6 +35,14 @@ export const initialize = Effect.fn("Dod.initialize")(function* (directory: stri
   const file = path.join(directory, FILE)
   return yield* Effect.tryPromise({
     try: async () => {
+      try {
+        const current = await stat(file)
+        if (!current.isFile()) throw new Error(`Project DoD path is not a file: ${file}`)
+        return "existing" as const
+      } catch (cause) {
+        if (!(typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT"))
+          throw cause
+      }
       const parent = path.dirname(file)
       await mkdir(parent, { recursive: true })
       const temporary = path.join(parent, `.dod-${randomUUID()}.tmp`)
