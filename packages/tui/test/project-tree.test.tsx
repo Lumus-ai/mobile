@@ -46,6 +46,7 @@ function render(
     args: { sessionID: worker.id },
     config: {
       animations: false,
+      mouse: true,
       session: { sidebar: options.sidebar ?? "hide" },
       debug: { devtools: true },
       layout,
