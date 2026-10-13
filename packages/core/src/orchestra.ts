@@ -290,34 +290,37 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             }
           }
           const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
-          if (!session) {
-            yield* kv.remove(TASK + sessionID)
-            return
-          }
+          const workerRemoved = session === undefined
 
           // A worker may finish unrelated work while its dispatched task is still queued.
           // Do not consume the task marker or report that unrelated answer upstream.
-          const taskMessage = task.value.messageID
-            ? yield* sessions.message({ sessionID, messageID: task.value.messageID })
-            : undefined
-          if (task.value.messageID && taskMessage?.type !== "user") return
+          const taskMessage =
+            !workerRemoved && task.value.messageID
+              ? yield* sessions.message({ sessionID, messageID: task.value.messageID })
+              : undefined
+          if (!workerRemoved && task.value.messageID && taskMessage?.type !== "user") return
 
-          const recent = yield* sessions
-            .messages({
-              sessionID,
-              limit: 20,
-              order: "desc",
-              ...(task.value.messageID
-                ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
-                : {}),
-            })
-            .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
-          const answer = recent.flatMap(finalText).at(0) ?? "(no text answer)"
+          const recent = workerRemoved
+            ? []
+            : yield* sessions
+                .messages({
+                  sessionID,
+                  limit: 20,
+                  order: "desc",
+                  ...(task.value.messageID
+                    ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
+                    : {}),
+                })
+                .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+          const answer = workerRemoved
+            ? "(worker session was deleted before it could report)"
+            : recent.flatMap(finalText).at(0) ?? "(no text answer)"
           const firstLine = answer.split(/\r?\n/).map((line) => line.trim()).find(Boolean)?.toUpperCase() ?? ""
           // A worker's execution can finish while its assigned task is only partly complete.
           // Keep that semantic outcome separate from the execution event's terminal state.
-          const outcome =
-            state === "failed" || state === "stopped"
+          const outcome = workerRemoved
+            ? "failed"
+            : state === "failed" || state === "stopped"
               ? state
               : /^PARTLY DONE\b/.test(firstLine)
                 ? "partial"
@@ -330,19 +333,24 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             answer.length > REPORT_LIMIT
               ? `${answer.slice(0, REPORT_LIMIT)}\n… (cut; read the worker session for the rest)`
               : answer
-          const title = session.title ?? sessionID
+          const title = session?.title ?? `Deleted worker ${sessionID}`
           const reportID = task.value.reportID ?? SessionMessage.ID.create()
           const wasPrepared = task.value.reportPrepared === true
+          const reportState = workerRemoved ? "failed" : state
+          const reportDetail =
+            workerRemoved
+              ? `Worker session ${sessionID} was removed before it could report the assigned task.`
+              : detail
           const preparedTask = {
             ...task.value,
             reportID,
             reportPrepared: true,
-            reportState: wasPrepared ? task.value.reportState ?? state : state,
-            reportDetail: wasPrepared ? task.value.reportDetail : detail,
+            reportState: wasPrepared ? task.value.reportState ?? reportState : reportState,
+            reportDetail: wasPrepared ? task.value.reportDetail : reportDetail,
             reportText: wasPrepared ? task.value.reportText ?? body : body,
             reportOutcome: wasPrepared ? task.value.reportOutcome ?? outcome : outcome,
             reportTitle: wasPrepared ? task.value.reportTitle ?? title : title,
-            reportRole: wasPrepared ? task.value.reportRole ?? (session.agent ?? "default") : session.agent ?? "default",
+            reportRole: wasPrepared ? task.value.reportRole ?? (session?.agent ?? "unknown") : session?.agent ?? "unknown",
           }
           // Persist the complete intended payload before admission. A retry after a crash uses
           // the same ID and byte-for-byte equivalent content instead of inventing a "recovered" report.
@@ -408,7 +416,11 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             if (active.has(sessionID) || suspended.has(sessionID)) return
             const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
             if (!session) {
-              yield* kv.remove(entry.key)
+              yield* report(
+                sessionID,
+                "failed",
+                "Worker session was removed before its task could be reported.",
+              )
               return
             }
             if (task.value.messageID) {

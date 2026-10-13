@@ -279,6 +279,37 @@ describe("Orchestra team", () => {
       expect(yield* reports(project.main!)).toHaveLength(1)
     }).pipe(Effect.scoped),
   ),
+  it.live("reports a failed task when its worker session is deleted", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-deleted-worker-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Deleted worker", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      yield* Effect.acquireRelease(
+        Effect.sync(() => suppressTerminalEvent.add(worker.id)),
+        () => Effect.sync(() => suppressTerminalEvent.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      yield* Effect.sleep("50 millis")
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // Deleting a worker cannot silently discard the outstanding task.
+      yield* sessions.remove(worker.id)
+      suppressTerminalEvent.delete(worker.id)
+      yield* orchestra.mainOf(project.main!)
+      const [report] = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(report).toContain('state="failed"')
+      expect(report).toContain("Worker session")
+      expect(report).toContain("was removed")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
   it.live("clears the marker when a report was admitted just before a crash", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-report-retry-")))
