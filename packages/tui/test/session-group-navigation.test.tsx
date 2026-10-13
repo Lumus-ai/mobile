@@ -165,7 +165,10 @@ test.each([
         .captureCharFrame()
         .split("\n")
         .findIndex((line) => line.includes("Thought:"))
-      await setup.mockMouse.click(8, header)
+      const headerText = setup.captureCharFrame().split("\n")[header] ?? ""
+      const x = headerText.indexOf("Thought:")
+      expect(x).toBeGreaterThanOrEqual(0)
+      await setup.mockMouse.click(x + 1, header)
       await setup.waitForFrame((frame) => frame.includes("First thought body"))
       setup.mockInput.pressKey("u", { ctrl: true, shift: true })
       await setup.waitForVisualIdle({ quietFrames: 3 })
