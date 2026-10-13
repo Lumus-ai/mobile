@@ -299,8 +299,11 @@ describe("Orchestra team", () => {
       expect(updated).toMatchObject({ name: "Moved", directory: destination, main: project.main })
       expect((yield* sessions.get(project.main!)).location.directory).toBe(AbsolutePath.make(destination))
       expect((yield* sessions.get(project.main!)).title).toBe("Moved · Orchestrator")
-      for (const member of originalMembers)
-        expect((yield* sessions.get(member.id)).location.directory).toBe(AbsolutePath.make(destination))
+      for (const member of originalMembers) {
+        // Sessions already nested beneath the project keep their relative path after migration.
+        const expectedDirectory = member.id === nested.id ? destinationNested : destination
+        expect((yield* sessions.get(member.id)).location.directory).toBe(AbsolutePath.make(expectedDirectory))
+      }
       expect((yield* sessions.get(nested.id)).location.directory).toBe(AbsolutePath.make(destinationNested))
       const currentMembers = yield* orchestra.sessions(project.id)
       expect(currentMembers.map((session) => session.id).toSorted()).toEqual(

@@ -285,7 +285,9 @@ export const layer = (options?: Options) =>
                 })
                 if (stillRunnable) yield* kv.set(resumeBlockedKey(session.id), true)
               })
-              yield* attempt.pipe(Effect.ignore, Effect.forkIn(scope))
+              // Register the successor execution before the startup sweep returns, so callers
+              // that await idle cannot race ahead of an unstarted recovery fiber.
+              yield* attempt.pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
             }),
             { concurrency: "unbounded", discard: true },
           )
