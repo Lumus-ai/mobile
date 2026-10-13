@@ -257,7 +257,7 @@ describe("Orchestra team", () => {
         },
         { concurrency: "unbounded" },
       )
-      if (result.main) expect(result.main.id).toBe(project.main)
+      if (result.main) expect(result.main.id).toBe(project.main!)
       expect((yield* orchestra.projects()).some((item) => item.id === project.id)).toBe(false)
     }).pipe(Effect.scoped),
   )
