@@ -9,6 +9,33 @@ afterEach(() => {
   spyOn(fs, "watch").mockRestore()
 })
 
+import * as fsPromises from "fs/promises"
+import { writeJsonAtomic } from "../../src/util/persistence"
+
+test("writeJsonAtomic retries transient rename failures before replacing persisted state", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "storage-rename-"))
+  const file = path.join(dir, "tabs.json")
+  await Bun.write(file, JSON.stringify({ title: "old" }))
+  const actualRename = fsPromises.rename
+  let attempts = 0
+  const renameSpy = spyOn(fsPromises, "rename").mockImplementation(async (source, destination) => {
+    attempts++
+    if (attempts < 3) {
+      throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" })
+    }
+    return actualRename(source, destination)
+  })
+
+  try {
+    await writeJsonAtomic(file, { title: "new" })
+    expect(attempts).toBe(3)
+    expect(await Bun.file(file).json()).toEqual({ title: "new" })
+  } finally {
+    renameSpy.mockRestore()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("createStorage degrades gracefully when fs.watch throws (e.g. ENOSPC)", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "storage-test-"))
   // fs.watch throws synchronously when inotify_add_watch fails (e.g. the watch
