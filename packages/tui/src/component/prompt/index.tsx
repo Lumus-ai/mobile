@@ -33,6 +33,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
+import type { JsonValue } from "@opencode/client/promise"
 import type { Session } from "@opencode/schema/session"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -105,6 +106,20 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+
+// Schema.Json exposes readonly child arrays; the generated promise client uses mutable JSON.
+// Clone the validated metadata at this boundary so both representations stay equivalent.
+function clientJson(value: Session.Metadata[string]): JsonValue {
+  if (Array.isArray(value)) return value.map((item) => clientJson(item))
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, clientJson(item)]))
+  }
+  return value
+}
+
+function clientMetadata(metadata: Session.Metadata): Record<string, JsonValue> {
+  return Object.fromEntries(Object.entries(metadata).map(([key, value]) => [key, clientJson(value)]))
+}
 const revealedPromptMetadata = new WeakSet<object>()
 
 function randomIndex(count: number) {
@@ -1240,7 +1255,7 @@ export function Prompt(props: PromptProps) {
         id: newSessionID,
         location: directory ? { directory } : location,
         agent: agent.id,
-        metadata: props.metadata,
+        metadata: props.metadata === undefined ? undefined : clientMetadata(props.metadata),
         model: {
           providerID: selection.providerID,
           id: selection.modelID,
