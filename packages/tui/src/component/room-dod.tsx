@@ -55,8 +55,8 @@ export function RoomDodRows(props: {
     const request = ++generation
     const projectID = props.id
     if (loadedAt() === undefined) setStatus({ type: "starting" })
-    void props
-      .load()
+    void Promise.resolve()
+      .then(() => props.load())
       .then((dod) => {
         // A late response from the previous room/project must not overwrite the selected one.
         if (request !== generation || projectID !== props.id) return
@@ -137,7 +137,10 @@ export function RoomDodRows(props: {
     })
     const follow = async () => {
       while (state.alive) {
-        const feed = await props.feed(state.after, FEED_WAIT_MS).catch(() => undefined)
+        // A custom fetch or adapter may throw before it returns its Promise.
+        const feed = await Promise.resolve()
+          .then(() => props.feed(state.after, FEED_WAIT_MS))
+          .catch(() => undefined)
         if (!state.alive) return
         if (!feed) {
           await Bun.sleep(FEED_RETRY_MS)
