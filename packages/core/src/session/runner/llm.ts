@@ -277,7 +277,7 @@ const layer = Layer.effect(
           ),
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
-          Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
+          Completed: (outcome) => retry.succeeded(String(loaded.model.ref.providerID)).pipe(Effect.as(outcome.needsContinuation)),
           Retry: (outcome) =>
             retry.wait({
               decision: outcome.decision,
