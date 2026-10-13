@@ -15,6 +15,8 @@ import { KV } from "./kv.js"
 import { Session } from "./session.js"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "./session/message.js"
+import { Dod } from "./dod.js"
+import { Project as CoreProject } from "./project.js"
 
 export const agent = Orchestra.agent
 export const role = Orchestra.role
@@ -68,7 +70,7 @@ export interface Interface {
     name: string
     directory: string
     template?: string
-  }) => Effect.Effect<Project, DirectoryError | TemplateNotFoundError>
+  }) => Effect.Effect<Project, DirectoryError | TemplateNotFoundError | Dod.DodError>
   readonly update: (
     id: ProjectID,
     input: { name?: string; directory?: string },
@@ -76,7 +78,7 @@ export interface Interface {
   // Forgets the project; its sessions and its main session stay.
   readonly remove: (id: ProjectID) => Effect.Effect<void, ProjectNotFoundError>
   // The project's main session, created in the project's directory on first use.
-  readonly main: (id: ProjectID) => Effect.Effect<SessionSchema.Info, ProjectNotFoundError>
+  readonly main: (id: ProjectID) => Effect.Effect<SessionSchema.Info, ProjectNotFoundError | Dod.DodError>
   // Top-level sessions the project owns (see ownerOf), every project's main session excluded.
   readonly sessions: (id: ProjectID) => Effect.Effect<ReadonlyArray<SessionSchema.Info>, ProjectNotFoundError>
   // Whether a session belongs to the project, so the orchestrator never reaches another project's team.
@@ -209,6 +211,14 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
       const resolved = path.resolve(input.trim().replace(/^~(?=$|[\\/])/, process.env.HOME ?? "~"))
       if (!(yield* fs.isDir(resolved))) return yield* new DirectoryError({ directory: resolved })
       return resolved
+    })
+
+    // Use the same root as Location.project.directory so Dod.instructions() reads this board.
+    // Resolve the VCS root when the selected directory is a subdirectory, or use the selected
+    // directory for a markerless project. Initializing here keeps ordinary folder browsing side-effect free.
+    const initializeDod = Effect.fnUntraced(function* (directory: string) {
+      const root = yield* CoreProject.root(fs, AbsolutePath.make(directory))
+      return yield* Dod.initialize(root ?? directory)
     })
 
     const mainSession = Effect.fnUntraced(function* (project: Project) {
@@ -369,6 +379,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         const template = input.template ? (yield* templates()).find((item) => item.id === input.template) : undefined
         if (input.template && !template) return yield* new TemplateNotFoundError({ template: input.template })
         const resolved = yield* directory(input.directory)
+        yield* initializeDod(resolved)
         const project = yield* save({
           id: ProjectID.create(),
           name: input.name.trim() || path.basename(resolved),
@@ -423,6 +434,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
       }),
       main: Effect.fn("Orchestra.main")(function* (id) {
         const project = yield* get(id)
+        // Repair projects created before automatic DoD initialization was introduced.
+        yield* initializeDod(project.directory)
         const existing = project.main
           ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
           : undefined
