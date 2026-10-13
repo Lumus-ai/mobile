@@ -1,7 +1,7 @@
 export * as Dod from "./dod.js"
 
 import { randomUUID } from "node:crypto"
-import { chmod, link, mkdir, rename, stat, unlink, writeFile } from "node:fs/promises"
+import { chmod, link, mkdir, open, rename, stat, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Option, Schema } from "effect"
 import type { Room } from "@opencode/schema/room"
@@ -54,8 +54,32 @@ export const initialize = Effect.fn("Dod.initialize")(function* (directory: stri
           await link(temporary, file)
           return "created" as const
         } catch (cause) {
-          if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "EEXIST")
-            return "existing" as const
+          if (typeof cause === "object" && cause !== null && "code" in cause) {
+            if (cause.code === "EEXIST") return "existing" as const
+            // Some network and FAT-like filesystems do not support hard links. Fall back
+            // to an exclusive create there; it still cannot replace an existing board.
+            if (["EPERM", "ENOTSUP", "EOPNOTSUPP", "EXDEV", "EMLINK"].includes(String(cause.code))) {
+              let destination
+              try {
+                destination = await open(file, "wx", 0o644)
+              } catch (fallbackCause) {
+                if (
+                  typeof fallbackCause === "object" &&
+                  fallbackCause !== null &&
+                  "code" in fallbackCause &&
+                  fallbackCause.code === "EEXIST"
+                )
+                  return "existing" as const
+                throw fallbackCause
+              }
+              try {
+                await destination.writeFile(STARTER, "utf8")
+                return "created" as const
+              } finally {
+                await destination.close()
+              }
+            }
+          }
           throw cause
         }
       } finally {
