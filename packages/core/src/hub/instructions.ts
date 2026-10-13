@@ -36,7 +36,7 @@ const readHints = (options: Options): Effect.Effect<string | typeof Instructions
     ),
     // An unreadable hub.json must not block session initialization the way an
     // unavailable source would: degrade to "nothing enabled" instead.
-    Effect.catch(() => Effect.succeed("")),
+    Effect.orElseSucceed(() => ""),
     Effect.map((text) => (text === "" ? Instructions.removed : text)),
   )
 
