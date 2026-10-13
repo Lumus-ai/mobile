@@ -270,6 +270,8 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
 export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const theme = props.context.theme
   const t = useT()
+  const [closeHovered, setCloseHovered] = createSignal(false)
+  const closeHoverColor = () => theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action?.primary?.base ?? theme.text.base, 2)
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
   const [boardRoot, setBoardRoot] = createSignal<string>()
   let revision = 0
@@ -360,15 +362,15 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
           flexShrink={0}
           paddingLeft={1}
           paddingRight={1}
-          backgroundColor={hoveredAction() === "close" ? theme.increase(theme.background.base, 4) : undefined}
-          onMouseOver={() => setHoveredAction("close")}
-          onMouseOut={() => setHoveredAction(undefined)}
+          backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : undefined}
+          onMouseOver={() => setCloseHovered(true)}
+          onMouseOut={() => setCloseHovered(false)}
           onMouseUp={(event) => {
             event.stopPropagation()
             props.panel.close()
           }}
         >
-          <text fg={hoveredAction() === "close" ? actionHoverColor() : actionColor}>{t("Close")} ✕</text>
+          <text fg={closeHovered() ? closeHoverColor() : (theme.text.action?.primary?.base ?? theme.text.base)}>{t("Close")} ✕</text>
         </box>
       </box>
 
