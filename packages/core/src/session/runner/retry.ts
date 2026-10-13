@@ -111,8 +111,14 @@ function providerPrefix(providerID: string) {
   return GATE_PREFIX + encodeURIComponent(providerID) + ":"
 }
 
+type KVRecord = Extract<KV.Value, Readonly<Record<string, unknown>>>
+
+function isKVRecord(value: KV.Value | undefined): value is KVRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 function decodeSharedRateLimit(value: KV.Value | undefined): SharedRateLimit | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return
+  if (!isKVRecord(value)) return
   if (
     value.version !== 1 ||
     typeof value.providerID !== "string" ||
@@ -198,14 +204,12 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, kv: KVInte
         let hookRejected = false
         const decision = yield* scheduledDecision({
           ...input,
-          hook: (event) => {
-            const proposed = event.decision.retry
-            return input.hook(event).pipe(
-              Effect.tap(() => {
-                if (proposed && !event.decision.retry) hookRejected = true
-              }),
-            )
-          },
+          hook: (event) =>
+            Effect.gen(function* () {
+              const proposed = event.decision.retry
+              yield* input.hook(event)
+              if (proposed && !event.decision.retry) hookRejected = true
+            }),
         })
         if (input.cause.reason._tag !== "RateLimit") return decision
 
