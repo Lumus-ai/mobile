@@ -1,5 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import type { Context } from "@opencode/plugin/tui/context"
@@ -10,6 +13,7 @@ function context(options?: {
   tokens?: number
   limit?: number
   actionColor?: boolean
+  directory?: string
   openPanel?: (name: string) => boolean
 }) {
   const color = RGBA.fromInts(200, 200, 200)
@@ -24,7 +28,7 @@ function context(options?: {
     },
     data: {
       session: {
-        get: () => ({ location: { directory: "/workspace" } }),
+        get: () => ({ location: { directory: options?.directory ?? "/workspace" } }),
         cost: () => options?.cost ?? 0,
         message: {
           list: () =>
@@ -139,5 +143,52 @@ test("DoD launcher remains visible and opens the existing task panel without an 
     expect(opened).toEqual(["opencode.sidebar.dod"])
   } finally {
     app.renderer.destroy()
+  }
+})
+
+test("sidebar DoD progress bar reflects completed project tasks", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-sidebar-dod-"))
+  await mkdir(path.join(directory, ".opencode"), { recursive: true })
+  await writeFile(
+    path.join(directory, ".opencode", "dod.yaml"),
+    [
+      "stages: []",
+      "leaves:",
+      "  - id: L-001",
+      "    what: Implement feature",
+      "    task_state: DONE",
+      "    steps:",
+      '      - "[x] Implement"',
+      "  - id: L-002",
+      "    what: Verify feature",
+      "    task_state: IN_PROGRESS",
+      "    steps:",
+      '      - "[ ] Verify"',
+      "",
+    ].join("\n"),
+    "utf8",
+  )
+  const app = await testRender(
+    () => <SidebarContext context={context({ directory })} sessionID="session" />,
+    { width: 72, height: 16 },
+  )
+
+  try {
+    const started = Date.now()
+    let frame = ""
+    while (Date.now() - started < 3_000) {
+      await app.renderOnce()
+      frame = app.captureCharFrame()
+      if (frame.includes("50%")) break
+      await Bun.sleep(20)
+    }
+    expect(frame).toContain("DoD")
+    expect(frame).toContain("1/2")
+    expect(frame).toContain("50%")
+    expect(frame).toContain("█")
+    expect(frame).toContain("░")
+  } finally {
+    app.renderer.destroy()
+    await rm(directory, { recursive: true, force: true })
   }
 })
