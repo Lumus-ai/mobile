@@ -432,7 +432,7 @@ test("session title generated while an untitled session is loading remains visib
   }
 })
 
-test("vertical session tabs switch to horizontal below readable content width", async () => {
+test("project tree hides below readable content width and returns when wide", async () => {
   await using state = await tmpdir()
   await Bun.write(path.join(state.path, "test", "tui", "layout.json"), JSON.stringify({ verticalTabsWidth: 42 }))
   const session = {
@@ -470,8 +470,7 @@ test("vertical session tabs switch to horizontal below readable content width", 
 
   setup.resize(100, 30)
   await setup.renderOnce()
-  await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
-  expect(setup.captureCharFrame()).not.toContain("⌕")
+  await setup.waitForFrame((frame) => !frame.includes("Projects") && !frame.includes("Fixture project"))
   setup.resize(120, 30)
   await setup.renderOnce()
   await setup.waitForFrame(hasVerticalTitle)
