@@ -17,7 +17,7 @@ const board: RoomDod = {
   ],
 }
 
-async function render(load: () => Promise<RoomDod>) {
+async function render(load: () => Promise<RoomDod>, roomID: () => string = () => "room") {
   const [hover, setHover] = createSignal<string>()
   return testRender(
     () => (
@@ -26,7 +26,7 @@ async function render(load: () => Promise<RoomDod>) {
           <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
             <ToastProvider>
               <RoomDodRows
-                id="room"
+                id={roomID()}
                 load={load}
                 release={load}
                 feed={() => new Promise(() => {})}
@@ -123,6 +123,33 @@ test("a recovered connection returns the panel to ready", async () => {
     setup.renderer.destroy()
   }
 }, 12_000)
+
+test("switching projects ignores a late response from the previous project", async () => {
+  const [roomID, setRoomID] = createSignal("first")
+  let resolvePrevious!: (dod: RoomDod) => void
+  const previous = new Promise<RoomDod>((resolve) => {
+    resolvePrevious = resolve
+  })
+  const next: RoomDod = {
+    status: "ready",
+    items: [{ id: "new", what: "Current project task", stage: "build", state: "IN_PROGRESS", done: 0, total: 1 }],
+  }
+  const setup = await render(() => (roomID() === "first" ? previous : Promise.resolve(next)), roomID)
+  try {
+    await frameWith(setup, "DoD service is starting")
+    setRoomID("second")
+    const current = await frameWith(setup, "DoD 0/1")
+    expect(current).not.toContain("DoD 1/2")
+    resolvePrevious(board)
+    await Bun.sleep(50)
+    await setup.renderOnce()
+    const afterLateResponse = setup.captureCharFrame()
+    expect(afterLateResponse).toContain("DoD 0/1")
+    expect(afterLateResponse).not.toContain("DoD 1/2")
+  } finally {
+    setup.renderer.destroy()
+  }
+})
 
 async function waitLong(setup: Awaited<ReturnType<typeof render>>, text: string) {
   const started = Date.now()
