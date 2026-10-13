@@ -64,15 +64,17 @@ const comparableRequest = (request: HttpRecorder.RequestSnapshot) => {
   }
   if (body !== null && typeof body === "object" && !Array.isArray(body)) {
     const messages = (body as { messages?: unknown }).messages
-    const first = Array.isArray(messages) ? messages[0] : undefined
-    if (
-      first !== null &&
-      typeof first === "object" &&
-      !Array.isArray(first) &&
-      (first as { role?: unknown }).role === "system" &&
-      typeof (first as { content?: unknown }).content === "string"
-    ) {
-      messages[0] = { ...first, content: "<dynamic-system-prompt>" }
+    if (Array.isArray(messages)) {
+      const first = messages[0]
+      if (
+        first !== null &&
+        typeof first === "object" &&
+        !Array.isArray(first) &&
+        (first as { role?: unknown }).role === "system" &&
+        typeof (first as { content?: unknown }).content === "string"
+      ) {
+        messages[0] = { ...first, content: "<dynamic-system-prompt>" }
+      }
     }
   }
   const canonicalize = (value: unknown): unknown => {
