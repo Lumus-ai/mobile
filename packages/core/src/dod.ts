@@ -201,6 +201,18 @@ export const accept = Effect.fn("Dod.accept")(function* (input: {
   summary: string
   by: string
 }) {
+  const item = (yield* read(input.directory)).items.find((entry) => entry.id === input.id)
+  if (!item) return yield* new DodError({ message: `The DoD has no item ${input.id}` })
+  if (FINISHED.has(item.state)) return yield* new DodError({ message: `${item.id} is already ${finishedWord(item)}` })
+  if (item.verify && input.command.trim() !== item.verify)
+    return yield* new DodError({
+      message: `${item.id} verification command mismatch; expected ${JSON.stringify(item.verify)}`,
+    })
+  if (input.exitCode === 0 && item.done < item.total)
+    return yield* new DodError({
+      message: `${item.id} cannot be DONE: ${item.total - item.done} checklist step(s) remain unchecked`,
+    })
+
   const passed = input.exitCode === 0
   return yield* change(
     input.directory,
