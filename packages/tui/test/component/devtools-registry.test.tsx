@@ -288,7 +288,7 @@ test("All off also clears saved switches that are outside the current registry r
               targetEnabled: (await HubState.read({ directory: tmp.path })).enabled[target],
               staleEnabled: (await HubState.read({ directory: tmp.path })).enabled[stale],
               counter,
-              statusRow: afterFrame.split("\\n").find((line) => line.includes("For the model")),
+              statusRow: afterFrame.split("\n").find((line) => line.includes("For the model")),
             },
             null,
             2,
