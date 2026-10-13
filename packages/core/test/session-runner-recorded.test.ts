@@ -54,7 +54,48 @@ if (process.env.RECORD === "true") {
   if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
   HttpRecorder.removeCassetteSync(cassetteName, { directory: cassetteDirectory })
 }
-const cassette = HttpRecorder.layerFetch(cassetteName, { directory: cassetteDirectory })
+// The shared harness prompt evolves independently of this recorded response.
+const comparableRequest = (request: HttpRecorder.RequestSnapshot) => {
+  let body: unknown
+  try {
+    body = JSON.parse(request.body)
+  } catch {
+    body = request.body
+  }
+  if (body !== null && typeof body === "object" && !Array.isArray(body)) {
+    const messages = (body as { messages?: unknown }).messages
+    const first = Array.isArray(messages) ? messages[0] : undefined
+    if (
+      first !== null &&
+      typeof first === "object" &&
+      !Array.isArray(first) &&
+      (first as { role?: unknown }).role === "system" &&
+      typeof (first as { content?: unknown }).content === "string"
+    ) {
+      messages[0] = { ...first, content: "<dynamic-system-prompt>" }
+    }
+  }
+  const canonicalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonicalize)
+    if (value !== null && typeof value === "object")
+      return Object.fromEntries(
+        Object.entries(value).toSorted(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonicalize(item)]),
+      )
+    return value
+  }
+  return JSON.stringify(
+    canonicalize({
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      body,
+    }),
+  )
+}
+const cassette = HttpRecorder.layerFetch(cassetteName, {
+  directory: cassetteDirectory,
+  match: (incoming, recorded) => comparableRequest(incoming) === comparableRequest(recorded),
+})
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
 const permission = permissionLayer()
