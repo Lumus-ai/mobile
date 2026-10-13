@@ -9,6 +9,8 @@ import { Bus } from "../../bus.js"
 import type { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
+import { randomUUID } from "node:crypto"
+import { KV, type Interface as KVInterface } from "../../kv.js"
 import { SessionSchema } from "../schema.js"
 
 export { isRetryable }
@@ -91,25 +93,165 @@ export const policy = (sessionID: SessionSchema.ID) =>
       })
   })
 
-export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
+const GATE_PREFIX = "session-runner:rate-limit:v1:"
+const RATE_LIMIT_COOLDOWN_MAX = Duration.toMillis("15 minutes")
+const RATE_LIMIT_STREAK_WINDOW = Duration.toMillis("6 hours")
+
+type SharedRateLimit = {
+  readonly version: 1
+  readonly providerID: string
+  readonly sessionID: string
+  readonly retryAt: number
+  readonly updatedAt: number
+  readonly consecutive: number
+}
+
+function providerPrefix(providerID: string) {
+  return GATE_PREFIX + encodeURIComponent(providerID) + ":"
+}
+
+function decodeSharedRateLimit(value: KV.Value | undefined): SharedRateLimit | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return
+  if (
+    value.version !== 1 ||
+    typeof value.providerID !== "string" ||
+    typeof value.sessionID !== "string" ||
+    typeof value.retryAt !== "number" ||
+    !Number.isFinite(value.retryAt) ||
+    typeof value.updatedAt !== "number" ||
+    !Number.isFinite(value.updatedAt) ||
+    typeof value.consecutive !== "number" ||
+    !Number.isInteger(value.consecutive) ||
+    value.consecutive < 1
+  )
+    return
+  return {
+    version: 1,
+    providerID: value.providerID,
+    sessionID: value.sessionID,
+    retryAt: value.retryAt,
+    updatedAt: value.updatedAt,
+    consecutive: value.consecutive,
+  }
+}
+
+function readSharedRateLimit(kv: KVInterface, providerID: string, now: number) {
+  const prefix = providerPrefix(providerID)
+  const scan = (after?: string): Effect.Effect<readonly KV.Entry[]> =>
+    Effect.gen(function* () {
+      const page = yield* kv.scan({ prefix, after, limit: 1000 })
+      if (!page.next) return page.entries
+      return [...page.entries, ...(yield* scan(page.next))]
+    })
+  return Effect.gen(function* () {
+    const entries = yield* scan()
+    let retryAt: number | undefined
+    let consecutive = 0
+    const stale: string[] = []
+    for (const entry of entries) {
+      const state = decodeSharedRateLimit(entry.value)
+      if (
+        !state ||
+        state.providerID !== providerID ||
+        now - state.updatedAt >= RATE_LIMIT_STREAK_WINDOW
+      ) {
+        stale.push(entry.key)
+        continue
+      }
+      consecutive = Math.max(consecutive, state.consecutive)
+      if (state.retryAt > now) retryAt = Math.max(retryAt ?? 0, state.retryAt)
+    }
+    // Each observation is independent and safe to remove after the streak window. New rate limits
+    // write unique keys, so cleaning an old entry cannot erase a concurrent provider cooldown.
+    yield* Effect.forEach(stale, (key) => kv.remove(key), { concurrency: "unbounded" })
+    return { retryAt, consecutive }
+  })
+}
+
+function rateLimitBackoff(consecutive: number) {
+  return Math.min(RATE_LIMIT_COOLDOWN_MAX, 2_000 * 2 ** Math.min(Math.max(0, consecutive - 1), 10))
+}
+
+export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, kv: KVInterface) =>
   Effect.gen(function* () {
-    const decide = yield* policy(sessionID)
+    const scheduledDecision = yield* policy(sessionID)
+    const decide = (input: Parameters<typeof scheduledDecision>[0]) =>
+      Effect.gen(function* () {
+        const decision = yield* scheduledDecision(input)
+        if (input.cause.reason._tag !== "RateLimit") return decision
+
+        const now = yield* Clock.currentTimeMillis
+        const providerID = String(input.model.providerID)
+        const previous = yield* readSharedRateLimit(kv, providerID, now)
+        const consecutive = previous.consecutive + 1
+        const retryAfterMs = input.cause.reason.retryAfterMs
+        const hintedDelay =
+          retryAfterMs !== undefined && Number.isFinite(retryAfterMs) && retryAfterMs > 0
+            ? Math.min(retryAfterMs, RATE_LIMIT_COOLDOWN_MAX)
+            : 0
+        const policyDelay = decision.retry ? decision.delay : 0
+        const delay = Math.max(rateLimitBackoff(consecutive), hintedDelay, policyDelay)
+        const retryAt = Math.max(now + delay, previous.retryAt ?? 0)
+        const effectiveDelay = Math.min(RATE_LIMIT_COOLDOWN_MAX, Math.max(0, retryAt - now))
+        const state: SharedRateLimit = {
+          version: 1,
+          providerID,
+          sessionID: String(sessionID),
+          retryAt: now + effectiveDelay,
+          updatedAt: now,
+          consecutive,
+        }
+        const key = providerPrefix(providerID) + now + ":" + encodeURIComponent(String(sessionID)) + ":" + randomUUID()
+        yield* kv.set(key, state)
+        // A rate limit is a durable pause, not a finite retry budget. Once the short generic
+        // schedule is exhausted, the session keeps its recorded history and retries with capped
+        // exponential cooldown instead of reporting the whole task as failed.
+        return {
+          retry: true as const,
+          attempt: decision.retry ? decision.attempt : Math.max(11, consecutive + 1),
+          delay: effectiveDelay,
+        }
+      })
+
+    const gateUntil = (providerID: string) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis
+        return (yield* readSharedRateLimit(kv, providerID, now)).retryAt
+      })
+
+    const waitForGate = (providerID: string) =>
+      Effect.gen(function* () {
+        let waited = false
+        while (true) {
+          const retryAt = yield* gateUntil(providerID)
+          const now = yield* Clock.currentTimeMillis
+          if (retryAt === undefined || retryAt <= now) return waited
+          waited = true
+          yield* Effect.sleep(Duration.millis(retryAt - now))
+        }
+      })
+
     const wait = (input: {
       readonly decision: Decision
       readonly assistantMessageID: SessionMessage.ID
       readonly error: SessionError.Error
+      readonly providerID: string
     }) =>
       Effect.gen(function* () {
         const scheduled = yield* Clock.currentTimeMillis
+        const sharedUntil = yield* gateUntil(input.providerID)
+        const at = Math.max(scheduled + input.decision.delay, sharedUntil ?? 0)
         yield* bus.publish(SessionEvent.RetryScheduled, {
           sessionID,
           assistantMessageID: input.assistantMessageID,
           attempt: input.decision.attempt,
-          at: scheduled + input.decision.delay,
+          at,
           error: input.error,
         })
-        const remaining = Math.max(0, scheduled + input.decision.delay - (yield* Clock.currentTimeMillis))
+        const remaining = Math.max(0, at - (yield* Clock.currentTimeMillis))
         yield* Effect.sleep(Duration.millis(remaining))
+        // A concurrent agent may have extended the shared cooldown while we slept.
+        yield* waitForGate(input.providerID)
       })
-    return { decide, wait }
+    return { decide, wait, waitForGate }
   })
