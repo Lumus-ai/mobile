@@ -59,19 +59,17 @@ export const initialize = Effect.fn("Dod.initialize")(function* (directory: stri
             // Some network and FAT-like filesystems do not support hard links. Fall back
             // to an exclusive create there; it still cannot replace an existing board.
             if (["EPERM", "ENOTSUP", "EOPNOTSUPP", "EXDEV", "EMLINK"].includes(String(cause.code))) {
-              let destination
-              try {
-                destination = await open(file, "wx", 0o644)
-              } catch (fallbackCause) {
+              const destination = await open(file, "wx", 0o644).catch((fallbackCause: unknown) => {
                 if (
                   typeof fallbackCause === "object" &&
                   fallbackCause !== null &&
                   "code" in fallbackCause &&
                   fallbackCause.code === "EEXIST"
                 )
-                  return "existing" as const
+                  return undefined
                 throw fallbackCause
-              }
+              })
+              if (!destination) return "existing" as const
               try {
                 await destination.writeFile(STARTER, "utf8")
                 return "created" as const
