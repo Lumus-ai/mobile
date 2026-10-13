@@ -1,6 +1,6 @@
 export * as Dod from "./dod.js"
 
-import { chmod, rename, stat } from "node:fs/promises"
+import { chmod, mkdir, open, rename, stat } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Option, Schema } from "effect"
 import type { Room } from "@opencode/schema/room"
@@ -11,6 +11,47 @@ import { Instructions } from "./instructions/index.js"
 // board, lead AI and text editor can write it. Mutations edit only an item's own lines so
 // comments, order, and every other field stay exactly as their authors wrote them.
 export const FILE = path.join(".opencode", "dod.yaml")
+
+// A new project gets a real, parseable board immediately. It starts empty on purpose:
+// a placeholder task must never be mistaken for the user's actual work.
+const STARTER = [
+  "# OpenCode++ Definition of Done (DoD)",
+  "# Project-scoped task board. Add real tasks under leaves; an empty board is not completion.",
+  "# Each task should list checkable steps and, where possible, verification.command.",
+  "task_id: PROJECT-BOARD",
+  "stages: []",
+  "leaves: []",
+  "",
+].join("\\n")
+
+// Idempotent and non-destructive: concurrent project resolution must never overwrite a
+// board that the user or another session has already created.
+export const initialize = Effect.fn("Dod.initialize")(function* (directory: string) {
+  const file = path.join(directory, FILE)
+  return yield* Effect.tryPromise({
+    try: async () => {
+      await mkdir(path.dirname(file), { recursive: true })
+      let handle
+      try {
+        handle = await open(file, "wx", 0o644)
+      } catch (cause) {
+        if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "EEXIST")
+          return "existing" as const
+        throw cause
+      }
+      try {
+        await handle.writeFile(STARTER, "utf8")
+        return "created" as const
+      } finally {
+        await handle.close()
+      }
+    },
+    catch: (cause) =>
+      new DodError({
+        message: `Could not initialize project DoD at ${file}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      }),
+  })
+})
 
 export class DodError extends Schema.TaggedError<DodError>()("Dod.Error", {
   message: Schema.String,
