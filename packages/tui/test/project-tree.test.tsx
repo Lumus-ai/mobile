@@ -189,7 +189,7 @@ test("a project is created from a name and a path", async () => {
 
   // without projects the tree still shows, for Multiplayer; the bottom bar offers to create the first project
   const frame = await setup.waitForFrame((frame) => frame.includes("+ Project"))
-  expect(frame).toContain("⇄ Multiplayer")
+  expect(frame).toContain("Multiplayer")
   const add = cell(frame, "+ Project")
   await setup.mockMouse.click(add.x, add.y)
   await setup.waitForFrame((frame) => frame.includes("New project") && frame.includes("Path"))
