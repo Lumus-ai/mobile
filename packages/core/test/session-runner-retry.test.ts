@@ -76,6 +76,8 @@ const rateLimit = new AIError({
   reason: new RateLimitError({ message: "Too many requests" }),
 })
 
+// The decision-only tests never publish events; wait() has separate bus coverage.
+// oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
 const retryBus = { publish: () => Effect.void } as unknown as Bus.Interface
 
 describe("SessionRunnerRetry shared rate-limit gate", () => {
@@ -94,7 +96,20 @@ describe("SessionRunnerRetry shared rate-limit gate", () => {
       )
       expect(gates.length).toBe(12)
       const now = yield* Clock.currentTimeMillis
-      expect(Math.max(...gates.map(([, value]) => (value as { retryAt: number }).retryAt))).toBeGreaterThan(now)
+      const retryAt = gates.map(([, value]) =>
+        typeof value === "object" && value !== null && !Array.isArray(value) && typeof value.retryAt === "number"
+          ? value.retryAt
+          : 0,
+      )
+      expect(Math.max(...retryAt)).toBeGreaterThan(now)
+
+      // The persisted provider gate caps the current pause; once it expires and a request
+      // succeeds, old 429s must not leave the provider stuck at the maximum backoff.
+      yield* TestClock.adjust(Duration.minutes(16))
+      yield* retry.succeeded("provider")
+      const recovered = yield* retry.decide(input(rateLimit))
+      expect(recovered.retry).toBe(true)
+      expect(recovered.delay).toBe(2_000)
     }),
   )
 
@@ -116,6 +131,7 @@ describe("SessionRunnerRetry shared rate-limit gate", () => {
         memory.kv,
       )
       const waiting = yield* Effect.fork(retry.waitForGate("provider"))
+      yield* Effect.yieldNow()
       yield* TestClock.adjust(Duration.millis(1_000))
       expect(yield* Fiber.join(waiting)).toBe(true)
     }),
