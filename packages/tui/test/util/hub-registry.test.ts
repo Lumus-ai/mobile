@@ -59,7 +59,9 @@ test("installed and missing partition every requirement for any probe", () => {
 
 test("default probe mirrors the alias-aware host probe", () => {
   const status = hubRegistryStatus({ manager: "apt" })
-  expect(status.total).toBe(platformEntries().length)
+  expect(status.total).toBe(
+    offeredEntries((tool) => Hub.HubHost.has(tool, { platform: process.platform }), "apt").length,
+  )
   const missing = new Set(status.missing.map((entry) => entry.tool))
   const required = new Set(
     offeredEntries((tool) => Hub.HubHost.has(tool, { platform: process.platform }), "apt").flatMap(
