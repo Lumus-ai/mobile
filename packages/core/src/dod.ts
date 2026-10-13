@@ -1,6 +1,7 @@
 export * as Dod from "./dod.js"
 
-import { chmod, mkdir, open, rename, stat } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { chmod, link, mkdir, rename, stat, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Option, Schema } from "effect"
 import type { Room } from "@opencode/schema/room"
@@ -34,20 +35,23 @@ export const initialize = Effect.fn("Dod.initialize")(function* (directory: stri
   const file = path.join(directory, FILE)
   return yield* Effect.tryPromise({
     try: async () => {
-      await mkdir(path.dirname(file), { recursive: true })
-      let handle
+      const parent = path.dirname(file)
+      await mkdir(parent, { recursive: true })
+      const temporary = path.join(parent, `.dod-${randomUUID()}.tmp`)
       try {
-        handle = await open(file, "wx", 0o644)
-      } catch (cause) {
-        if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "EEXIST")
-          return "existing" as const
-        throw cause
-      }
-      try {
-        await handle.writeFile(STARTER, "utf8")
-        return "created" as const
+        // Publish only a complete file: link() creates the destination atomically and
+        // fails with EEXIST instead of replacing a board created by another session.
+        await writeFile(temporary, STARTER, { flag: "wx", mode: 0o644 })
+        try {
+          await link(temporary, file)
+          return "created" as const
+        } catch (cause) {
+          if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "EEXIST")
+            return "existing" as const
+          throw cause
+        }
       } finally {
-        await handle.close()
+        await unlink(temporary).catch(() => undefined)
       }
     },
     catch: (cause) =>
