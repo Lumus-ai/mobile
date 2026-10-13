@@ -199,6 +199,7 @@ const ru: Record<string, string> = {
   "No tasks yet": "Пока нет задач",
   "Project DoD": "Задачи проекта DoD",
   Progress: "Прогресс",
+  Close: "Закрыть",
   "In progress": "В работе",
   Blocked: "Заблокировано",
   Failed: "Ошибка",
