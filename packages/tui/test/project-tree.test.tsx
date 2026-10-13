@@ -123,7 +123,9 @@ test("a new session started from a project carries its project owner metadata", 
   const frame = await setup.waitForFrame((frame) => frame.includes("+ New session"))
   const add = cell(frame, "+ New session")
   await setup.mockMouse.click(add.x + 1, add.y)
-  await setup.waitForFrame((frame) => frame.includes("Model"))
+  // Navigating to Home swaps the session view for the prompt; wait for the UI to settle
+  // instead of depending on a model label that is not rendered in this layout.
+  await setup.waitForVisualIdle({ quietFrames: 3 })
 
   await setup.mockInput.typeText("hello")
   setup.mockInput.pressEnter()
