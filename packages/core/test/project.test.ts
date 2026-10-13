@@ -187,7 +187,7 @@ describe("Project.resolve", () => {
       expect(starter).toContain("task_id: PROJECT-BOARD")
       expect(starter).toContain("leaves: []")
 
-      const custom = "task_id: MY-TASK\\nstages: []\\nleaves: []\\n"
+      const custom = "task_id: MY-TASK\nstages: []\nleaves: []\n"
       yield* Effect.promise(() => fs.writeFile(file, custom))
       yield* project.resolve(abs(tmp.path))
       expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(custom)
