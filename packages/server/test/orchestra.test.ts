@@ -44,6 +44,8 @@ it.live("operator projects own the sessions under their directory and one main s
 
     const project = (yield* call("/api/orchestra/project", "POST", { name: "App", directory: app })).body
     expect(project).toMatchObject({ name: "App", directory: app })
+    // Projects own their orchestrator from creation, even before a team is selected.
+    expect(project.main).toBeDefined()
     expect((yield* call("/api/orchestra/project")).body.map((item: { id: string }) => item.id)).toEqual([project.id])
 
     const top = yield* session(app, "Top")
@@ -52,6 +54,7 @@ it.live("operator projects own the sessions under their directory and one main s
 
     const main = (yield* call(`/api/orchestra/project/${project.id}/main`, "POST")).body
     expect(main.title).toBe("App · Orchestrator")
+    expect(main.id).toBe(project.main)
     expect((yield* call(`/api/orchestra/project/${project.id}/main`, "POST")).body.id).toBe(main.id)
 
     expect((yield* call(`/api/orchestra/access/${deep.id}`, "PUT", { access: "write" })).status).toBe(204)

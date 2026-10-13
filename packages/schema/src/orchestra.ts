@@ -54,7 +54,8 @@ export function sessionOwner(metadata?: SessionMetadata) {
 
 // A project the operator created: a name and a directory. Its sessions are the
 // ones it opened and the others in that directory or below it (see ownerOf);
-// `main` is its orchestra session, absent until it is opened the first time.
+// `main` is its stable orchestrator session. Optional only for legacy records, which
+// Orchestra.main repairs by creating the session when next opened.
 export const Project = Schema.Struct({
   id: ProjectID,
   name: Schema.String,

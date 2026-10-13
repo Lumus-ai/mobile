@@ -65,19 +65,19 @@ export class DirectoryError extends Schema.TaggedError<DirectoryError>()("Orches
 
 export interface Interface {
   readonly projects: () => Effect.Effect<ReadonlyArray<Project>>
-  // With a template, also opens the main session and one session per team member.
+  // Always opens the project's main orchestrator; with a template, also opens one session per team member.
   readonly create: (input: {
     name: string
     directory: string
     template?: string
-  }) => Effect.Effect<Project, DirectoryError | TemplateNotFoundError | Dod.DodError>
+  }) => Effect.Effect<Project, ProjectNotFoundError | DirectoryError | TemplateNotFoundError | Dod.DodError>
   readonly update: (
     id: ProjectID,
     input: { name?: string; directory?: string },
   ) => Effect.Effect<Project, ProjectNotFoundError | DirectoryError>
   // Forgets the project; its sessions and its main session stay.
   readonly remove: (id: ProjectID) => Effect.Effect<void, ProjectNotFoundError>
-  // The project's main session, created in the project's directory on first use.
+  // The project's stable main session. Repairs legacy projects which predate eager creation.
   readonly main: (id: ProjectID) => Effect.Effect<SessionSchema.Info, ProjectNotFoundError | Dod.DodError>
   // Top-level sessions the project owns (see ownerOf), every project's main session excluded.
   readonly sessions: (id: ProjectID) => Effect.Effect<ReadonlyArray<SessionSchema.Info>, ProjectNotFoundError>
@@ -165,6 +165,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
     const bus = yield* Bus.Service
     // Serialize task assignment per worker while allowing different workers to run in parallel.
     const dispatchLocks = KeyedMutex.makeUnsafe<SessionID>()
+    // Concurrent UI/API opens must converge on one durable main session per project.
+    const mainLocks = KeyedMutex.makeUnsafe<ProjectID>()
 
     const projects = Effect.fn("Orchestra.projects")(function* () {
       const result = yield* kv.scan({ prefix: PROJECT, limit: 1000 })
@@ -237,6 +239,24 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
       yield* save({ ...project, main: created.id })
       return created
     })
+
+    // The orchestrator belongs to the project, not to a team template or worker session.
+    // This also repairs old persisted projects and serializes competing first opens.
+    const ensureMain = (id: ProjectID) =>
+      mainLocks.withLock(id)(
+        Effect.gen(function* () {
+          const project = yield* get(id)
+          yield* initializeDod(project.directory)
+          const existing = project.main
+            ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
+            : undefined
+          if (!existing) return yield* mainSession(project)
+          if (existing.agent === Orchestra.agent) return existing
+          // Main sessions created before the Orchestra agent existed adopt it on next open.
+          yield* sessions.switchAgent({ sessionID: existing.id, agent: Orchestra.agent }).pipe(Effect.orDie)
+          return { ...existing, agent: Orchestra.agent }
+        }),
+      )
 
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped", detail?: string): Effect.Effect<void> =>
       dispatchLocks.withLock(sessionID)(
@@ -388,31 +408,33 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
           directory: resolved,
           created: Date.now(),
         })
-        if (!template) return project
-        const team = yield* roles()
-        // Sessions list newest first, so opening the last member first shows the team in template order.
-        yield* Effect.forEach(
-          template.members.toReversed(),
-          (member) => {
-            // Claimed before it exists, so nothing ever lists the session under another project.
-            const id = SessionID.create()
-            return kv.set(OWNER + id, project.id).pipe(
-              Effect.andThen(
-                sessions.create({
-                  id,
-                  location: { directory: AbsolutePath.make(resolved) },
-                  title: member.title,
-                  agent: member.agent,
-                  model: modelOf(team.find((role) => role.agent === member.agent)),
-                }),
-              ),
-              Effect.orDie,
-              Effect.andThen(Effect.all([kv.set(ACCESS + id, "full"), kv.set(CATEGORY + id, member.category)])),
-            )
-          },
-          { discard: true },
-        )
-        const main = yield* mainSession(project)
+        // Create the durable project entry point first, even when no team is selected.
+        const main = yield* ensureMain(project.id)
+        if (template) {
+          const team = yield* roles()
+          // Sessions list newest first, so opening the last member first shows the team in template order.
+          yield* Effect.forEach(
+            template.members.toReversed(),
+            (member) => {
+              // Claimed before it exists, so nothing ever lists the session under another project.
+              const id = SessionID.create()
+              return kv.set(OWNER + id, project.id).pipe(
+                Effect.andThen(
+                  sessions.create({
+                    id,
+                    location: { directory: AbsolutePath.make(resolved) },
+                    title: member.title,
+                    agent: member.agent,
+                    model: modelOf(team.find((role) => role.agent === member.agent)),
+                  }),
+                ),
+                Effect.orDie,
+                Effect.andThen(Effect.all([kv.set(ACCESS + id, "full"), kv.set(CATEGORY + id, member.category)])),
+              )
+            },
+            { discard: true },
+          )
+        }
         return { ...project, main: main.id }
       }),
       update: Effect.fn("Orchestra.update")(function* (id, input) {
@@ -435,17 +457,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         )
       }),
       main: Effect.fn("Orchestra.main")(function* (id) {
-        const project = yield* get(id)
-        // Repair projects created before automatic DoD initialization was introduced.
-        yield* initializeDod(project.directory)
-        const existing = project.main
-          ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
-          : undefined
-        if (!existing) return yield* mainSession(project)
-        if (existing.agent === Orchestra.agent) return existing
-        // Main sessions created before the Orchestra agent existed adopt it on next open.
-        yield* sessions.switchAgent({ sessionID: existing.id, agent: Orchestra.agent }).pipe(Effect.orDie)
-        return { ...existing, agent: Orchestra.agent }
+        return yield* ensureMain(id)
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
         const project = yield* get(id)

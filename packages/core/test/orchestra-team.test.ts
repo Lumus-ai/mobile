@@ -136,7 +136,7 @@ const reports = (sessionID: Session.ID) =>
   })
 
 describe("Orchestra team", () => {
-  it.live("creates a project DoD before returning even when no team is selected", () =>
+  it.live("creates the project DoD and main orchestrator even when no team is selected", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-project-")))
       const orchestra = yield* Orchestra.Service
@@ -146,7 +146,12 @@ describe("Orchestra team", () => {
       expect(yield* Effect.promise(() => Bun.file(dodPath).exists())).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(dodPath).text())).toContain("task_id: PROJECT-BOARD")
       expect(yield* Dod.read(tmp.path)).toMatchObject({ status: "ready", items: [] })
-      expect(project.main).toBeUndefined()
+      expect(project.main).toBeDefined()
+      const main = yield* orchestra.main(project.id)
+      expect(main.id).toBe(project.main)
+      expect(main.title).toBe("No team · Orchestrator")
+      expect(main.agent).toBe(Orchestra.agent)
+      expect(yield* orchestra.mainOf(main.id)).toMatchObject({ id: project.id })
     }),
   )
 

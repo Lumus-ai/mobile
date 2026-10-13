@@ -74,6 +74,7 @@ export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (h
         orchestra
           .create(ctx.payload)
           .pipe(
+            Effect.catchTag("Orchestra.ProjectNotFoundError", missingProject),
             Effect.catchTag("Orchestra.DirectoryError", badDirectory),
             Effect.catchTag("Orchestra.TemplateNotFoundError", badTemplate),
             Effect.catchTag("Dod.Error", badDod),
