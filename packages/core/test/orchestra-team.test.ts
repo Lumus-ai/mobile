@@ -14,6 +14,7 @@ import { Job } from "@opencode/core/job"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Orchestra } from "@opencode/core/orchestra"
 import { Dod } from "@opencode/core/dod"
+import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -278,8 +279,8 @@ describe("Orchestra team", () => {
       const destinationNested = path.join(destination, "src")
       yield* Effect.promise(() =>
         Promise.all([
-          import("node:fs/promises").then(({ mkdir }) => mkdir(sourceNested, { recursive: true })),
-          import("node:fs/promises").then(({ mkdir }) => mkdir(destinationNested, { recursive: true })),
+          mkdir(sourceNested, { recursive: true }),
+          mkdir(destinationNested, { recursive: true }),
         ]),
       )
       const orchestra = yield* Orchestra.Service
