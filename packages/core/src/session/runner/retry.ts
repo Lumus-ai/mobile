@@ -104,6 +104,7 @@ type SharedRateLimit = {
   readonly retryAt: number
   readonly updatedAt: number
   readonly consecutive: number
+  readonly outcome: "rate-limit" | "success"
 }
 
 function providerPrefix(providerID: string) {
@@ -122,7 +123,10 @@ function decodeSharedRateLimit(value: KV.Value | undefined): SharedRateLimit | u
     !Number.isFinite(value.updatedAt) ||
     typeof value.consecutive !== "number" ||
     !Number.isInteger(value.consecutive) ||
-    value.consecutive < 1
+    value.consecutive < 0 ||
+    (value.outcome !== undefined && value.outcome !== "rate-limit" && value.outcome !== "success") ||
+    (value.outcome === "success" && value.consecutive !== 0) ||
+    (value.outcome !== "success" && value.consecutive < 1)
   )
     return
   return {
@@ -132,6 +136,8 @@ function decodeSharedRateLimit(value: KV.Value | undefined): SharedRateLimit | u
     retryAt: value.retryAt,
     updatedAt: value.updatedAt,
     consecutive: value.consecutive,
+    // Entries written before success markers were introduced are rate-limit events.
+    outcome: value.outcome === "success" ? "success" : "rate-limit",
   }
 }
 
@@ -147,19 +153,31 @@ function readSharedRateLimit(kv: KVInterface, providerID: string, now: number) {
     const entries = yield* scan()
     let retryAt: number | undefined
     let consecutive = 0
+    let lastSuccessAt = Number.NEGATIVE_INFINITY
     const stale: string[] = []
-    for (const entry of entries) {
-      const state = decodeSharedRateLimit(entry.value)
+    const states = entries.map((entry) => ({ key: entry.key, state: decodeSharedRateLimit(entry.value) }))
+    for (const entry of states) {
       if (
-        !state ||
-        state.providerID !== providerID ||
-        now - state.updatedAt >= RATE_LIMIT_STREAK_WINDOW
+        !entry.state ||
+        entry.state.providerID !== providerID ||
+        now - entry.state.updatedAt >= RATE_LIMIT_STREAK_WINDOW
       ) {
         stale.push(entry.key)
         continue
       }
-      consecutive = Math.max(consecutive, state.consecutive)
-      if (state.retryAt > now) retryAt = Math.max(retryAt ?? 0, state.retryAt)
+      if (entry.state.outcome === "success") lastSuccessAt = Math.max(lastSuccessAt, entry.state.updatedAt)
+      if (entry.state.outcome === "rate-limit" && entry.state.retryAt > now)
+        retryAt = Math.max(retryAt ?? 0, entry.state.retryAt)
+    }
+    for (const entry of states) {
+      const state = entry.state
+      if (
+        state?.outcome === "rate-limit" &&
+        state.providerID === providerID &&
+        state.updatedAt > lastSuccessAt &&
+        now - state.updatedAt < RATE_LIMIT_STREAK_WINDOW
+      )
+        consecutive = Math.max(consecutive, state.consecutive)
     }
     // Each observation is independent and safe to remove after the streak window. New rate limits
     // write unique keys, so cleaning an old entry cannot erase a concurrent provider cooldown.
@@ -177,7 +195,18 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, kv: KVInte
     const scheduledDecision = yield* policy(sessionID)
     const decide = (input: Parameters<typeof scheduledDecision>[0]) =>
       Effect.gen(function* () {
-        const decision = yield* scheduledDecision(input)
+        let hookRejected = false
+        const decision = yield* scheduledDecision({
+          ...input,
+          hook: (event) => {
+            const proposed = event.decision.retry
+            return input.hook(event).pipe(
+              Effect.tap(() => {
+                if (proposed && !event.decision.retry) hookRejected = true
+              }),
+            )
+          },
+        })
         if (input.cause.reason._tag !== "RateLimit") return decision
 
         const now = yield* Clock.currentTimeMillis
@@ -200,9 +229,13 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, kv: KVInte
           retryAt: now + effectiveDelay,
           updatedAt: now,
           consecutive,
+          outcome: "rate-limit",
         }
         const key = providerPrefix(providerID) + now + ":" + encodeURIComponent(String(sessionID)) + ":" + randomUUID()
         yield* kv.set(key, state)
+        // Persist the shared cooldown even if a hook vetoes this session's retry: sibling agents
+        // must still stop spending requests against a provider that has returned 429.
+        if (hookRejected || !input.retry) return decision
         // A rate limit is a durable pause, not a finite retry budget. Once the short generic
         // schedule is exhausted, the session keeps its recorded history and retries with capped
         // exponential cooldown instead of reporting the whole task as failed.
@@ -211,6 +244,22 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, kv: KVInte
           attempt: decision.retry ? decision.attempt : Math.max(11, consecutive + 1),
           delay: effectiveDelay,
         }
+      })
+
+    const succeeded = (providerID: string) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis
+        // One overwritten success marker resets the backoff without growing the journal per
+        // successful turn. Existing future retry deadlines remain independent and are not cleared.
+        yield* kv.set(providerPrefix(providerID) + "last-success", {
+          version: 1,
+          providerID,
+          sessionID: String(sessionID),
+          retryAt: now,
+          updatedAt: now,
+          consecutive: 0,
+          outcome: "success",
+        })
       })
 
     const gateUntil = (providerID: string) =>
@@ -253,5 +302,5 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, kv: KVInte
         // A concurrent agent may have extended the shared cooldown while we slept.
         yield* waitForGate(input.providerID)
       })
-    return { decide, wait, waitForGate }
+    return { decide, wait, waitForGate, succeeded }
   })
