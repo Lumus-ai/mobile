@@ -381,7 +381,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
 
     // Bus subscriptions only observe live events. Reconcile task markers left behind when a
     // worker completed before its terminal event could be observed by this process.
-    const recoverPending = Effect.fn("Orchestra.recoverPending")(function* () {
+    const recoverPending = Effect.fn("Orchestra.recoverPending")(function* (mainID?: SessionID) {
       const read = (after?: string): Effect.Effect<KV.Entry[]> =>
         kv.scan({ prefix: TASK, after, limit: 1000 }).pipe(
           Effect.flatMap((result) =>
@@ -401,6 +401,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           Effect.gen(function* () {
             const task = decodeTask(entry.value)
             if (Option.isNone(task)) return
+            // Context hooks ask mainOf for ordinary sessions too. Never recover a different
+            // project's worker just because an unrelated session was opened.
+            if (mainID && task.value.main !== mainID) return
             const sessionID = SessionID.make(entry.key.slice(TASK.length))
             if (active.has(sessionID) || suspended.has(sessionID)) return
             const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
@@ -559,8 +562,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       main: Effect.fn("Orchestra.main")(function* (id) {
         const session = yield* ensureMain(id)
         // This request is made after the service graph is ready, so recovered reports may safely
-        // wake the orchestrator while the project panel is opening.
-        yield* recoverPending()
+        // wake this project's orchestrator while the project panel is opening.
+        yield* recoverPending(session.id)
         return session
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
@@ -585,9 +588,12 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         yield* kv.set(OWNER + sessionID, projectID)
       }),
       mainOf: Effect.fn("Orchestra.mainOf")(function* (sessionID) {
-        // The orchestrator's next activation is a second recovery checkpoint after startup.
-        yield* recoverPending()
-        return (yield* projects()).find((project) => project.main === sessionID)
+        const project = (yield* projects()).find((item) => item.main === sessionID)
+        if (!project) return undefined
+        // Context hooks also query worker sessions. Only an actual project's main session
+        // is a recovery checkpoint, and it only reconciles its own tasks.
+        yield* recoverPending(sessionID)
+        return project
       }),
       access,
       accessMany: Effect.fn("Orchestra.accessMany")(function* (sessionIDs) {

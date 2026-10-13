@@ -236,6 +236,7 @@ describe("Orchestra team", () => {
       const orchestra = yield* Orchestra.Service
       const sessionStore = yield* SessionStore.Service
       const project = yield* orchestra.create({ name: "Recovery", directory: tmp.path, template: "bugfix" })
+      const unrelated = yield* orchestra.create({ name: "Unrelated", directory: tmp.path, template: "docs" })
       const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
       yield* Effect.acquireRelease(
         Effect.sync(() => suppressTerminalEvent.add(worker.id)),
@@ -255,8 +256,13 @@ describe("Orchestra team", () => {
       expect(yield* reports(project.main!)).toHaveLength(0)
       expect(yield* orchestra.pending(worker.id)).toBeNumber()
 
-      // Once the durable execution claim clears, the missing terminal event can be reconciled.
+      // Opening another project's main session must not reconcile this project's task.
       yield* sessionStore.release(worker.id)
+      yield* orchestra.mainOf(unrelated.main!)
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // Once the owning orchestrator is activated, it reconciles only its own task.
       yield* orchestra.mainOf(project.main!)
       const recovered = yield* reports(project.main!).pipe(
         Effect.filterOrFail((items) => items.length > 0),
