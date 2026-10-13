@@ -392,20 +392,17 @@ export function RegistryPanel(props: {
         </Button>
       </box>
       <box flexDirection="row">
-        <text
-          fg={theme.text.action.primary[busy() !== undefined ? "disabled" : "base"]}
-          wrapMode="none"
-          onMouseUp={(event) => {
-            event.stopPropagation()
-            if (busy() !== undefined) return
+        <Button
+          disabled={busy() !== undefined}
+          onClick={() =>
             void setSwitch(
               Array.from(new Set([...Hub.all.flatMap((entry) => entry.requires ?? []), ...Object.keys(enabled())])),
               false,
             )
-          }}
+          }
         >
-          [ {t("All off")} ]
-        </text>
+          {t("All off")}
+        </Button>
       </box>
 
       <box>
