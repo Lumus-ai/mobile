@@ -437,7 +437,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         const moved = yield* sessions.get(session.id).pipe(Effect.mapError(failure))
         const actualRoot = yield* fs.resolve(moved.location.directory)
         if (actualRoot !== targetRoot) {
-          return yield* failure(new Error(`Session location remained at ${moved.location.directory}`))
+          return yield* Effect.fail(failure(new Error(`Session location remained at ${moved.location.directory}`)))
         }
       }
     })
