@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { parseDodBoard, summarizeDodBoard } from "../src/feature-plugins/sidebar/dod"
+import { DOD_PANEL, openDodPanel, parseDodBoard, summarizeDodBoard } from "../src/feature-plugins/sidebar/dod"
 
 test("DoD progress counts only tasks with a terminal state", () => {
   const items = parseDodBoard([
@@ -39,4 +39,21 @@ test("an empty DoD board is zero progress, not completed work", () => {
 test("malformed DoD data raises an error rather than looking like an empty board", () => {
   expect(() => parseDodBoard("nope")).toThrow("DoD must be a YAML mapping")
   expect(() => parseDodBoard("leaves: nope")).toThrow("DoD leaves must be a list")
+})
+
+test("the DoD launcher opens the registered full task panel", () => {
+  const opened: string[] = []
+  const context = {
+    ui: {
+      panel: {
+        open: (name: string) => {
+          opened.push(name)
+          return true
+        },
+      },
+    },
+  } as unknown as Parameters<typeof openDodPanel>[0]
+
+  expect(openDodPanel(context)).toBe(true)
+  expect(opened).toEqual([DOD_PANEL])
 })
