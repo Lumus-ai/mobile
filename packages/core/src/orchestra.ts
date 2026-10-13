@@ -273,10 +273,19 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           if (existing) {
             // The session was created but the process died before clearing its reservation.
             yield* kv.remove(MAIN_INITIALIZING + id)
-            if (existing.agent === Orchestra.agent) return existing
-            // Main sessions created before the Orchestra agent existed adopt it on next open.
-            yield* sessions.switchAgent({ sessionID: existing.id, agent: Orchestra.agent }).pipe(Effect.orDie)
-            return { ...existing, agent: Orchestra.agent }
+            let main = existing
+            if (main.agent !== Orchestra.agent) {
+              // Main sessions created before the Orchestra agent existed adopt it on next open.
+              yield* sessions.switchAgent({ sessionID: main.id, agent: Orchestra.agent }).pipe(Effect.orDie)
+              main = { ...main, agent: Orchestra.agent }
+            }
+            // Also repair a crash between saving the renamed project and renaming its main session.
+            const title = `${project.name} · Orchestrator`
+            if (main.title !== title) {
+              yield* sessions.rename({ sessionID: main.id, title }).pipe(Effect.orDie)
+              main = { ...main, title }
+            }
+            return main
           }
           if (pending) return yield* mainSession({ ...project, main: pending })
 
@@ -582,30 +591,43 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         return { ...project, main: main.id }
       }),
       update: Effect.fn("Orchestra.update")(function* (id, input) {
-        const project = yield* get(id)
-        const updated = yield* save({
-          ...project,
-          name: input.name?.trim() || project.name,
-          directory: input.directory === undefined ? project.directory : yield* directory(input.directory),
-        })
-        // The main session is the project's long-lived identity. Keep its visible title in sync
-        // when the project is renamed; a legacy project without a main is repaired on main().
-        if (updated.main && updated.name !== project.name) {
-          const main = yield* sessions.get(updated.main).pipe(Effect.orElseSucceed(() => undefined))
-          if (main && main.title !== `${updated.name} · Orchestrator`)
-            yield* sessions.rename({ sessionID: main.id, title: `${updated.name} · Orchestrator` }).pipe(Effect.orDie)
-        }
-        return updated
+        // Serialize metadata changes with main-session initialization. Otherwise a concurrent
+        // rename could be saved between reservation and Session.create and leave a stale title.
+        return yield* mainLocks.withLock(id)(
+          Effect.gen(function* () {
+            const project = yield* get(id)
+            const updated = yield* save({
+              ...project,
+              name: input.name?.trim() || project.name,
+              directory: input.directory === undefined ? project.directory : yield* directory(input.directory),
+            })
+            // The main session is the project's long-lived identity. Keep its visible title in sync
+            // when the project is renamed; ensureMain repairs this too if a crash interrupts the rename.
+            if (updated.main && updated.name !== project.name) {
+              const main = yield* sessions.get(updated.main).pipe(Effect.orElseSucceed(() => undefined))
+              if (main && main.title !== `${updated.name} · Orchestrator`)
+                yield* sessions.rename({ sessionID: main.id, title: `${updated.name} · Orchestrator` }).pipe(Effect.orDie)
+            }
+            return updated
+          }),
+        )
       }),
       remove: Effect.fn("Orchestra.remove")(function* (id) {
-        yield* get(id)
-        yield* kv.remove(PROJECT + id)
-        // Its sessions go back to whichever project contains their directory.
-        const claims = yield* owners()
-        yield* Effect.forEach(
-          Object.keys(claims).filter((sessionID) => claims[sessionID] === id),
-          (sessionID) => kv.remove(OWNER + sessionID),
-          { discard: true },
+        // Do not delete the project while mainSession is saving its reservation or pointer;
+        // doing so could let a stale initialization resurrect a forgotten project.
+        yield* mainLocks.withLock(id)(
+          Effect.gen(function* () {
+            yield* get(id)
+            yield* kv.remove(MAIN_INITIALIZING + id)
+            yield* kv.remove(PROJECT + id)
+            // Its sessions go back to whichever project contains their directory.
+            const claims = yield* owners()
+            yield* Effect.forEach(
+              Object.keys(claims).filter((sessionID) => claims[sessionID] === id),
+              (sessionID) => kv.remove(OWNER + sessionID),
+              { discard: true },
+            )
+          }),
         )
       }),
       main: Effect.fn("Orchestra.main")(function* (id) {
