@@ -72,6 +72,7 @@ it.live("operator projects own the sessions under their directory and one main s
     expect((yield* call(`/api/orchestra/project/${project.id}`, "PATCH", { name: "Renamed" })).body.name).toBe(
       "Renamed",
     )
+    expect((yield* call(`/api/orchestra/project/${project.id}/main`, "POST")).body.title).toBe("Renamed · Orchestrator")
     expect((yield* call(`/api/orchestra/project/${project.id}`, "DELETE")).status).toBe(204)
     expect((yield* call("/api/orchestra/project")).body).toEqual([])
     // forgetting the project keeps its sessions

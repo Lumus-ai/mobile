@@ -554,11 +554,19 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       }),
       update: Effect.fn("Orchestra.update")(function* (id, input) {
         const project = yield* get(id)
-        return yield* save({
+        const updated = yield* save({
           ...project,
           name: input.name?.trim() || project.name,
           directory: input.directory === undefined ? project.directory : yield* directory(input.directory),
         })
+        // The main session is the project's long-lived identity. Keep its visible title in sync
+        // when the project is renamed; a legacy project without a main is repaired on main().
+        if (updated.main && updated.name !== project.name) {
+          const main = yield* sessions.get(updated.main).pipe(Effect.orElseSucceed(() => undefined))
+          if (main && main.title !== `${updated.name} · Orchestrator`)
+            yield* sessions.rename({ sessionID: main.id, title: `${updated.name} · Orchestrator` }).pipe(Effect.orDie)
+        }
+        return updated
       }),
       remove: Effect.fn("Orchestra.remove")(function* (id) {
         yield* get(id)
