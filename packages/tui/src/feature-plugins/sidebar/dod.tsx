@@ -5,7 +5,6 @@ import { Plugin } from "@opencode/plugin/tui"
 import type { PanelInput } from "@opencode/plugin/tui/context"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
-import { HoverAction } from "../../component/hover-action"
 
 export const DOD_PANEL = "opencode.sidebar.dod"
 const FILE = path.join(".opencode", "dod.yaml")
@@ -108,7 +107,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
   const layout = useCompactLayout()
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
   const [open, setOpen] = createSignal(false)
-  const [hoveredAction, setHoveredAction] = createSignal<"open">()
+  const [hoveredAction, setHoveredAction] = createSignal<"open" | "toggle" | "close">()
   const actionHoverColor = () => theme.text.action?.primary?.hovered ?? theme.increase(actionColor, 2)
   let revision = 0
 
@@ -173,14 +172,19 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
   return (
     <box gap={1}>
       <box flexDirection="row" alignItems="center" gap={1}>
-        <HoverAction
+        <box
           id="sidebar.dod.preview-toggle"
-          paddingLeft={0}
-          paddingRight={0}
-          onClick={() => setOpen((value) => !value)}
+          flexShrink={0}
+          backgroundColor={hoveredAction() === "toggle" ? theme.increase(theme.background.base, 4) : undefined}
+          onMouseOver={() => setHoveredAction("toggle")}
+          onMouseOut={() => setHoveredAction(undefined)}
+          onMouseUp={(event) => {
+            event.stopPropagation()
+            setOpen((value) => !value)
+          }}
         >
-          <text fg={actionColor}>{open() ? "▾" : "▸"}</text>
-        </HoverAction>
+          <text fg={hoveredAction() === "toggle" ? actionHoverColor() : actionColor}>{open() ? "▾" : "▸"}</text>
+        </box>
         <box flexDirection="row" alignItems="center" gap={1} flexGrow={1} minWidth={0}>
           <box flexGrow={1} minWidth={0}>
             <text fg={actionColor} wrapMode="none" truncate>
@@ -190,18 +194,23 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
           <text fg={theme.text.muted} wrapMode="none" truncate>
             {heading()}
           </text>
-          <HoverAction
+          <box
             id="sidebar.dod.open-button"
+            flexShrink={0}
             paddingLeft={1}
             paddingRight={1}
-            onMouseEnter={() => setHoveredAction("open")}
-            onMouseLeave={() => setHoveredAction(undefined)}
-            onClick={() => openDodPanel(props.context)}
+            backgroundColor={hoveredAction() === "open" ? theme.increase(theme.background.base, 4) : undefined}
+            onMouseOver={() => setHoveredAction("open")}
+            onMouseOut={() => setHoveredAction(undefined)}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              openDodPanel(props.context)
+            }}
           >
             <text fg={hoveredAction() === "open" ? actionHoverColor() : actionColor} wrapMode="none">
               {`[${t("Open")}] ↗`}
             </text>
-          </HoverAction>
+          </box>
         </box>
       </box>
 
@@ -346,9 +355,21 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
             {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{props.context.ui.format.path(root())}</text>}
           </Show>
         </box>
-        <HoverAction id="dod.panel.close" paddingLeft={1} paddingRight={1} onClick={() => props.panel.close()}>
-          <text fg={theme.text.action?.primary?.base ?? theme.text.base}>{t("Close")} ✕</text>
-        </HoverAction>
+        <box
+          id="dod.panel.close"
+          flexShrink={0}
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={hoveredAction() === "close" ? theme.increase(theme.background.base, 4) : undefined}
+          onMouseOver={() => setHoveredAction("close")}
+          onMouseOut={() => setHoveredAction(undefined)}
+          onMouseUp={(event) => {
+            event.stopPropagation()
+            props.panel.close()
+          }}
+        >
+          <text fg={hoveredAction() === "close" ? actionHoverColor() : actionColor}>{t("Close")} ✕</text>
+        </box>
       </box>
 
       <Show when={board().type === "loading"}>
