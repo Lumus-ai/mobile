@@ -1,6 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
-import { Renderable } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { Hub } from "@opencode/core/hub/index"
 import { HubState } from "@opencode/core/hub/state"
@@ -250,66 +249,17 @@ test("All off also clears saved switches that are outside the current registry r
   const app = await render({ probe, directory: tmp.path })
   try {
     const frame = await app.waitForFrame(
-      (frame) => frame.includes(`[on] ${target}`) && frame.includes("All off"),
+      (frame) =>
+        frame.split("\n").some((line) => line.includes("[on]") && line.includes(target)) &&
+        frame.includes("All off"),
     )
     const lines = frame.split("\n")
     const row = lines.findIndex((line) => line.includes("All off"))
     const allOff = lines[row]!.indexOf("All off")
     const x = allOff + Math.floor("All off".length / 2)
-    await app.mockMouse.moveTo(x, row)
-    const hitId = app.renderer.hitTest(x, row)
-    let hit = Renderable.renderablesByNumber.get(hitId)
-    const chain: Array<{ type: string; id: string; x: number; y: number; width: number; height: number }> = []
-    while (hit && chain.length < 8) {
-      chain.push({
-        type: hit.constructor.name,
-        id: hit.id,
-        x: hit.x,
-        y: hit.y,
-        width: hit.width,
-        height: hit.height,
-      })
-      hit = hit.parent instanceof Renderable ? hit.parent : undefined
-    }
     await app.mockMouse.click(x, row)
-    const expected = "0/" + hubRegistryStatus({ probe }).tools.length
-    const observations: Array<{ counter: string | undefined; targetEnabled: boolean | undefined; staleEnabled: boolean | undefined }> = []
-    for (let attempt = 0; attempt < 20; attempt++) {
-      await Bun.sleep(10)
-      const observedFrame = app.captureCharFrame()
-      const state = await HubState.read({ directory: tmp.path })
-      observations.push({
-        counter: rowValue(observedFrame, "For the model"),
-        targetEnabled: state.enabled[target],
-        staleEnabled: state.enabled[stale],
-      })
-    }
-    const last = observations.at(-1)
-    if (
-      !last ||
-      last.counter !== expected ||
-      last.targetEnabled !== false ||
-      last.staleEnabled !== false
-    ) {
-      throw new Error(
-        "DEBUG All off observations: " +
-          JSON.stringify(
-            {
-              x,
-              y: row,
-              rowText: lines[row],
-              hitId,
-              chain,
-              expected,
-              observations,
-              finalFrame: app.captureCharFrame(),
-            },
-            null,
-            2,
-          ),
-      )
-    }
 
+    await app.waitForFrame((frame) => rowValue(frame, "For the model") === "0/" + hubRegistryStatus({ probe }).tools.length)
     expect(await untilEnabled(tmp.path, target, false)).toBe(true)
     expect(await untilEnabled(tmp.path, stale, false)).toBe(true)
   } finally {
