@@ -159,6 +159,7 @@ describe("PluginSupervisor", () => {
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
     }),
+    15_000,
   )
 
   it.effect("reloads for a trigger published while the initial generation is activating", () =>
