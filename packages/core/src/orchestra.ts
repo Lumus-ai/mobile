@@ -133,6 +133,8 @@ const ROLE = "orchestra/role/"
 const TEMPLATE = "orchestra/template/"
 // The project that opened a session. Without it, every project in one directory would share one team.
 const OWNER = "orchestra/owner/"
+// Durable reservation for the main session being initialized. It bridges the KV/session-store write gap.
+const MAIN_INITIALIZING = "orchestra/main-initializing/"
 // Reports carry enough evidence to decide the next step without copying a whole worker session.
 const REPORT_LIMIT = 16_000
 // How many recent top-level sessions are scanned when listing a project.
@@ -140,6 +142,7 @@ const SCAN_LIMIT = 500
 const decodeProject = Schema.decodeUnknownOption(Project)
 const decodeAccess = Schema.decodeUnknownOption(Access)
 const decodeProjectID = Schema.decodeUnknownOption(ProjectID)
+const decodeSessionID = Schema.decodeUnknownOption(SessionID)
 // A task that is waiting for its report: which main session to deliver it to and when it was sent.
 const Task = Schema.Struct({
   main: SessionID,
@@ -237,7 +240,12 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
     })
 
     const mainSession = Effect.fnUntraced(function* (project: Project) {
-      const id = SessionID.create()
+      // The reservation is written first; if the process dies anywhere below, the next open
+      // reuses this exact ID instead of creating a second main session.
+      const pending = Option.getOrUndefined(decodeSessionID(yield* kv.get(MAIN_INITIALIZING + project.id)))
+      const id = pending ?? SessionID.create()
+      yield* kv.set(MAIN_INITIALIZING + project.id, id)
+      yield* save({ ...project, main: id })
       yield* kv.set(OWNER + id, project.id)
       const created = yield* sessions
         .create({
@@ -247,25 +255,46 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           agent: Orchestra.agent,
         })
         .pipe(Effect.orDie)
-      yield* save({ ...project, main: created.id })
+      yield* kv.remove(MAIN_INITIALIZING + project.id)
       return created
     })
 
     // The orchestrator belongs to the project, not to a team template or worker session.
-    // This also repairs old persisted projects and serializes competing first opens.
+    // Repair interrupted initialization, recover legacy orphan mains, and serialize concurrent opens.
     const ensureMain = (id: ProjectID) =>
       mainLocks.withLock(id)(
         Effect.gen(function* () {
           const project = yield* get(id)
           yield* initializeDod(project.directory)
+          const pending = Option.getOrUndefined(decodeSessionID(yield* kv.get(MAIN_INITIALIZING + id)))
           const existing = project.main
             ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
             : undefined
-          if (!existing) return yield* mainSession(project)
-          if (existing.agent === Orchestra.agent) return existing
-          // Main sessions created before the Orchestra agent existed adopt it on next open.
-          yield* sessions.switchAgent({ sessionID: existing.id, agent: Orchestra.agent }).pipe(Effect.orDie)
-          return { ...existing, agent: Orchestra.agent }
+          if (existing) {
+            // The session was created but the process died before clearing its reservation.
+            yield* kv.remove(MAIN_INITIALIZING + id)
+            if (existing.agent === Orchestra.agent) return existing
+            // Main sessions created before the Orchestra agent existed adopt it on next open.
+            yield* sessions.switchAgent({ sessionID: existing.id, agent: Orchestra.agent }).pipe(Effect.orDie)
+            return { ...existing, agent: Orchestra.agent }
+          }
+          if (pending) return yield* mainSession({ ...project, main: pending })
+
+          // Older versions created the Session before saving Project.main. Recover that orphan
+          // by its explicit project owner and orchestrator title rather than creating a duplicate.
+          const claims = yield* owners()
+          const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
+          const orphan = recent.find(
+            (session) => claims[session.id] === project.id && session.title?.endsWith(" · Orchestrator"),
+          )
+          if (orphan) {
+            yield* save({ ...project, main: orphan.id })
+            if (orphan.agent === Orchestra.agent) return orphan
+            yield* sessions.switchAgent({ sessionID: orphan.id, agent: Orchestra.agent }).pipe(Effect.orDie)
+            return { ...orphan, agent: Orchestra.agent }
+          }
+          // A dangling legacy main ID may refer to a deleted session; don't accidentally reuse it.
+          return yield* mainSession({ ...project, main: undefined })
         }),
       )
 

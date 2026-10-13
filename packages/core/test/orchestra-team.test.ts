@@ -161,6 +161,58 @@ describe("Orchestra team", () => {
     }),
   )
 
+  it.live("reattaches a durable orphaned orchestrator instead of creating a duplicate", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-orphan-main-")))
+      const orchestra = yield* Orchestra.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Orphan", directory: tmp.path })
+      const originalID = project.main!
+
+      // Simulate the old crash window: Session was stored, but Project.main was not.
+      yield* kv.set(
+        `orchestra/project/${project.id}`,
+        Schema.encodeSync(Orchestra.Project)({
+          id: project.id,
+          name: project.name,
+          directory: project.directory,
+          created: project.created,
+        }),
+      )
+      const main = yield* orchestra.main(project.id)
+      expect(main.id).toBe(originalID)
+      expect((yield* orchestra.projects()).find((item) => item.id === project.id)?.main).toBe(originalID)
+      expect(yield* orchestra.mainOf(originalID)).toMatchObject({ id: project.id })
+    }).pipe(Effect.scoped),
+  )
+
+  it.live("reuses the reserved main ID after interrupted initialization", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-main-reservation-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Reservation", directory: tmp.path })
+      yield* sessions.remove(project.main!)
+      yield* kv.set(
+        `orchestra/project/${project.id}`,
+        Schema.encodeSync(Orchestra.Project)({
+          id: project.id,
+          name: project.name,
+          directory: project.directory,
+          created: project.created,
+        }),
+      )
+      const reservedID = Session.ID.create()
+      yield* kv.set(`orchestra/main-initializing/${project.id}`, reservedID)
+
+      const main = yield* orchestra.main(project.id)
+      expect(main.id).toBe(reservedID)
+      expect(main.title).toBe("Reservation · Orchestrator")
+      expect((yield* orchestra.projects()).find((item) => item.id === project.id)?.main).toBe(reservedID)
+    }).pipe(Effect.scoped),
+  )
+
   it.live("concurrent main repair creates one orchestrator for a legacy project", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-concurrent-main-")))
