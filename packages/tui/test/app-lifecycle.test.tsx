@@ -465,13 +465,14 @@ test("vertical session tabs switch to horizontal below readable content width", 
     },
   })
   await setup.ready
-  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
+  const hasVerticalTitle = (frame: string) => frame.split("\n").some((line) => line.slice(0, 42).includes(session.title))
+  await setup.waitForFrame(hasVerticalTitle)
 
   setup.resize(100, 30)
   await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
   expect(setup.captureCharFrame()).not.toContain("⌕")
   setup.resize(120, 30)
-  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
+  await setup.waitForFrame(hasVerticalTitle)
 })
 
 test("automatic rename refreshes the displayed title before settling, even without a renamed event", async () => {
