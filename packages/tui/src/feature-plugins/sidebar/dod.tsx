@@ -189,7 +189,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
         </Show>
         <Show when={board().type === "error"}>
           <text fg={theme.text.feedback.error.base} wrapMode="word">
-            {t("DoD read error: {reason}", { reason: board().type === "error" ? board().reason : "" })}
+            {heading()}
           </text>
         </Show>
         <Show when={board().type === "ready"}>
