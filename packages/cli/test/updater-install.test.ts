@@ -9,6 +9,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Updater } from "../src/services/updater"
+import { OPENCODE_VERSION } from "../src/version"
 import { testEffect } from "../../core/test/lib/effect"
 
 const it = testEffect(NodeServices.layer)
@@ -317,7 +318,7 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
     expect(yield* test.updater.latest("npm")).toBe("2.3.4")
     expect(test.requests).toEqual([
       "https://formulae.brew.sh/api/formula/opencode.json",
-      "https://opencode.ai/update/api/local/cli/npm?current=local",
+      "https://opencode.ai/update/api/local/cli/npm?current=${encodeURIComponent(OPENCODE_VERSION)}",
     ])
   }),
 )
@@ -330,8 +331,8 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
       yield* test.updater.upgrade("brew", "2.3.4")
       expect(test.commands).toEqual([["brew", "upgrade", `anomalyco/tap/${formula}`]])
       expect(test.requests).toEqual([
-        "https://opencode.ai/update/api/local/cli/homebrew?current=local",
-        "https://opencode.ai/update/api/local/cli/homebrew?current=local",
+        "https://opencode.ai/update/api/local/cli/homebrew?current=${encodeURIComponent(OPENCODE_VERSION)}",
+        "https://opencode.ai/update/api/local/cli/homebrew?current=${encodeURIComponent(OPENCODE_VERSION)}",
       ])
     }),
   )

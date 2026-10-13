@@ -85,18 +85,22 @@ describe("ShellParse malformed native syntax", () => {
   ] as const)("fails explicitly for malformed %s syntax: %s", async (shell, command, reason) => {
     const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
     expect(scanned).toEqual({ kind: "opaque", reason })
-    expect(await Effect.runPromise(Effect.result(ShellParse.scanPortable(command, shell, "/workspace")))).toMatchObject(
-      {
-        _tag: "Failure",
-        failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
-      },
+    const portable = await Effect.runPromise(Effect.result(ShellParse.scanPortable(command, shell, "/workspace")))
+    expect(portable._tag).toBe("Failure")
+    if (portable._tag === "Failure") {
+      expect(portable.failure.message).toContain(`Portable shell scanner cannot analyze command for`)
+      expect(portable.failure.message).toContain(reason)
+      expect(portable.failure.message).toContain("The command was not executed.")
+    }
+    const option = await Effect.runPromise(
+      Effect.result(ShellParse.scan(command, shell, "/workspace", { portable: true })),
     )
-    expect(
-      await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace", { portable: true }))),
-    ).toMatchObject({
-      _tag: "Failure",
-      failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
-    })
+    expect(option._tag).toBe("Failure")
+    if (option._tag === "Failure") {
+      expect(option.failure.message).toContain(`Portable shell scanner cannot analyze command for`)
+      expect(option.failure.message).toContain(reason)
+      expect(option.failure.message).toContain("The command was not executed.")
+    }
   })
 })
 
