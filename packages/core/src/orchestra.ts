@@ -217,8 +217,10 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
     // Resolve the VCS root when the selected directory is a subdirectory, or use the selected
     // directory for a markerless project. Initializing here keeps ordinary folder browsing side-effect free.
     const initializeDod = Effect.fnUntraced(function* (directory: string) {
-      const root = yield* CoreProject.root(fs, AbsolutePath.make(directory))
-      return yield* Dod.initialize(root ?? directory)
+      // Match Project.resolve/Location's canonical path before choosing the board root.
+      const canonical = AbsolutePath.make(yield* fs.resolve(directory))
+      const root = yield* CoreProject.root(fs, canonical)
+      return yield* Dod.initialize(root ?? canonical)
     })
 
     const mainSession = Effect.fnUntraced(function* (project: Project) {
