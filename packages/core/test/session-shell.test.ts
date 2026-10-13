@@ -19,7 +19,8 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 // Every test boots a real Location, so shell start waits for cold plugin activation before spawning.
-setDefaultTimeout(15_000)
+// Keep enough headroom for the cold plugin/watcher startup on Windows CI and developer machines.
+setDefaultTimeout(30_000)
 
 class ExecutionControl extends Context.Service<
   ExecutionControl,
@@ -101,7 +102,7 @@ const launch = Effect.fn(function* (fixture: Effect.Success<typeof setup>, name:
   yield* Effect.promise(() => Bun.file(path.join(fixture.tmp.path, `${name}.started`)).exists()).pipe(
     Effect.repeat({ until: (exists) => exists, schedule: Schedule.spaced("10 millis") }),
     Effect.timeoutOrElse({
-      duration: "5 seconds",
+      duration: "15 seconds",
       orElse: () => Effect.fail(new Error(`Timed out waiting for shell process to create ${name}.started`)),
     }),
   )
