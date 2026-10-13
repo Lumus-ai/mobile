@@ -316,7 +316,7 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
         </box>
         <text
           id="dod.panel.close"
-          fg={theme.text.action.primary.base}
+          fg={theme.text.action?.primary?.base ?? theme.text.base}
           onMouseUp={() => props.panel.close()}
         >
           {t("Close")} ✕
