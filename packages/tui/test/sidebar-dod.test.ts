@@ -1,5 +1,35 @@
 import { expect, test } from "bun:test"
-import { DOD_PANEL, openDodPanel, parseDodBoard, summarizeDodBoard } from "../src/feature-plugins/sidebar/dod"
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { DOD_PANEL, openDodPanel, parseDodBoard, resolveDodRoot, summarizeDodBoard } from "../src/feature-plugins/sidebar/dod"
+
+test("nested sessions resolve the DoD board from the nearest repository root", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "opencode-dod-root-"))
+  const project = path.join(temporary, "project")
+  const nested = path.join(project, "packages", "core", "src")
+  try {
+    await mkdir(path.join(project, ".git"), { recursive: true })
+    await mkdir(nested, { recursive: true })
+    await access(path.join(project, ".git"))
+    expect(await resolveDodRoot(nested)).toBe(project)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test("markerless projects keep their selected directory as the DoD root", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "opencode-dod-markerless-"))
+  const project = path.join(temporary, "plain-project")
+  const nested = path.join(project, "src")
+  try {
+    await mkdir(nested, { recursive: true })
+    expect(await resolveDodRoot(project)).toBe(project)
+    expect(await resolveDodRoot(nested)).toBe(nested)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
 
 test("DoD progress counts only tasks with a terminal state", () => {
   const items = parseDodBoard([

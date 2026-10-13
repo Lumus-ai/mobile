@@ -1,4 +1,5 @@
 import path from "node:path"
+import { access } from "node:fs/promises"
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { Plugin } from "@opencode/plugin/tui"
 import type { PanelInput } from "@opencode/plugin/tui/context"
@@ -8,6 +9,28 @@ import { useT } from "../../util/i18n"
 export const DOD_PANEL = "opencode.sidebar.dod"
 const FILE = path.join(".opencode", "dod.yaml")
 const FINISHED = new Set(["DONE", "OUT_OF_SCOPE"])
+
+// Match the core's project-root rule: the nearest .git/.hg marker wins, otherwise
+// the selected directory is a markerless project root.
+async function exists(target: string) {
+  try {
+    await access(target)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function resolveDodRoot(directory: string): Promise<string> {
+  const original = path.resolve(directory)
+  let current = original
+  while (true) {
+    if ((await exists(path.join(current, ".git"))) || (await exists(path.join(current, ".hg")))) return current
+    const parent = path.dirname(current)
+    if (parent === current) return original
+    current = parent
+  }
+}
 const MARK: Record<string, string> = {
   DONE: "✓",
   IN_PROGRESS: "●",
@@ -89,13 +112,14 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
   const directory = () =>
     props.context.data.session.get(props.sessionID)?.location?.directory ?? props.context.location?.directory
 
-  const refresh = async (root: string | undefined) => {
+  const refresh = async (directory: string | undefined) => {
     const current = ++revision
-    if (!root) {
+    if (!directory) {
       setBoard({ type: "missing" })
       return
     }
     try {
+      const root = await resolveDodRoot(directory)
       const file = Bun.file(path.join(root, FILE))
       if (!(await file.exists())) {
         if (current === revision) setBoard({ type: "missing" })
@@ -236,18 +260,23 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
   const theme = props.context.theme
   const t = useT()
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
+  const [boardRoot, setBoardRoot] = createSignal<string>()
   let revision = 0
 
   const directory = () =>
     props.context.data.session.get(props.panel.sessionID)?.location?.directory ?? props.context.location?.directory
 
-  const refresh = async (root: string | undefined) => {
+  const refresh = async (directory: string | undefined) => {
     const current = ++revision
-    if (!root) {
+    if (!directory) {
+      setBoardRoot(undefined)
       setBoard({ type: "missing" })
       return
     }
     try {
+      const root = await resolveDodRoot(directory)
+      if (current !== revision) return
+      setBoardRoot(root)
       const file = Bun.file(path.join(root, FILE))
       if (!(await file.exists())) {
         if (current === revision) setBoard({ type: "missing" })
@@ -311,7 +340,7 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
           <text fg={theme.text.base}>
             <b>{t("Project DoD")}</b>
           </text>
-          <Show when={directory()}>
+          <Show when={boardRoot()}>
             {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{props.context.ui.format.path(root())}</text>}
           </Show>
         </box>
