@@ -299,7 +299,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
                 ...(task.value.messageID ? { taskID: task.value.messageID } : {}),
               },
             })
-            .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
+            .pipe(Effect.as(true), Effect.orElseSucceed(() => false))
           // If admission failed, restore the task so a later completion can retry safely.
           if (!admitted) yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
       }),
