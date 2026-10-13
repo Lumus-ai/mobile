@@ -4,7 +4,7 @@ import path from "path"
 import { mkdirSync, readFileSync, watch } from "fs"
 import { Flock } from "@opencode/util/flock"
 import { writeJsonAtomic } from "../util/persistence"
-import { useTuiApp, useTuiPaths } from "./runtime"
+import { useTuiApp, useTuiLifecycleOptional, useTuiPaths } from "./runtime"
 
 type Options<Value extends object> = {
   readonly initial: Value
@@ -151,6 +151,8 @@ const Context = createContext<Storage>()
 
 export function StorageProvider(props: ParentProps) {
   const result = createStorage(useTuiPaths().state, useTuiApp().channel)
+  // Flush asynchronous writes after component cleanup, before the app's temporary state can be removed.
+  useTuiLifecycleOptional()?.add(() => result.storage.flush())
   onCleanup(result.close)
   return <Context.Provider value={result.storage}>{props.children}</Context.Provider>
 }
