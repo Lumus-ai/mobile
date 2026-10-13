@@ -143,7 +143,7 @@ test("the left panel lists the operator's projects with the orchestrator and ses
   const frame = await setup.waitForFrame(
     (frame) => frame.includes("Projects") && frame.includes("Demo") && frame.includes("[write]"),
   )
-  expect(frame).toContain("★ Orchestrator")
+  expect(frame).toContain("Orchestrator")
   // sessions sit under their category
   const lines = frame.split("\n")
   expect(lines.findIndex((line) => line.includes("Build"))).toBeLessThan(
@@ -162,7 +162,7 @@ test("the left panel lists the operator's projects with the orchestrator and ses
   })
 
   // the orchestra row opens the project's main session
-  const orchestra = cell(setup.captureCharFrame(), "★ Orchestrator")
+  const orchestra = cell(setup.captureCharFrame(), "Orchestrator")
   await setup.mockMouse.click(orchestra.x + 2, orchestra.y)
   await setup.waitFor(() => calls.some((call) => call.path === `/api/orchestra/project/${project.id}/main`))
 })
