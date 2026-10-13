@@ -5,6 +5,7 @@ import type { PanelInput } from "@opencode/plugin/tui/context"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
 
+export const DOD_PANEL = "opencode.sidebar.dod"
 const FILE = path.join(".opencode", "dod.yaml")
 const FINISHED = new Set(["DONE", "OUT_OF_SCOPE"])
 const MARK: Record<string, string> = {
@@ -68,6 +69,10 @@ export function summarizeDodBoard(items: readonly DodTask[]) {
     total: items.length,
     percent: items.length === 0 ? 0 : Math.round((finished / items.length) * 100),
   }
+}
+
+export function openDodPanel(context: Pick<Plugin.Context, "ui">) {
+  return context.ui.panel.open(DOD_PANEL)
 }
 
 // Project DoD in the session's right sidebar. It reads the same .opencode/dod.yaml
@@ -158,7 +163,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
           flexGrow={1}
           minWidth={0}
           onMouseUp={() => {
-            if (!props.context.ui.panel.open("opencode.sidebar.dod")) setOpen(true)
+            if (!openDodPanel(props.context)) setOpen(true)
           }}
         >
           <box flexGrow={1} minWidth={0}>
