@@ -4,13 +4,12 @@ import { mkdtempSync, rmSync } from "fs"
 import { tmpdir } from "os"
 import path from "path"
 import { createStorage } from "../../src/context/storage"
+import * as fsPromises from "fs/promises"
+import { writeJsonAtomic } from "../../src/util/persistence"
 
 afterEach(() => {
   spyOn(fs, "watch").mockRestore()
 })
-
-import * as fsPromises from "fs/promises"
-import { writeJsonAtomic } from "../../src/util/persistence"
 
 test("writeJsonAtomic retries transient rename failures before replacing persisted state", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "storage-rename-"))
