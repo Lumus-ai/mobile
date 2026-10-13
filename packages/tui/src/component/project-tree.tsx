@@ -797,6 +797,8 @@ function RoomPeople(props: {
                   <text fg={theme.text.formfield.base}>{` [${t(ROLE_LABEL[item.member.role])}]`}</text>
                 </box>
                 <box
+                  minWidth={6}
+                  justifyContent="flex-end"
                   onMouseOut={() => setArmed()}
                   onMouseUp={() =>
                     confirm(`kick:${item.member.id}`, () =>
@@ -809,6 +811,8 @@ function RoomPeople(props: {
                   </text>
                 </box>
                 <box
+                  minWidth={5}
+                  justifyContent="flex-end"
                   onMouseOut={() => setArmed()}
                   onMouseUp={() =>
                     confirm(`ban:${item.member.id}`, () =>
