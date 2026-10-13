@@ -13,6 +13,8 @@ import { Agent } from "@opencode/core/agent"
 import { Job } from "@opencode/core/job"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Orchestra } from "@opencode/core/orchestra"
+import { Dod } from "@opencode/core/dod"
+import path from "node:path"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
@@ -139,6 +141,9 @@ describe("Orchestra team", () => {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))
       const orchestra = yield* Orchestra.Service
       const project = yield* orchestra.create({ name: "Team", directory: tmp.path, template: "bugfix" })
+      const dodPath = path.join(tmp.path, Dod.FILE)
+      expect(yield* Effect.promise(() => Bun.file(dodPath).exists())).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(dodPath).text())).toContain("task_id: PROJECT-BOARD")
       const main = project.main!
       const members = yield* orchestra.sessions(project.id)
       const byTitle = (title: string) => members.find((session) => session.title === title)!
