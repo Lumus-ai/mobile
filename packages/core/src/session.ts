@@ -7,6 +7,7 @@ import { ListAnchor } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
 import { KV } from "./kv.js"
+import { resumeBlockedKey } from "./session/restart-state.js"
 import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
 import type { FileSystem } from "./filesystem.js"
@@ -248,6 +249,20 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const projects = yield* Project.Service
     const execution = yield* SessionExecution.Service
+    const kv = yield* KV.Service
+    const resumeAwareExecution = SessionExecution.Service.of({
+      ...execution,
+      // Keep restart suppression at the host boundary. Inner Session handles remain usable
+      // in tests and embeddings whose service graphs intentionally omit KV.
+      wake: (sessionID) =>
+        kv.remove(resumeBlockedKey(sessionID)).pipe(Effect.andThen(execution.wake(sessionID))),
+      resume: (sessionID) =>
+        kv.remove(resumeBlockedKey(sessionID)).pipe(Effect.andThen(execution.resume(sessionID))),
+      interrupt: (sessionID, options) =>
+        (options?.resume ? kv.remove(resumeBlockedKey(sessionID)) : Effect.void).pipe(
+          Effect.andThen(execution.interrupt(sessionID, options)),
+        ),
+    })
     const llm = yield* LLMClient.Service
     const transport = yield* SessionModelTransport.Service
     const store = yield* SessionStore.Service
@@ -256,7 +271,9 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
     const locations = yield* LocationServiceMap.Service
-    const sessions = yield* Session.make()
+    const sessions = yield* Session.make().pipe(
+      Effect.provideService(SessionExecution.Service, resumeAwareExecution),
+    )
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
 
     const result = Service.of({

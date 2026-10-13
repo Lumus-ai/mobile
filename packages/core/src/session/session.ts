@@ -30,8 +30,6 @@ import { SessionShell } from "./shell.js"
 import { SessionSkill } from "./skill.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
-import { KV } from "../kv.js"
-import { resumeBlockedKey } from "./restart-state.js"
 
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
@@ -45,15 +43,12 @@ type PromptRequest = SessionPrompt.Input & {
 export const make = Effect.fn("Session.make")(function* () {
   const bus = yield* Bus.Service
   const database = yield* Database.Service
-  const kv = yield* KV.Service
   const store = yield* SessionStore.Service
   const instances = yield* Instance.Service
   const execution = yield* SessionExecution.Service
   const admission = yield* SessionInbox.Service
   const fs = yield* FSUtil.Service
   const scope = yield* Scope.Scope
-
-  const clearRestartBlock = (sessionID: SessionSchema.ID) => kv.remove(resumeBlockedKey(sessionID))
 
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
@@ -144,8 +139,7 @@ export const make = Effect.fn("Session.make")(function* () {
     inboxID: SessionMessage.ID,
   ) {
     yield* mutatePending(sessionID, inboxID, admission.steer)
-    yield* clearRestartBlock(sessionID)
-    yield* execution.wake(sessionID)
+        yield* execution.wake(sessionID)
   }, Effect.uninterruptible)
   const queueInbox = Effect.fn("Session.queueInbox")(
     (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, admission.queue),
@@ -181,8 +175,7 @@ export const make = Effect.fn("Session.make")(function* () {
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )
         if (input.resume !== false) {
-          yield* clearRestartBlock(sessionID)
-          yield* execution.wake(sessionID)
+                    yield* execution.wake(sessionID)
         }
         return admitted
       }),
@@ -271,8 +264,7 @@ export const make = Effect.fn("Session.make")(function* () {
       .pipe(
         Effect.catchTag("SessionInbox.LifecycleConflict", () => new CompactionConflictError({ sessionID, inputID })),
       )
-    yield* clearRestartBlock(sessionID)
-    yield* execution.wake(sessionID)
+        yield* execution.wake(sessionID)
     return admitted
   })
   const wait = Effect.fn("Session.wait")(function* (sessionID: SessionSchema.ID) {
@@ -281,8 +273,7 @@ export const make = Effect.fn("Session.make")(function* () {
   })
   const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)
-    yield* clearRestartBlock(sessionID)
-    yield* execution.resume(sessionID)
+        yield* execution.resume(sessionID)
   })
   const synthetic = Effect.fn("Session.synthetic")(
     (
@@ -323,8 +314,7 @@ export const make = Effect.fn("Session.make")(function* () {
               ),
             )
           if (input.resume !== false && !(yield* get(sessionID)).revert) {
-            yield* clearRestartBlock(sessionID)
-            yield* execution.wake(sessionID)
+                        yield* execution.wake(sessionID)
           }
           return admitted
         }),
@@ -334,7 +324,6 @@ export const make = Effect.fn("Session.make")(function* () {
     (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          if (options?.resume) yield* clearRestartBlock(sessionID)
           return yield* execution.interrupt(sessionID, options)
         }),
       ),
@@ -358,8 +347,7 @@ export const make = Effect.fn("Session.make")(function* () {
       Effect.provideService(Instance.Service, instances),
       Effect.provideService(Bus.Service, bus),
     )
-    yield* clearRestartBlock(sessionID)
-    return yield* execution.wake(sessionID)
+        return yield* execution.wake(sessionID)
   })
   const commit = Effect.fn("Session.revert.commit")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
