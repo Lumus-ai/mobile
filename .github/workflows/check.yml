@@ -4,8 +4,11 @@ on:
   push:
     branches: [dev, v2, lan-rooms]
   pull_request:
-    branches: [dev, v2]
+    branches: [dev, v2, lan-rooms]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
@@ -15,13 +18,14 @@ jobs:
   check:
     name: typecheck
     # Use GitHub-hosted runners on lan-rooms so this fork does not depend on Blacksmith capacity.
-    runs-on: ${{ github.ref_name == 'lan-rooms' && 'ubuntu-latest' || 'blacksmith-4vcpu-ubuntu-2404' }}
+    runs-on: ${{ (github.ref_name == 'lan-rooms' || github.base_ref == 'lan-rooms') && 'ubuntu-latest' || 'blacksmith-4vcpu-ubuntu-2404' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           # A pull request checks out its merge into the current base; the first parent is that base.
           fetch-depth: 2
+          persist-credentials: false
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
