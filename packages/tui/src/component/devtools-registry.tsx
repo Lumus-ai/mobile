@@ -367,7 +367,8 @@ export function RegistryPanel(props: {
         <Button onClick={() => turn(1)}>›</Button>
       </box>
 
-      {/* Wraps whole buttons onto the next line instead of breaking their labels on narrow windows. */}
+      {/* Keep the install controls wrappable; All off has its own row so its
+          mouse target cannot overlap the wrapped siblings on narrow terminals. */}
       <box flexDirection="row" flexWrap="wrap" columnGap={1}>
         <Button
           variant="primary"
@@ -389,6 +390,8 @@ export function RegistryPanel(props: {
         >
           {t("All installed on")}
         </Button>
+      </box>
+      <box flexDirection="row">
         <Button
           disabled={busy() !== undefined}
           onClick={() =>
