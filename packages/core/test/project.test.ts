@@ -8,6 +8,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { Project } from "@opencode/core/project"
+import { Dod } from "@opencode/core/dod"
 import { ProjectSchema } from "@opencode/core/project/schema"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -171,6 +172,28 @@ async function rootCommit(dir: string) {
 }
 
 describe("Project.resolve", () => {
+  it.live("creates a DoD board for a new project without overwriting later edits", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const project = yield* Project.Service
+      const file = path.join(tmp.path, Dod.FILE)
+
+      const first = yield* project.resolve(abs(tmp.path))
+      expect(first.directory).toBe(yield* real(tmp.path))
+      const starter = yield* Effect.promise(() => fs.readFile(file, "utf8"))
+      expect(starter).toContain("task_id: PROJECT-BOARD")
+      expect(starter).toContain("leaves: []")
+
+      const custom = "task_id: MY-TASK\\nstages: []\\nleaves: []\\n"
+      yield* Effect.promise(() => fs.writeFile(file, custom))
+      yield* project.resolve(abs(tmp.path))
+      expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(custom)
+    }),
+  )
+
   it.live("creates distinct deterministic projects for exact markerless directories", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
