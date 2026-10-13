@@ -157,7 +157,7 @@ function cell(frame: string, needle: string) {
   const exact = lines.findIndex((line) => line.includes(needle))
   // Terminal renderers can substitute a different glyph for a button icon.
   // Retry against the visible label so mouse tests stay portable across platforms.
-  const label = needle.trim().replace(/^[^\\p{L}\\p{N}]+/u, "").trim()
+  const label = needle.trim().replace(/^[^\p{L}\p{N}]+/u, "").trim()
   const y = exact >= 0 ? exact : label ? lines.findIndex((line) => line.includes(label)) : -1
   if (y < 0) throw new Error(`no ${needle} on screen:\n${frame}`)
   return { x: lines[y].indexOf(exact >= 0 ? needle : label), y }
