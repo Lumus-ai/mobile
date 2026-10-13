@@ -1547,14 +1547,14 @@ describe("SessionRunnerLLM", () => {
       const continued = s.requests.at(-1)
       if (!continued) throw new Error("Expected continuation request")
       expect(continued.messages[0]).toEqual(replacement[0])
-      expect(continued.system.map((part) => part.text)).toContain("Checkpoint instructions")
+      expect(continued.system.map((part) => part.text)).toContain(projectContext("Checkpoint instructions"))
       expect(systemTexts(continued)).toEqual(["Newest instructions"])
 
       const forked = yield* s.session.fork({ sessionID, before: after.id })
       yield* s.session.prompt({ sessionID: forked.id, text: "Fork prompt", resume: false })
       yield* s.session.resume(forked.id)
       expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
-      expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Newest instructions")
+      expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain(projectContext("Newest instructions"))
       expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
         Message.system("Newest instructions"),
       ])
@@ -1615,7 +1615,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
     yield* s.session.resume(forked.id)
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Latest context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, projectContext("Latest context")])
     // Copied history keeps the frozen chronological update; no new update is emitted.
     expect(systemTexts(s.requests.at(-1)!)).toContain("Changed context")
     expect(systemTexts(s.requests.at(-1)!)).not.toContain("Latest context")
@@ -3585,7 +3585,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Third")
 
     // Compaction already moved current values into the new epoch before the unavailable read.
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Changed context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, projectContext("Changed context")])
     expect(systemTexts(s.requests.at(-1)!)).not.toContain("Changed context")
   })
 
