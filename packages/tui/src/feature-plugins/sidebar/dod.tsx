@@ -107,6 +107,8 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
   const layout = useCompactLayout()
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
   const [open, setOpen] = createSignal(false)
+  const [hoveredAction, setHoveredAction] = createSignal<"title" | "open">()
+  const actionHoverColor = () => theme.text.action?.primary?.hovered ?? theme.text.base
   let revision = 0
 
   const directory = () =>
@@ -180,33 +182,46 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
         >
           {open() ? "▾" : "▸"}
         </text>
-        <box
-          id="sidebar.dod.open"
-          flexDirection="row"
-          alignItems="center"
-          gap={1}
-          flexGrow={1}
-          minWidth={0}
-          onMouseUp={() => openDodPanel(props.context)}
-        >
-          <box flexGrow={1} minWidth={0}>
-            <text fg={actionColor} wrapMode="none" truncate>
+        <box flexDirection="row" alignItems="center" gap={1} flexGrow={1} minWidth={0}>
+          <box
+            id="sidebar.dod.open"
+            flexGrow={1}
+            minWidth={0}
+            onMouseOver={() => setHoveredAction("title")}
+            onMouseOut={() => setHoveredAction(undefined)}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              openDodPanel(props.context)
+            }}
+          >
+            <text
+              fg={hoveredAction() === "title" ? actionHoverColor() : actionColor}
+              wrapMode="none"
+              truncate
+            >
               <b>{t("DoD")}</b>
             </text>
           </box>
           <text fg={theme.text.muted} wrapMode="none" truncate>
             {heading()}
           </text>
-          <text
+          <box
             id="sidebar.dod.open-button"
-            fg={actionColor}
+            flexShrink={0}
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={hoveredAction() === "open" ? theme.background.action.primary.hovered : undefined}
+            onMouseOver={() => setHoveredAction("open")}
+            onMouseOut={() => setHoveredAction(undefined)}
             onMouseUp={(event) => {
               event.stopPropagation()
               openDodPanel(props.context)
             }}
           >
-            {`[${t("Open")}] ↗`}
-          </text>
+            <text fg={hoveredAction() === "open" ? actionHoverColor() : actionColor} wrapMode="none">
+              {`[${t("Open")}] ↗`}
+            </text>
+          </box>
         </box>
       </box>
 
