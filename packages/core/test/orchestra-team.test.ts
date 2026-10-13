@@ -298,19 +298,21 @@ describe("Orchestra team", () => {
       // Simulate the crash window: the report made it to the inbox, but the task marker wasn't cleared.
       const taskID = typeof original.messageID === "string" ? original.messageID : "legacy"
       const reportText = `<team-report session="${worker.id}" task="${taskID}" title="Developer" role="${Orchestra.role("developer")}" state="done" outcome="unknown">\nOriginal durable report\n</team-report>`
-      yield* sessions.synthetic({
-        id: reportID,
-        sessionID: project.main!,
-        description: "Developer: done",
-        text: reportText,
-        metadata: {
-          source: "team",
-          sessionID: worker.id,
-          state: "done",
-          outcome: "unknown",
-          ...(taskID === "legacy" ? {} : { taskID }),
-        },
-      })
+      yield* sessions
+        .synthetic({
+          id: reportID,
+          sessionID: project.main!,
+          description: "Developer: done",
+          text: reportText,
+          metadata: {
+            source: "team",
+            sessionID: worker.id,
+            state: "done",
+            outcome: "unknown",
+            ...(taskID === "legacy" ? {} : { taskID }),
+          },
+        })
+        .pipe(Effect.orDie)
       expect(yield* reports(project.main!)).toHaveLength(1)
 
       // Reconciliation must recognize the already-admitted ID, not retry with a conflicting body.

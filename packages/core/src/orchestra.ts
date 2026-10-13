@@ -16,6 +16,7 @@ import { Session } from "./session.js"
 import { SessionStore } from "./session/store.js"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "./session/message.js"
+import { SessionInbox } from "./session/inbox.js"
 import { Dod } from "./dod.js"
 import { Project as CoreProject } from "./project.js"
 
