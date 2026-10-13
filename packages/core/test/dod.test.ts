@@ -47,6 +47,22 @@ const fails = <A>(effect: Effect.Effect<A, Dod.DodError>) =>
   Effect.runPromise(Effect.flip(effect)).then((error) => error.message)
 
 describe("Dod", () => {
+  test("initializes the board atomically and never overwrites project edits", async () => {
+    await using dir = await tmpdir()
+    const results = await Promise.all([run(Dod.initialize(dir.path)), run(Dod.initialize(dir.path))])
+    expect(results.toSorted()).toEqual(["created", "existing"])
+
+    const file = path.join(dir.path, Dod.FILE)
+    const starter = await Bun.file(file).text()
+    expect(starter).toContain("task_id: PROJECT-BOARD")
+    expect(starter).toContain("leaves: []")
+
+    const custom = "task_id: CUSTOM\\nstages: []\\nleaves: []\\n"
+    await Bun.write(file, custom)
+    expect(await run(Dod.initialize(dir.path))).toBe("existing")
+    expect(await Bun.file(file).text()).toBe(custom)
+  })
+
   test("reads the items in file order with their step counts", async () => {
     await using dir = await project()
     const dod = await run(Dod.read(dir.path))
