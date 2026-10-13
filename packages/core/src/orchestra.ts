@@ -360,7 +360,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           const reportBody = preparedTask.reportText ?? body
           const reportOutcome = preparedTask.reportOutcome ?? outcome
           const reportTitle = preparedTask.reportTitle ?? title
-          const reportRole = preparedTask.reportRole ?? (session.agent ?? "default")
+          const reportRole = preparedTask.reportRole ?? (session?.agent ?? "unknown")
           const admitted = yield* sessions
             .synthetic({
               id: reportID,
