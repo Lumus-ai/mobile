@@ -72,6 +72,10 @@ const memoryKV = () => {
   return { kv, values }
 }
 
+function isJsonObject(value: KV.Value | undefined): value is Extract<KV.Value, Readonly<Record<string, unknown>>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 const rateLimit = new AIError({
   reason: new RateLimitError({ message: "Too many requests" }),
 })
@@ -90,17 +94,18 @@ describe("SessionRunnerRetry shared rate-limit gate", () => {
       for (let i = 0; i < 12; i++) results.push(yield* retry.decide(input(rateLimit)))
 
       expect(results.every((result) => result.retry)).toBe(true)
-      expect(results[11].attempt).toBeGreaterThan(10)
+      const last = results[11]
+      if (!last?.retry) throw new Error("Rate limits must remain retryable after the ordinary retry budget")
+      expect(last.attempt).toBeGreaterThan(10)
       const gates = [...memory.values.entries()].filter(([key]) =>
         key.startsWith("session-runner:rate-limit:v1:provider:"),
       )
       expect(gates.length).toBe(12)
       const now = yield* Clock.currentTimeMillis
-      const retryAt = gates.map(([, value]) =>
-        typeof value === "object" && value !== null && !Array.isArray(value) && typeof value.retryAt === "number"
-          ? value.retryAt
-          : 0,
-      )
+      const retryAt = gates.map(([, value]) => {
+        if (!isJsonObject(value)) return 0
+        return typeof value.retryAt === "number" ? value.retryAt : 0
+      })
       expect(Math.max(...retryAt)).toBeGreaterThan(now)
 
       // The persisted provider gate caps the current pause; once it expires and a request
@@ -108,7 +113,7 @@ describe("SessionRunnerRetry shared rate-limit gate", () => {
       yield* TestClock.adjust(Duration.minutes(16))
       yield* retry.succeeded("provider")
       const recovered = yield* retry.decide(input(rateLimit))
-      expect(recovered.retry).toBe(true)
+      if (!recovered.retry) throw new Error("The provider should be eligible for another retry")
       expect(recovered.delay).toBe(2_000)
     }),
   )
@@ -130,8 +135,7 @@ describe("SessionRunnerRetry shared rate-limit gate", () => {
         SessionSchema.ID.make("ses_waiting"),
         memory.kv,
       )
-      const waiting = yield* Effect.fork(retry.waitForGate("provider"))
-      yield* Effect.yieldNow()
+      const waiting = yield* retry.waitForGate("provider").pipe(Effect.forkChild)
       yield* TestClock.adjust(Duration.millis(1_000))
       expect(yield* Fiber.join(waiting)).toBe(true)
     }),

@@ -113,6 +113,7 @@ const it = testEffect(
       Job.node,
       Session.node,
       SessionStore.node,
+      KV.node,
       SessionInbox.node,
       SessionExecution.node,
       LocationServiceMap.node,
