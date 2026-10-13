@@ -339,15 +339,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                           worktree: global.data + "/worktree",
                         }}
                       >
-                        <StorageProvider>
-                          <TuiLifecycleProvider
-                            value={{
-                              add(finalizer) {
-                                finalizers.add(finalizer)
-                                return () => finalizers.delete(finalizer)
-                              },
-                            }}
-                          >
+                        <TuiLifecycleProvider
+                          value={{
+                            add(finalizer) {
+                              finalizers.add(finalizer)
+                              return () => finalizers.delete(finalizer)
+                            },
+                          }}
+                        >
+                          <StorageProvider>
                             <TuiTerminalEnvironmentProvider
                               value={{
                                 platform: process.platform,
@@ -450,8 +450,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                 </ClipboardProvider>
                               </TuiStartupProvider>
                             </TuiTerminalEnvironmentProvider>
-                          </TuiLifecycleProvider>
-                        </StorageProvider>
+                          </StorageProvider>
+                        </TuiLifecycleProvider>
                       </TuiPathsProvider>
                     </ErrorBoundary>
                   </TuiAppProvider>
