@@ -336,8 +336,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           const title = session?.title ?? `Deleted worker ${sessionID}`
           const reportID = task.value.reportID ?? SessionMessage.ID.create()
           const wasPrepared = task.value.reportPrepared === true
-          const reportState = workerRemoved ? "failed" : state
-          const reportDetail =
+          const stateForReport = workerRemoved ? "failed" : state
+          const detailForReport =
             workerRemoved
               ? `Worker session ${sessionID} was removed before it could report the assigned task.`
               : detail
@@ -345,8 +345,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             ...task.value,
             reportID,
             reportPrepared: true,
-            reportState: wasPrepared ? task.value.reportState ?? reportState : reportState,
-            reportDetail: wasPrepared ? task.value.reportDetail : reportDetail,
+            reportState: wasPrepared ? task.value.reportState ?? stateForReport : stateForReport,
+            reportDetail: wasPrepared ? task.value.reportDetail : detailForReport,
             reportText: wasPrepared ? task.value.reportText ?? body : body,
             reportOutcome: wasPrepared ? task.value.reportOutcome ?? outcome : outcome,
             reportTitle: wasPrepared ? task.value.reportTitle ?? title : title,
