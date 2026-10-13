@@ -1844,6 +1844,7 @@ export type NoteFrontmatter = {
 
 export type RoomDod = {
   items: Array<RoomDodItem>
+  status?: "ready" | "disabled" | undefined
   taken?: string | undefined
   note?: RoomDodNote | undefined
   check?: { exitCode: number; output: string } | undefined
