@@ -123,7 +123,8 @@ export function RoomDodRows(props: {
     if (current.type === "connection-error") return t("DoD connection error: {reason}", { reason: current.reason })
     return t("DoD state unknown: {reason}", { reason: current.reason })
   }
-  const showBoard = () => status().type === "ready" || (items().length > 0 && ["stale", "unknown"].includes(status().type))
+  const showBoard = () =>
+    status().type === "ready" || (items().length > 0 && ["stale", "unknown"].includes(status().type))
 
   onMount(() => {
     // Leases run out without an event, so the list still refreshes now and then.
@@ -210,139 +211,139 @@ export function RoomDodRows(props: {
         )}
       </Show>
       <Show when={showBoard()}>
-      <Row id={`${props.id}:dod`} hover={props.hover} setHover={props.setHover} onClick={() => setOpen(!open())}>
-        <text flexShrink={0} fg={theme.text.muted}>
-          {open() ? "    ▾ " : "    ▸ "}
-        </text>
-        <box flexGrow={1} minWidth={0}>
-          <text fg={theme.text.base} wrapMode="none" truncate>
-            {t("DoD")}
-            <span style={{ fg: theme.text.muted }}>
-              {` ${finished()}/${items().length}`}
-              {taken() > 0 ? ` · ${t("{count} taken", { count: taken() })}` : ""}
-            </span>
-            {/* Last, so a narrow panel cuts the bar before the numbers. */}
-            <span style={{ fg: theme.text.feedback.success.base }}>{` ${bar()}`}</span>
+        <Row id={`${props.id}:dod`} hover={props.hover} setHover={props.setHover} onClick={() => setOpen(!open())}>
+          <text flexShrink={0} fg={theme.text.muted}>
+            {open() ? "    ▾ " : "    ▸ "}
           </text>
-        </box>
-        <Show when={props.take && ready()}>
-          <box
-            flexShrink={0}
-            onMouseUp={(event) => {
-              event.stopPropagation()
-              act(
-                () => props.take!(),
-                (dod) =>
-                  dod.taken && toast.show({ message: t("{item} is yours", { item: dod.taken }), variant: "info" }),
-              )
-            }}
-          >
-            <text fg={theme.text.action.primary.base}>{` ${t("next")}`}</text>
+          <box flexGrow={1} minWidth={0}>
+            <text fg={theme.text.base} wrapMode="none" truncate>
+              {t("DoD")}
+              <span style={{ fg: theme.text.muted }}>
+                {` ${finished()}/${items().length}`}
+                {taken() > 0 ? ` · ${t("{count} taken", { count: taken() })}` : ""}
+              </span>
+              {/* Last, so a narrow panel cuts the bar before the numbers. */}
+              <span style={{ fg: theme.text.feedback.success.base }}>{` ${bar()}`}</span>
+            </text>
           </box>
-        </Show>
-      </Row>
-      <Show when={open()}>
-        <For each={remaining()}>
-          {(item) => {
-            const mine = () => item.mine === true
-            const free = () => !item.owner || item.stale === true
-            return (
-              <box flexDirection="row" paddingLeft={7} paddingRight={1}>
-                <text flexShrink={0} fg={color(item.state)}>
-                  {`${MARK[item.state] ?? "·"} `}
-                </text>
-                <box flexGrow={1} minWidth={0}>
-                  <text fg={theme.text.base} wrapMode="none" truncate>
-                    <span style={{ fg: theme.text.muted }}>{`${item.id} `}</span>
-                    {item.what || item.id}
-                    <span style={{ fg: theme.text.muted }}>{item.total > 0 ? ` ${item.done}/${item.total}` : ""}</span>
+          <Show when={props.take && ready()}>
+            <box
+              flexShrink={0}
+              onMouseUp={(event) => {
+                event.stopPropagation()
+                act(
+                  () => props.take!(),
+                  (dod) =>
+                    dod.taken && toast.show({ message: t("{item} is yours", { item: dod.taken }), variant: "info" }),
+                )
+              }}
+            >
+              <text fg={theme.text.action.primary.base}>{` ${t("next")}`}</text>
+            </box>
+          </Show>
+        </Row>
+        <Show when={open()}>
+          <For each={remaining()}>
+            {(item) => {
+              const mine = () => item.mine === true
+              const free = () => !item.owner || item.stale === true
+              return (
+                <box flexDirection="row" paddingLeft={7} paddingRight={1}>
+                  <text flexShrink={0} fg={color(item.state)}>
+                    {`${MARK[item.state] ?? "·"} `}
                   </text>
-                </box>
-                <Show when={item.stale && item.owner}>
-                  <text flexShrink={0} fg={theme.text.muted}>
-                    {` ${t("{name}, lease ran out", { name: item.owner ?? "" })}`}
-                  </text>
-                </Show>
-                <Show
-                  when={!free()}
-                  fallback={
-                    <Show
-                      when={!item.waits}
-                      fallback={
-                        <text flexShrink={0} fg={theme.text.muted}>
-                          {` ${t("waits for {items}", { items: item.waits?.join(", ") ?? "" })}`}
-                        </text>
-                      }
-                    >
-                      <Show when={props.take}>
-                        {(take) => (
-                          <box flexShrink={0} onMouseUp={() => act(() => take()(item.id))}>
-                            <text fg={theme.text.action.primary.base}>{` ${t("take")}`}</text>
-                          </box>
-                        )}
-                      </Show>
-                    </Show>
-                  }
-                >
-                  <text flexShrink={0} fg={mine() ? theme.text.formfield.base : theme.text.muted}>
-                    {` ${mine() ? t("you") : item.owner}`}
-                  </text>
-                  <Show when={mine() && item.verify ? props.submit : undefined}>
-                    {(submit) => (
-                      <box flexShrink={0} onMouseUp={() => act(() => submit()(item.id), submitted(item.id))}>
-                        <text fg={theme.text.action.primary.base}>{` ${t("submit")}`}</text>
-                      </box>
-                    )}
+                  <box flexGrow={1} minWidth={0}>
+                    <text fg={theme.text.base} wrapMode="none" truncate>
+                      <span style={{ fg: theme.text.muted }}>{`${item.id} `}</span>
+                      {item.what || item.id}
+                      <span style={{ fg: theme.text.muted }}>{item.total > 0 ? ` ${item.done}/${item.total}` : ""}</span>
+                    </text>
+                  </box>
+                  <Show when={item.stale && item.owner}>
+                    <text flexShrink={0} fg={theme.text.muted}>
+                      {` ${t("{name}, lease ran out", { name: item.owner ?? "" })}`}
+                    </text>
                   </Show>
-                  <Show when={mine() || !props.take}>
-                    <box
-                      flexShrink={0}
-                      onMouseOut={() => setArmed()}
-                      onMouseUp={() => {
-                        // Freeing another person's item needs a second click; giving back your own does not.
-                        if (!mine() && armed() !== actionId(item)) return setArmed(actionId(item))
-                        setArmed()
-                        act(() => props.release(item.id))
-                      }}
-                    >
-                      <text
-                        fg={
-                          armed() === actionId(item)
-                            ? theme.text.action.destructive.focused
-                            : theme.text.action.destructive.base
+                  <Show
+                    when={!free()}
+                    fallback={
+                      <Show
+                        when={!item.waits}
+                        fallback={
+                          <text flexShrink={0} fg={theme.text.muted}>
+                            {` ${t("waits for {items}", { items: item.waits?.join(", ") ?? "" })}`}
+                          </text>
                         }
                       >
-                        {armed() === actionId(item) ? ` ${t("free?")}` : mine() ? ` ${t("release")}` : " ×"}
-                      </text>
-                    </box>
+                        <Show when={props.take}>
+                          {(take) => (
+                            <box flexShrink={0} onMouseUp={() => act(() => take()(item.id))}>
+                              <text fg={theme.text.action.primary.base}>{` ${t("take")}`}</text>
+                            </box>
+                          )}
+                        </Show>
+                      </Show>
+                    }
+                  >
+                    <text flexShrink={0} fg={mine() ? theme.text.formfield.base : theme.text.muted}>
+                      {` ${mine() ? t("you") : item.owner}`}
+                    </text>
+                    <Show when={mine() && item.verify ? props.submit : undefined}>
+                      {(submit) => (
+                        <box flexShrink={0} onMouseUp={() => act(() => submit()(item.id), submitted(item.id))}>
+                          <text fg={theme.text.action.primary.base}>{` ${t("submit")}`}</text>
+                        </box>
+                      )}
+                    </Show>
+                    <Show when={mine() || !props.take}>
+                      <box
+                        flexShrink={0}
+                        onMouseOut={() => setArmed()}
+                        onMouseUp={() => {
+                          // Freeing another person's item needs a second click; giving back your own does not.
+                          if (!mine() && armed() !== actionId(item)) return setArmed(actionId(item))
+                          setArmed()
+                          act(() => props.release(item.id))
+                        }}
+                      >
+                        <text
+                          fg={
+                            armed() === actionId(item)
+                              ? theme.text.action.destructive.focused
+                              : theme.text.action.destructive.base
+                          }
+                        >
+                          {armed() === actionId(item) ? ` ${t("free?")}` : mine() ? ` ${t("release")}` : " ×"}
+                        </text>
+                      </box>
+                    </Show>
                   </Show>
-                </Show>
-              </box>
-            )
-          }}
-        </For>
-        <Show when={items().length > 0 && remaining().length === 0}>
-          <box paddingLeft={7} paddingRight={1}>
-            <text fg={theme.text.feedback.success.base}>{t("Everything is done.")}</text>
-          </box>
-        </Show>
-        <Show when={items().length === 0}>
-          <box paddingLeft={7} paddingRight={1}>
-            <text fg={theme.text.muted}>{t("The DoD file exists but contains no tasks.")}</text>
-          </box>
-        </Show>
-        <For each={events()}>
-          {(event) => (
+                </box>
+              )
+            }}
+          </For>
+          <Show when={items().length > 0 && remaining().length === 0}>
             <box paddingLeft={7} paddingRight={1}>
-              <text fg={theme.text.muted} wrapMode="none" truncate>
-                {`${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} `}
-                <span style={{ fg: theme.text.base }}>{event.who === "host" ? t("host") : event.who}</span>
-                {` ${verb(event)}${event.item ? ` ${event.item}` : ""}${event.detail ? `: ${event.detail}` : ""}`}
-              </text>
+              <text fg={theme.text.feedback.success.base}>{t("Everything is done.")}</text>
             </box>
-          )}
-        </For>
-      </Show>
+          </Show>
+          <Show when={items().length === 0}>
+            <box paddingLeft={7} paddingRight={1}>
+              <text fg={theme.text.muted}>{t("The DoD file exists but contains no tasks.")}</text>
+            </box>
+          </Show>
+          <For each={events()}>
+            {(event) => (
+              <box paddingLeft={7} paddingRight={1}>
+                <text fg={theme.text.muted} wrapMode="none" truncate>
+                  {`${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} `}
+                  <span style={{ fg: theme.text.base }}>{event.who === "host" ? t("host") : event.who}</span>
+                  {` ${verb(event)}${event.item ? ` ${event.item}` : ""}${event.detail ? `: ${event.detail}` : ""}`}
+                </text>
+              </box>
+            )}
+          </For>
+        </Show>
       </Show>
     </>
   )

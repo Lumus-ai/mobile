@@ -1,7 +1,7 @@
 export * as SessionContext from "./context.js"
 
-import { Model } from "../model.js"
 import { Dod } from "../dod.js"
+import { Model } from "../model.js"
 import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
