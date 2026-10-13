@@ -521,10 +521,26 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
+  // Keep the Git diagnostics when a source checkout cannot contact or inspect its upstream.
+  // Bun's generic "Failed with exit code 128" hides the stderr that explains the real problem.
+  const sourceCheck = <A>(operation: () => Promise<A>) =>
+    Effect.tryPromise({
+      try: operation,
+      catch: (cause) =>
+        new UpgradeError(
+          {
+            title: "Could not check for Opencode++ updates",
+            detail: errorDetail(cause),
+            retry: "Check that Git is installed and this checkout's remote or upstream is reachable, then try again.",
+          },
+          { cause },
+        ),
+    })
+
   // A development tree offers its upstream's new commits; the messages stay fixed text
   // so the TUI can translate them.
   const developmentBranch = Effect.fnUntraced(function* () {
-    const status = yield* Effect.promise(() => SourceRelease.branch())
+    const status = yield* sourceCheck(() => SourceRelease.branch())
     if (!status) return yield* installedBranch()
     if (status.type === "behind") return { type: "available" as const, version: `${status.name} +${status.behind}` }
     if (status.type === "current") return undefined
@@ -542,7 +558,7 @@ const make = Effect.gen(function* () {
   const installedBranch = Effect.fnUntraced(function* () {
     const newest = yield* Effect.tryPromise(() => SourceRelease.latest()).pipe(Effect.orElseSucceed(() => undefined))
     if (newest) return { type: "available" as const, version: newest }
-    const status = yield* Effect.promise(() => SourceRelease.install())
+    const status = yield* sourceCheck(() => SourceRelease.install())
     if (status.type === "behind") return { type: "available" as const, version: `${status.branch} +${status.behind}` }
     if (status.type === "current") return undefined
     return {
@@ -554,7 +570,7 @@ const make = Effect.gen(function* () {
   // The release this source checkout is pinned to and a newer published one, if any.
   // Undefined for development trees, which update through developmentBranch.
   const sourceRelease = Effect.fnUntraced(function* () {
-    const pinned = yield* Effect.promise(() => SourceRelease.current())
+    const pinned = yield* sourceCheck(() => SourceRelease.current())
     if (!pinned) return undefined
     const newest = yield* Effect.tryPromise(() => SourceRelease.latest()).pipe(Effect.orElseSucceed(() => undefined))
     return { current: pinned, available: newest && Bun.semver.order(newest, pinned) > 0 ? newest : undefined }
