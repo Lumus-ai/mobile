@@ -6,6 +6,10 @@ import { Effect, Option, Schema } from "effect"
 import type { Room } from "@opencode/schema/room"
 import { Instructions } from "./instructions/index.js"
 
+export class DodError extends Schema.TaggedError<DodError>()("Dod.Error", {
+  message: Schema.String,
+}) {}
+
 // The project's Definition of Done is a project-scoped source read by every AI session and,
 // when the project is shared, by room members. The file belongs to people and AIs: the CLI
 // board, lead AI and text editor can write it. Mutations edit only an item's own lines so
@@ -52,10 +56,6 @@ export const initialize = Effect.fn("Dod.initialize")(function* (directory: stri
       }),
   })
 })
-
-export class DodError extends Schema.TaggedError<DodError>()("Dod.Error", {
-  message: Schema.String,
-}) {}
 
 const FINISHED = new Set(["DONE", "OUT_OF_SCOPE"])
 const STEP = /^\s*\[(x|X)\]/
