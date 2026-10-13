@@ -146,6 +146,14 @@ const Task = Schema.Struct({
   // Optional for compatibility with tasks written by earlier versions.
   messageID: SessionMessage.ID.pipe(Schema.optional),
   reportID: SessionMessage.ID.pipe(Schema.optional),
+  // Once report construction starts, preserve the payload across retries and process crashes.
+  reportPrepared: Schema.Boolean.pipe(Schema.optional),
+  reportState: Schema.Literals(["done", "failed", "stopped", "recovered"]).pipe(Schema.optional),
+  reportDetail: Schema.String.pipe(Schema.optional),
+  reportText: Schema.String.pipe(Schema.optional),
+  reportOutcome: Schema.Literals(["complete", "partial", "incomplete", "unknown", "failed", "stopped"]).pipe(Schema.optional),
+  reportTitle: Schema.String.pipe(Schema.optional),
+  reportRole: Schema.String.pipe(Schema.optional),
 })
 const decodeTask = Schema.decodeUnknownOption(Task)
 // Saved roles and templates keep when they were first created, so custom ones list in creation order.
@@ -265,6 +273,21 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         Effect.gen(function* () {
           const task = decodeTask(yield* kv.get(TASK + sessionID))
           if (Option.isNone(task)) return
+          // A crash can happen after synthetic admission but before deleting the task marker.
+          // Find that durable report first; otherwise retrying with state="recovered" would
+          // reuse the ID with a different payload and conflict forever.
+          if (task.value.reportID) {
+            const recorded = yield* sessions
+              .message({ sessionID: task.value.main, messageID: task.value.reportID })
+              .pipe(Effect.orElseSucceed(() => undefined))
+            const pending = yield* sessions
+              .inbox(task.value.main)
+              .pipe(Effect.orElseSucceed((): SessionInbox.Info[] => []))
+            if (recorded || pending.some((item) => item.id === task.value.reportID)) {
+              yield* kv.remove(TASK + sessionID)
+              return
+            }
+          }
           const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
           if (!session) {
             yield* kv.remove(TASK + sessionID)
@@ -308,35 +331,50 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
               : answer
           const title = session.title ?? sessionID
           const reportID = task.value.reportID ?? SessionMessage.ID.create()
-          // Persist the report ID before admission so retries cannot append duplicate reports.
-          if (!task.value.reportID)
-            yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
-          // Admit the report before clearing the outstanding task marker. If the process
-          // dies between these writes, a retry uses the same reportID and SessionInbox makes
-          // admission idempotent; the task can never vanish without a durable report.
+          const wasPrepared = task.value.reportPrepared === true
+          const preparedTask = {
+            ...task.value,
+            reportID,
+            reportPrepared: true,
+            reportState: wasPrepared ? task.value.reportState ?? state : state,
+            reportDetail: wasPrepared ? task.value.reportDetail : detail,
+            reportText: wasPrepared ? task.value.reportText ?? body : body,
+            reportOutcome: wasPrepared ? task.value.reportOutcome ?? outcome : outcome,
+            reportTitle: wasPrepared ? task.value.reportTitle ?? title : title,
+            reportRole: wasPrepared ? task.value.reportRole ?? (session.agent ?? "default") : session.agent ?? "default",
+          }
+          // Persist the complete intended payload before admission. A retry after a crash uses
+          // the same ID and byte-for-byte equivalent content instead of inventing a "recovered" report.
+          yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)(preparedTask))
+          const reportState = preparedTask.reportState ?? state
+          const reportDetail = preparedTask.reportDetail
+          const reportBody = preparedTask.reportText ?? body
+          const reportOutcome = preparedTask.reportOutcome ?? outcome
+          const reportTitle = preparedTask.reportTitle ?? title
+          const reportRole = preparedTask.reportRole ?? (session.agent ?? "default")
           const admitted = yield* sessions
             .synthetic({
               id: reportID,
               sessionID: task.value.main,
-              description: `${title}: ${state}`,
+              description: `${reportTitle}: ${reportState}`,
               text: [
-                `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${title}" role="${session.agent ?? "default"}" state="${state}" outcome="${outcome}">`,
-                ...(detail ? [detail] : []),
-                body,
+                `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${reportTitle}" role="${reportRole}" state="${reportState}" outcome="${reportOutcome}">`,
+                ...(reportDetail ? [reportDetail] : []),
+                reportBody,
                 "</team-report>",
               ].join("\n"),
               metadata: {
                 source: "team",
                 sessionID,
-                state,
-                outcome,
+                state: reportState,
+                outcome: reportOutcome,
                 ...(task.value.messageID ? { taskID: task.value.messageID } : {}),
               },
             })
             .pipe(Effect.as(true), Effect.orElseSucceed(() => false))
           // Keep the task marker until admission succeeds; it is the durable retry record.
           if (admitted) yield* kv.remove(TASK + sessionID)
-          else yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)({ ...task.value, reportID }))
+          else yield* kv.set(TASK + sessionID, Schema.encodeSync(Task)(preparedTask))
       }),
     )
 

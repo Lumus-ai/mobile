@@ -21,6 +21,7 @@ import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionStore } from "@opencode/core/session/store"
+import { KV } from "@opencode/core/kv"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -269,6 +270,53 @@ describe("Orchestra team", () => {
       // Recovery is idempotent after the durable marker has been cleared.
       yield* orchestra.mainOf(project.main!)
       expect(yield* reports(project.main!)).toHaveLength(1)
+    }).pipe(Effect.scoped),
+  ),
+  it.live("clears the marker when a report was admitted just before a crash", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-report-retry-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Report retry", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      yield* Effect.acquireRelease(
+        Effect.sync(() => suppressTerminalEvent.add(worker.id)),
+        () => Effect.sync(() => suppressTerminalEvent.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      yield* Effect.sleep("50 millis")
+      const taskKey = `orchestra/task/${worker.id}`
+      const value = yield* kv.get(taskKey)
+      expect(value).toBeDefined()
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Missing task marker")
+      const reportID = SessionMessage.ID.create()
+      const original = value as Record<string, unknown>
+      yield* kv.set(taskKey, { ...original, reportID })
+
+      // Simulate the crash window: the report made it to the inbox, but the task marker wasn't cleared.
+      const taskID = typeof original.messageID === "string" ? original.messageID : "legacy"
+      const reportText = `<team-report session="${worker.id}" task="${taskID}" title="Developer" role="${Orchestra.role("developer")}" state="done" outcome="unknown">\nOriginal durable report\n</team-report>`
+      yield* sessions.synthetic({
+        id: reportID,
+        sessionID: project.main!,
+        description: "Developer: done",
+        text: reportText,
+        metadata: {
+          source: "team",
+          sessionID: worker.id,
+          state: "done",
+          outcome: "unknown",
+          ...(taskID === "legacy" ? {} : { taskID }),
+        },
+      })
+      expect(yield* reports(project.main!)).toHaveLength(1)
+
+      // Reconciliation must recognize the already-admitted ID, not retry with a conflicting body.
+      yield* orchestra.mainOf(project.main!)
+      expect(yield* reports(project.main!)).toHaveLength(1)
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
     }).pipe(Effect.scoped),
   ),
   it.live("does not report an unrelated completion for an undispatched queued task", () =>
