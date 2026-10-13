@@ -94,7 +94,7 @@ const locations = makeGlobalNode({
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([Database.node, KV.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(execution),
