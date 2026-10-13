@@ -272,12 +272,27 @@ test("All off also clears saved switches that are outside the current registry r
       hit = hit.parent instanceof Renderable ? hit.parent : undefined
     }
     await app.mockMouse.click(x, row)
-    await Bun.sleep(50)
-    const afterFrame = app.captureCharFrame()
-    const counter = rowValue(afterFrame, "For the model")
-    if (counter !== "0/" + hubRegistryStatus({ probe }).tools.length) {
+    const expected = "0/" + hubRegistryStatus({ probe }).tools.length
+    const observations: Array<{ counter: string | undefined; targetEnabled: boolean | undefined; staleEnabled: boolean | undefined }> = []
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await Bun.sleep(10)
+      const observedFrame = app.captureCharFrame()
+      const state = await HubState.read({ directory: tmp.path })
+      observations.push({
+        counter: rowValue(observedFrame, "For the model"),
+        targetEnabled: state.enabled[target],
+        staleEnabled: state.enabled[stale],
+      })
+    }
+    const last = observations.at(-1)
+    if (
+      !last ||
+      last.counter !== expected ||
+      last.targetEnabled !== false ||
+      last.staleEnabled !== false
+    ) {
       throw new Error(
-        "DEBUG All off failed click: " +
+        "DEBUG All off observations: " +
           JSON.stringify(
             {
               x,
@@ -285,10 +300,9 @@ test("All off also clears saved switches that are outside the current registry r
               rowText: lines[row],
               hitId,
               chain,
-              targetEnabled: (await HubState.read({ directory: tmp.path })).enabled[target],
-              staleEnabled: (await HubState.read({ directory: tmp.path })).enabled[stale],
-              counter,
-              statusRow: afterFrame.split("\n").find((line) => line.includes("For the model")),
+              expected,
+              observations,
+              finalFrame: app.captureCharFrame(),
             },
             null,
             2,
@@ -296,7 +310,6 @@ test("All off also clears saved switches that are outside the current registry r
       )
     }
 
-    await app.waitForFrame((frame) => rowValue(frame, "For the model") === "0/" + hubRegistryStatus({ probe }).tools.length)
     expect(await untilEnabled(tmp.path, target, false)).toBe(true)
     expect(await untilEnabled(tmp.path, stale, false)).toBe(true)
   } finally {
