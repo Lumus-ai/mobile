@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schedule } from "effect"
+import { Effect, Layer, Schedule, Schema } from "effect"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -159,6 +159,37 @@ describe("Orchestra team", () => {
       expect(main.agent).toBe(Orchestra.agent)
       expect(yield* orchestra.mainOf(main.id)).toMatchObject({ id: project.id })
     }),
+  )
+
+  it.live("concurrent main repair creates one orchestrator for a legacy project", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-concurrent-main-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Concurrent", directory: tmp.path })
+
+      // Simulate an older project record whose main session was removed.
+      yield* kv.set(
+        `orchestra/project/${project.id}`,
+        Schema.encodeSync(Orchestra.Project)({
+          id: project.id,
+          name: project.name,
+          directory: project.directory,
+          created: project.created,
+        }),
+      )
+      yield* sessions.remove(project.main!)
+
+      const repaired = yield* Effect.all(
+        Array.from({ length: 8 }, () => orchestra.main(project.id)),
+        { concurrency: "unbounded" },
+      )
+      expect(new Set(repaired.map((session) => session.id)).size).toBe(1)
+      expect(repaired.every((session) => session.agent === Orchestra.agent)).toBe(true)
+      expect((yield* orchestra.projects()).find((item) => item.id === project.id)?.main).toBe(repaired[0].id)
+      expect(yield* orchestra.mainOf(repaired[0].id)).toMatchObject({ id: project.id })
+    }).pipe(Effect.scoped),
   )
 
   it.live("a dispatched task reports back to the orchestrator when its run ends", () =>
