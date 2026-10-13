@@ -42,7 +42,7 @@ export function HoverAction(props: Props) {
       gap={props.gap}
       flexDirection={props.flexDirection ?? "row"}
       justifyContent={props.justifyContent}
-      backgroundColor={hovered() && !props.disabled ? theme.increase(theme.background.base, 4) : undefined}
+      backgroundColor={hovered() && !props.disabled ? theme.increase(theme.background.raised.base, 4) : undefined}
       onMouseOver={(event) => {
         event.stopPropagation()
         setHovered(true)
