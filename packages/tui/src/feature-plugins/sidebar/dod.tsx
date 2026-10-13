@@ -1,6 +1,7 @@
 import path from "node:path"
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { Plugin } from "@opencode/plugin/tui"
+import type { PanelInput } from "@opencode/plugin/tui/context"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
 
@@ -138,22 +139,38 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
 
   return (
     <box gap={1}>
-      <box
-        id="sidebar.dod.toggle"
-        flexDirection="row"
-        alignItems="center"
-        gap={1}
-        onMouseUp={() => setOpen((value) => !value)}
-      >
-        <text fg={theme.text.action.primary.base}>{open() ? "▾" : "▸"}</text>
-        <box flexGrow={1} minWidth={0}>
-          <text fg={theme.text.base} wrapMode="none" truncate>
-            <b>{t("DoD")}</b>
-          </text>
-        </box>
-        <text fg={theme.text.muted} wrapMode="none" truncate>
-          {heading()}
+      <box flexDirection="row" alignItems="center" gap={1}>
+        <text
+          id="sidebar.dod.preview-toggle"
+          fg={theme.text.action.primary.base}
+          onMouseUp={(event) => {
+            event.stopPropagation()
+            setOpen((value) => !value)
+          }}
+        >
+          {open() ? "▾" : "▸"}
         </text>
+        <box
+          id="sidebar.dod.open"
+          flexDirection="row"
+          alignItems="center"
+          gap={1}
+          flexGrow={1}
+          minWidth={0}
+          onMouseUp={() => {
+            if (!props.context.ui.panel.open("opencode.sidebar.dod")) setOpen(true)
+          }}
+        >
+          <box flexGrow={1} minWidth={0}>
+            <text fg={theme.text.action.primary.base} wrapMode="none" truncate>
+              <b>{t("DoD")}</b>
+            </text>
+          </box>
+          <text fg={theme.text.muted} wrapMode="none" truncate>
+            {heading()}
+          </text>
+          <text fg={theme.text.action.primary.base}>↗</text>
+        </box>
       </box>
 
       <Show when={board().type === "ready"}>
@@ -198,6 +215,179 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
             )}
           </For>
         </Show>
+      </Show>
+    </box>
+  )
+}
+
+
+/**
+ * Full task-board view opened from the session sidebar. It deliberately reads the
+ * exact same project DoD file and uses the same parser/progress rules as the compact
+ * sidebar view; it is a larger presentation, not a second task store.
+ */
+export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelInput }) {
+  const theme = props.context.theme
+  const t = useT()
+  const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
+  let revision = 0
+
+  const directory = () =>
+    props.context.data.session.get(props.panel.sessionID)?.location?.directory ?? props.context.location?.directory
+
+  const refresh = async (root: string | undefined) => {
+    const current = ++revision
+    if (!root) {
+      setBoard({ type: "missing" })
+      return
+    }
+    try {
+      const file = Bun.file(path.join(root, FILE))
+      if (!(await file.exists())) {
+        if (current === revision) setBoard({ type: "missing" })
+        return
+      }
+      const items = parseDodBoard(await file.text())
+      if (current === revision) setBoard({ type: "ready", items })
+    } catch (cause) {
+      if (current !== revision) return
+      setBoard({ type: "error", reason: cause instanceof Error ? cause.message : String(cause) })
+    }
+  }
+
+  createEffect(() => void refresh(directory()))
+  onMount(() => {
+    const timer = setInterval(() => void refresh(directory()), 5_000)
+    onCleanup(() => {
+      revision++
+      clearInterval(timer)
+    })
+  })
+
+  const items = () => {
+    const value = board()
+    return value.type === "ready" ? value.items : []
+  }
+  const summary = () => summarizeDodBoard(items())
+  const barWidth = () => Math.max(8, Math.min(40, props.panel.width - 8))
+  const filled = () => Math.round((summary().percent / 100) * barWidth())
+  const color = (state: string) =>
+    state === "DONE" || state === "OUT_OF_SCOPE"
+      ? theme.text.feedback.success.base
+      : state === "IN_PROGRESS"
+        ? theme.text.feedback.info.base
+        : state === "BLOCKED"
+          ? theme.text.feedback.warning.base
+          : state === "FAILED"
+            ? theme.text.feedback.error.base
+            : theme.text.muted
+  const stateLabel = (state: string) => {
+    const labels: Record<string, string> = {
+      DONE: "Done",
+      IN_PROGRESS: "In progress",
+      BLOCKED: "Blocked",
+      FAILED: "Failed",
+      OUT_OF_SCOPE: "Out of scope",
+      NOT_STARTED: "Not started",
+    }
+    return t(labels[state] ?? state)
+  }
+
+  return (
+    <box flexDirection="column" flexGrow={1} minWidth={0} minHeight={0} padding={1} gap={1}>
+      <box flexDirection="row" alignItems="center" gap={1}>
+        <box flexGrow={1} minWidth={0} gap={1}>
+          <text fg={theme.text.base}>
+            <b>{t("Project DoD")}</b>
+          </text>
+          <Show when={directory()}>
+            {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{props.context.ui.format.path(root())}</text>}
+          </Show>
+        </box>
+        <text
+          id="dod.panel.close"
+          fg={theme.text.action.primary.base}
+          onMouseUp={() => props.panel.close()}
+        >
+          {t("Close")} ✕
+        </text>
+      </box>
+
+      <Show when={board().type === "loading"}>
+        <text fg={theme.text.muted}>{t("Loading DoD…")}</text>
+      </Show>
+      <Show when={board().type === "missing"}>
+        <text fg={theme.text.muted}>{t("DoD file is missing")}</text>
+      </Show>
+      <Show when={board().type === "error"}>
+        <text fg={theme.text.feedback.error.base} wrapMode="word">
+          {t("DoD read error: {reason}", { reason: board().type === "error" ? board().reason : "" })}
+        </text>
+      </Show>
+      <Show when={board().type === "ready"}>
+        <box gap={1}>
+          <box flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
+            <text fg={theme.text.base}>{t("Progress")}</text>
+            <text fg={theme.text.feedback.success.base}>
+              {summary().finished}/{summary().total} · {summary().percent}%
+            </text>
+          </box>
+          <text id="dod.panel.progress" wrapMode="none">
+            <span style={{ fg: theme.text.feedback.success.base }}>{"█".repeat(filled())}</span>
+            <span style={{ fg: theme.text.muted }}>{"░".repeat(Math.max(0, barWidth() - filled()))}</span>
+          </text>
+          <box flexDirection="row" gap={2}>
+            <text fg={theme.text.feedback.info.base}>
+              {t("In progress")}: {items().filter((item) => item.state === "IN_PROGRESS").length}
+            </text>
+            <text fg={theme.text.feedback.warning.base}>
+              {t("Blocked")}: {items().filter((item) => item.state === "BLOCKED").length}
+            </text>
+            <text fg={theme.text.feedback.error.base}>
+              {t("Failed")}: {items().filter((item) => item.state === "FAILED").length}
+            </text>
+          </box>
+        </box>
+        <box flexGrow={1} minHeight={0}>
+          <scrollbox
+            flexGrow={1}
+            minHeight={0}
+            verticalScrollbarOptions={{ visible: true }}
+            horizontalScrollbarOptions={{ visible: false }}
+          >
+            <box gap={1} paddingRight={1}>
+              <Show when={items().length === 0}>
+                <text fg={theme.text.muted}>{t("No tasks yet")}</text>
+              </Show>
+              <For each={items()}>
+                {(item) => (
+                  <box
+                    id={"dod.task." + item.id}
+                    flexDirection="row"
+                    alignItems="flex-start"
+                    gap={1}
+                    paddingLeft={1}
+                    paddingRight={1}
+                  >
+                    <text fg={color(item.state)}>{MARK[item.state] ?? "·"}</text>
+                    <box flexGrow={1} minWidth={0} gap={1}>
+                      <text fg={theme.text.base} wrapMode="word">
+                        <span style={{ fg: theme.text.muted }}>{item.id + " "}</span>
+                        {item.title}
+                      </text>
+                      <text fg={color(item.state)}>{stateLabel(item.state)}</text>
+                    </box>
+                    <Show when={item.total > 0}>
+                      <text fg={theme.text.muted} wrapMode="none">
+                        {item.done}/{item.total} {t("steps")}
+                      </text>
+                    </Show>
+                  </box>
+                )}
+              </For>
+            </box>
+          </scrollbox>
+        </box>
       </Show>
     </box>
   )
