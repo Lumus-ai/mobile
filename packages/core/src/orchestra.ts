@@ -13,6 +13,7 @@ import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
 import { Session } from "./session.js"
+import { SessionStore } from "./session/store.js"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "./session/message.js"
 import { Dod } from "./dod.js"
@@ -156,11 +157,12 @@ const decodeCreated = Schema.decodeUnknownOption(Schema.Struct({ created: Schema
 
 // Annotated: the layer calls Session operations whose types reach back through the
 // instance graph that includes this node, so an inferred type would be circular.
-const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.Service | Bus.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionStore.Service | FSUtil.Service | Bus.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const kv = yield* KV.Service
     const sessions = yield* Session.Service
+    const sessionStore = yield* SessionStore.Service
     const fs = yield* FSUtil.Service
     const bus = yield* Bus.Service
     // Serialize task assignment per worker while allowing different workers to run in parallel.
@@ -351,6 +353,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
         )
       const pending = yield* read()
       const active = yield* sessions.active
+      // A durable execution claim means this run must be resumed after restart; its partial
+      // messages are not proof that the assigned task has finished.
+      const suspended = new Set(yield* sessionStore.listSuspended())
       yield* Effect.forEach(
         pending,
         (entry) =>
@@ -358,7 +363,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | FSUtil.S
             const task = decodeTask(entry.value)
             if (Option.isNone(task)) return
             const sessionID = SessionID.make(entry.key.slice(TASK.length))
-            if (active.has(sessionID)) return
+            if (active.has(sessionID) || suspended.has(sessionID)) return
             const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
             if (!session) {
               yield* kv.remove(entry.key)
@@ -739,5 +744,5 @@ function finalText(message: SessionMessage.Info) {
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [KV.node, Session.node, FSUtil.node, Bus.node],
+  deps: [KV.node, Session.node, SessionStore.node, FSUtil.node, Bus.node],
 })

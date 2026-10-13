@@ -231,6 +231,7 @@ describe("Orchestra team", () => {
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-recovery-")))
       const orchestra = yield* Orchestra.Service
+      const sessionStore = yield* SessionStore.Service
       const project = yield* orchestra.create({ name: "Recovery", directory: tmp.path, template: "bugfix" })
       const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
       yield* Effect.acquireRelease(
@@ -243,8 +244,16 @@ describe("Orchestra team", () => {
       expect(yield* reports(project.main!)).toHaveLength(0)
       expect(yield* orchestra.pending(worker.id)).toBeNumber()
 
-      // No terminal event arrived. Resolving the main session reconciles durable task state.
+      // A persisted execution claim means a worker must resume; don't mistake its durable partial
+      // transcript for a finished task merely because this process has no local active fiber.
+      yield* sessionStore.claim(worker.id)
       suppressTerminalEvent.delete(worker.id)
+      yield* orchestra.mainOf(project.main!)
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // Once the durable execution claim clears, the missing terminal event can be reconciled.
+      yield* sessionStore.release(worker.id)
       yield* orchestra.mainOf(project.main!)
       const recovered = yield* reports(project.main!).pipe(
         Effect.filterOrFail((items) => items.length > 0),
