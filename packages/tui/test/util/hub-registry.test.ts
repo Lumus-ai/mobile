@@ -61,7 +61,11 @@ test("default probe mirrors the alias-aware host probe", () => {
   const status = hubRegistryStatus({ manager: "apt" })
   expect(status.total).toBe(platformEntries().length)
   const missing = new Set(status.missing.map((entry) => entry.tool))
-  const required = requiredTools()
+  const required = new Set(
+    offeredEntries((tool) => Hub.HubHost.has(tool, { platform: process.platform }), "apt").flatMap(
+      (entry) => entry.requires ?? [],
+    ),
+  )
   expect(status.installed.length + status.missing.length).toBe(required.size)
   for (const tool of required) {
     expect(status.installed.includes(tool) !== missing.has(tool)).toBe(true)
