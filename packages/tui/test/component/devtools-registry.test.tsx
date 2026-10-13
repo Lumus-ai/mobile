@@ -254,8 +254,10 @@ test("All off also clears saved switches that are outside the current registry r
     const lines = frame.split("\n")
     const row = lines.findIndex((line) => line.includes("All off"))
     const allOff = lines[row]!.indexOf("All off")
-    // Click the center of the label, clear of its bracket edge on terminal renderers.
-    await app.mockMouse.click(allOff + Math.floor("All off".length / 2), row)
+    const x = allOff + Math.floor("All off".length / 2)
+    // Prime hit-testing with a move: click() emits down/up, but no move event.
+    await app.mockMouse.moveTo(x, row)
+    await app.mockMouse.click(x, row)
 
     await app.waitForFrame((frame) => rowValue(frame, "For the model") === "0/" + hubRegistryStatus({ probe }).tools.length)
     expect(await untilEnabled(tmp.path, target, false)).toBe(true)
