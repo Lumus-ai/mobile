@@ -133,12 +133,15 @@ test("a new session started from a project carries its project owner metadata", 
   const add = cell(frame, "+ New session")
   // Click a visible character, not the whitespace after the plus sign.
   await setup.mockMouse.click(add.x + 2, add.y)
-  // Wait for Home's prompt to render instead of requiring the renderer to become visually idle.
-  // Background updates may keep scheduling frames even though the prompt is ready for input.
-  await setup.waitForFrame((frame) =>
-    ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"].some((text) =>
-      frame.includes(text),
-    ),
+  // A route change can leave a render scheduled in OpenTUI's test renderer;
+  // run that frame before waiting for Home's asynchronously loaded prompt.
+  await setup.renderOnce()
+  await setup.waitForFrame(
+    (frame) =>
+      ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"].some((text) =>
+        frame.includes(text),
+      ),
+    { maxPasses: 100 },
   )
 
   await setup.mockInput.typeText("hello")
