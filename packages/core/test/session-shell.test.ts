@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream } from "effect"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -60,6 +61,8 @@ const executionLayer = Layer.effect(
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node]), [
     Bus.node.replace(Bus.configured({ persist: true })),
+    // Avoid loading global MCP/plugin config during this test.
+    Config.node.replace(Config.configured({ global: false })),
     SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
     offlineModels,
   ]).pipe(Layer.provideMerge(controlLayer)),
