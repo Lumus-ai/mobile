@@ -560,7 +560,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             instances.provide(session),
             locationErrors,
             Effect.catchTag("LocationNotFoundError", Effect.die),
-            Effect.catch(() => Effect.fail(new ForbiddenError({ message: "The host did not allow this command" }))),
+            Effect.mapError(() => new ForbiddenError({ message: "The host did not allow this command" })),
           )
           codes.record(joined.room.id, { kind: "run", who: joined.member.name, detail: command })
           return yield* Effect.tryPromise({
@@ -683,7 +683,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             instances.provide(session),
             locationErrors,
             Effect.catchTag("LocationNotFoundError", Effect.die),
-            Effect.catch(() => Effect.fail(new ForbiddenError({ message: "The host did not allow this check" }))),
+            Effect.mapError(() => new ForbiddenError({ message: "The host did not allow this check" })),
           )
           const result = yield* Effect.tryPromise({
             try: (signal) => Passport.run(command, directory, signal),
