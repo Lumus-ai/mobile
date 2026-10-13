@@ -365,8 +365,9 @@ describe("Orchestra team", () => {
       expect(report).toContain("Developer: task answer")
       expect(yield* orchestra.pending(worker.id)).toBeUndefined()
     }).pipe(Effect.scoped),
-  )
+  ),
 
+  it.live("recovers a completed worker task when its terminal event was missed", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-recovery-")))
       const orchestra = yield* Orchestra.Service

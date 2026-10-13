@@ -249,7 +249,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
               if (oldMain) return
 
               const worker = yield* sessions.get(workerID).pipe(Effect.orElseSucceed(() => undefined))
-              let belongs = claims[workerID] === project.id
+              let belongs = claims[workerID] === project.id || claims[task.main] === project.id
               if (!belongs && worker) belongs = yield* owns(project, worker)
               if (!belongs) return
               yield* kv.set(entry.key, Schema.encodeSync(Task)({ ...task, main: mainID }))
