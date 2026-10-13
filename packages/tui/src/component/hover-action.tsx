@@ -15,6 +15,7 @@ type Props = {
   paddingTop?: number
   paddingBottom?: number
   gap?: number
+  flexDirection?: "row" | "column"
   justifyContent?: "flex-start" | "flex-end" | "center" | "space-between" | "space-around"
   onMouseEnter?: () => void
   onMouseLeave?: () => void
@@ -39,6 +40,7 @@ export function HoverAction(props: Props) {
       paddingTop={props.paddingTop}
       paddingBottom={props.paddingBottom}
       gap={props.gap}
+      flexDirection={props.flexDirection ?? "row"}
       justifyContent={props.justifyContent}
       backgroundColor={hovered() && !props.disabled ? theme.increase(theme.background.base, 4) : undefined}
       onMouseOver={(event) => {
