@@ -34,8 +34,8 @@ export function HoverAction(props: Props) {
       flexGrow={props.flexGrow}
       minWidth={props.minWidth}
       maxWidth={props.maxWidth}
-      paddingLeft={props.paddingLeft ?? 1}
-      paddingRight={props.paddingRight ?? 1}
+      paddingLeft={props.paddingLeft ?? 0}
+      paddingRight={props.paddingRight ?? 0}
       paddingTop={props.paddingTop}
       paddingBottom={props.paddingBottom}
       gap={props.gap}
