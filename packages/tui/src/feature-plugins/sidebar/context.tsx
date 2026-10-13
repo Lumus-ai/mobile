@@ -4,7 +4,7 @@ import { contextUsage } from "../../util/session"
 import { Locale } from "../../util/locale"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
-import { SidebarDod, SidebarDodPanel } from "./dod"
+import { DOD_PANEL, SidebarDod, SidebarDodPanel } from "./dod"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -86,7 +86,7 @@ export default Plugin.define({
     context.ui.slot({
       append: "session.panel",
       render: (panel) => (
-        <Show when={panel.name === "opencode.sidebar.dod"}>
+        <Show when={panel.name === DOD_PANEL}>
           <SidebarDodPanel context={context} panel={panel} />
         </Show>
       ),
