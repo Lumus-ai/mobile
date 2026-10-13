@@ -397,6 +397,8 @@ test("Participants under Multiplayer lists guests, steps their role and removes 
     fetch: async (url, request) => {
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/room") return json({ data: [room] })
+      if (url.pathname === `/api/room/${room.id}/dod`) return json({ items: [], status: "disabled" })
+      if (url.pathname === `/api/room/${room.id}/feed`) return json({ events: [] })
       if (url.pathname.startsWith(`/api/room/${room.id}/`) && request.method !== "GET")
         calls.push({
           method: request.method,
