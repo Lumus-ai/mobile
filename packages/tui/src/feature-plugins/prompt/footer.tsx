@@ -4,6 +4,7 @@ import { contextUsage, formatContextUsage } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 import { stringWidth } from "../../util/string-width"
 import { useT } from "../../util/i18n"
+import { hoverBackground } from "../../ui/hover"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -68,10 +69,21 @@ export function PromptFooter(props: {
             <box flexDirection="row" flexShrink={props.showDetails && layout().usage ? 0 : 1} minWidth={0}>
               <Show when={live()}>
                 <box
+                  id="prompt.footer.live"
                   flexShrink={0}
-                  onMouseOver={() => setLiveHovered(true)}
-                  onMouseOut={() => setLiveHovered(false)}
-                  onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
+                  backgroundColor={liveHovered() ? hoverBackground(props.context.theme) : undefined}
+                  onMouseOver={(event) => {
+                    event.stopPropagation()
+                    setLiveHovered(true)
+                  }}
+                  onMouseOut={(event) => {
+                    event.stopPropagation()
+                    setLiveHovered(false)
+                  }}
+                  onMouseUp={(event) => {
+                    event.stopPropagation()
+                    props.context.keymap.dispatch("session.child.first")
+                  }}
                 >
                   <text
                     fg={liveHovered() ? props.context.theme.text.base : props.context.theme.text.muted}

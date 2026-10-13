@@ -1,5 +1,6 @@
 import type { JSX } from "solid-js"
 import { useTheme } from "../context/theme"
+import { hoverBackground } from "../ui/hover"
 
 // One clickable line of the left panel. Hover is shared by the panel so only one
 // row lights up at a time, and the selected row marks where the user is.
@@ -21,7 +22,7 @@ export function Row(props: {
         props.selected
           ? theme.background.action.primary.focused
           : props.hover() === props.id
-            ? theme.increase(theme.background.raised.base, 4)
+            ? hoverBackground(theme)
             : undefined
       }
       onMouseOver={() => props.setHover(props.id)}

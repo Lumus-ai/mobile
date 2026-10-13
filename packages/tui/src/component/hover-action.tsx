@@ -1,5 +1,6 @@
 import { createSignal, type JSX } from "solid-js"
 import { useTheme } from "../context/theme"
+import { hoverBackground } from "../ui/hover"
 
 type Props = {
   id?: string
@@ -42,7 +43,7 @@ export function HoverAction(props: Props) {
       gap={props.gap}
       flexDirection={props.flexDirection ?? "row"}
       justifyContent={props.justifyContent}
-      backgroundColor={hovered() && !props.disabled ? theme.increase(theme.background.raised.base, 4) : undefined}
+      backgroundColor={hovered() && !props.disabled ? hoverBackground(theme) : undefined}
       onMouseOver={(event) => {
         event.stopPropagation()
         setHovered(true)

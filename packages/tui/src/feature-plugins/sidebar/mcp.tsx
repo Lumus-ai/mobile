@@ -66,7 +66,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                   flexDirection="row"
                   gap={1}
                   minWidth={0}
-                  backgroundColor={hovered() ? theme.background.raised.high : undefined}
+                  backgroundColor={hovered() ? hoverBackground(theme) : undefined}
                   onMouseOver={() => setHovered(true)}
                   onMouseOut={() => setHovered(false)}
                   onMouseUp={() =>

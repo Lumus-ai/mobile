@@ -12,6 +12,7 @@ import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
 import { Keymap } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
+import { hoverBackground } from "../ui/hover"
 import { useClipboard } from "../context/clipboard"
 import { useTuiPaths } from "../context/runtime"
 import { DialogHelp } from "../ui/dialog-help"
@@ -591,7 +592,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
         props.active
           ? theme.background.action.primary.focused
           : hovered()
-            ? theme.increase(theme.background.base, 4)
+            ? hoverBackground(theme)
             : undefined
       }
       onMouseOver={() => setHovered(true)}
@@ -611,7 +612,7 @@ function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; ho
   const [hovered, setHovered] = createSignal(false)
   return (
     <box
-      backgroundColor={props.hoverBackground && hovered() && !props.disabled ? theme.increase(theme.background.base, 4) : undefined}
+      backgroundColor={props.hoverBackground && hovered() && !props.disabled ? hoverBackground(theme) : undefined}
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
       onMouseUp={(event) => {

@@ -7,6 +7,7 @@ import { usePromptMove } from "../../component/prompt/move"
 import { hasConnectedProvider } from "../../util/connected-provider"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
+import { hoverBackground } from "../../ui/hover"
 
 export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: string }) {
   const t = useT()
@@ -51,7 +52,7 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={
-                hoveredAction() === "dismiss" ? props.context.theme.increase(props.context.theme.background.base, 4) : undefined
+                hoveredAction() === "dismiss" ? hoverBackground(props.context.theme) : undefined
               }
               onMouseOver={() => setHoveredAction("dismiss")}
               onMouseOut={() => setHoveredAction(undefined)}
@@ -79,7 +80,7 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
             gap={1}
             justifyContent="space-between"
             backgroundColor={
-              hoveredAction() === "connect" ? props.context.theme.increase(props.context.theme.background.base, 4) : undefined
+              hoveredAction() === "connect" ? hoverBackground(props.context.theme) : undefined
             }
             onMouseOver={() => setHoveredAction("connect")}
             onMouseOut={() => setHoveredAction(undefined)}

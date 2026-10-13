@@ -5,6 +5,7 @@ import { Plugin } from "@opencode/plugin/tui"
 import type { PanelInput } from "@opencode/plugin/tui/context"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
+import { hoverBackground } from "../../ui/hover"
 
 export const DOD_PANEL = "opencode.sidebar.dod"
 const FILE = path.join(".opencode", "dod.yaml")
@@ -175,7 +176,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
         <box
           id="sidebar.dod.preview-toggle"
           flexShrink={0}
-          backgroundColor={hoveredAction() === "toggle" ? theme.increase(theme.background.base, 4) : undefined}
+          backgroundColor={hoveredAction() === "toggle" ? hoverBackground(theme) : undefined}
           onMouseOver={() => setHoveredAction("toggle")}
           onMouseOut={() => setHoveredAction(undefined)}
           onMouseUp={(event) => {
@@ -199,7 +200,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
             flexShrink={0}
             paddingLeft={1}
             paddingRight={1}
-            backgroundColor={hoveredAction() === "open" ? theme.increase(theme.background.base, 4) : undefined}
+            backgroundColor={hoveredAction() === "open" ? hoverBackground(theme) : undefined}
             onMouseOver={() => setHoveredAction("open")}
             onMouseOut={() => setHoveredAction(undefined)}
             onMouseUp={(event) => {
@@ -362,7 +363,7 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
           flexShrink={0}
           paddingLeft={1}
           paddingRight={1}
-          backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : undefined}
+          backgroundColor={closeHovered() ? hoverBackground(theme) : undefined}
           onMouseOver={() => setCloseHovered(true)}
           onMouseOut={() => setCloseHovered(false)}
           onMouseUp={(event) => {
