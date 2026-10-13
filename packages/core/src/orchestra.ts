@@ -219,6 +219,41 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       return Orchestra.ownerOf(yield* projects(), session.location.directory, claimed)?.id === project.id
     })
 
+    // When a main Session is deleted, its replacement has a new ID. Keep any outstanding
+    // worker tasks reachable by transferring only markers that target a missing main and are
+    // demonstrably owned by this project. Never redirect work away from another live main.
+    const reconcileMainTasks = Effect.fn("Orchestra.reconcileMainTasks")(function* (
+      project: Project,
+      mainID: SessionID,
+    ) {
+      const read = (after?: string): Effect.Effect<KV.Entry[]> =>
+        kv.scan({ prefix: TASK, after, limit: 1000 }).pipe(
+          Effect.flatMap((result) =>
+            result.next
+              ? read(result.next).pipe(Effect.map((rest) => [...result.entries, ...rest]))
+              : Effect.succeed([...result.entries]),
+          ),
+        )
+      const [entries, claims] = yield* Effect.all([read(), owners()])
+      yield* Effect.forEach(
+        entries,
+        (entry) =>
+          Effect.gen(function* () {
+            const task = decodeTask(entry.value)
+            if (Option.isNone(task) || task.value.main === mainID) return
+            const oldMain = yield* sessions.get(task.value.main).pipe(Effect.orElseSucceed(() => undefined))
+            if (oldMain) return
+
+            const workerID = SessionID.make(entry.key.slice(TASK.length))
+            const worker = yield* sessions.get(workerID).pipe(Effect.orElseSucceed(() => undefined))
+            const belongs = claims[workerID] === project.id || (worker ? yield* owns(project, worker) : false)
+            if (!belongs) return
+            yield* kv.set(entry.key, Schema.encodeSync(Task)({ ...task.value, main: mainID }))
+          }),
+        { concurrency: "unbounded", discard: true },
+      )
+    })
+
     const save = (project: Project) =>
       kv.set(PROJECT + project.id, Schema.encodeSync(Project)(project)).pipe(Effect.as(project))
 
@@ -270,10 +305,11 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           const existing = project.main
             ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
             : undefined
+          let main: SessionSchema.Info
           if (existing) {
             // The session was created but the process died before clearing its reservation.
             yield* kv.remove(MAIN_INITIALIZING + id)
-            let main = existing
+            main = existing
             if (main.agent !== Orchestra.agent) {
               // Main sessions created before the Orchestra agent existed adopt it on next open.
               yield* sessions.switchAgent({ sessionID: main.id, agent: Orchestra.agent }).pipe(Effect.orDie)
@@ -285,25 +321,35 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
               yield* sessions.rename({ sessionID: main.id, title }).pipe(Effect.orDie)
               main = { ...main, title }
             }
-            return main
+          } else if (pending) {
+            main = yield* mainSession({ ...project, main: pending })
+          } else {
+            // Older versions created the Session before saving Project.main. Recover that orphan
+            // by its explicit project owner and orchestrator title rather than creating a duplicate.
+            const claims = yield* owners()
+            const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
+            const orphan = recent.find(
+              (session) => claims[session.id] === project.id && session.title?.endsWith(" · Orchestrator"),
+            )
+            if (orphan) {
+              yield* save({ ...project, main: orphan.id })
+              main = orphan
+              if (main.agent !== Orchestra.agent) {
+                yield* sessions.switchAgent({ sessionID: main.id, agent: Orchestra.agent }).pipe(Effect.orDie)
+                main = { ...main, agent: Orchestra.agent }
+              }
+              const title = `${project.name} · Orchestrator`
+              if (main.title !== title) {
+                yield* sessions.rename({ sessionID: main.id, title }).pipe(Effect.orDie)
+                main = { ...main, title }
+              }
+            } else {
+              // A dangling legacy main ID may refer to a deleted session; don't accidentally reuse it.
+              main = yield* mainSession({ ...project, main: undefined })
+            }
           }
-          if (pending) return yield* mainSession({ ...project, main: pending })
-
-          // Older versions created the Session before saving Project.main. Recover that orphan
-          // by its explicit project owner and orchestrator title rather than creating a duplicate.
-          const claims = yield* owners()
-          const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
-          const orphan = recent.find(
-            (session) => claims[session.id] === project.id && session.title?.endsWith(" · Orchestrator"),
-          )
-          if (orphan) {
-            yield* save({ ...project, main: orphan.id })
-            if (orphan.agent === Orchestra.agent) return orphan
-            yield* sessions.switchAgent({ sessionID: orphan.id, agent: Orchestra.agent }).pipe(Effect.orDie)
-            return { ...orphan, agent: Orchestra.agent }
-          }
-          // A dangling legacy main ID may refer to a deleted session; don't accidentally reuse it.
-          return yield* mainSession({ ...project, main: undefined })
+          yield* reconcileMainTasks(project, main.id)
+          return main
         }),
       )
 
