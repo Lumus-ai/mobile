@@ -59,7 +59,7 @@ function rowValue(frame: string, label: string) {
   return row?.slice(row.indexOf(label) + label.length).trim().split(/\s+/)[0]
 }
 
-// // Cell of `needle` on the row naming `tool`: the tool's own row carries both —
+// Cell of `needle` on the row naming `tool`: the tool's own row carries both —
 // a category line or a header may contain the name too, so one line must match.
 function cell(app: Awaited<ReturnType<typeof render>>, tool: string, needle: string) {
   const lines = app.captureCharFrame().split("\n")
