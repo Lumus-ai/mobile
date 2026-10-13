@@ -9,24 +9,12 @@ import "../../component/title-shimmer"
 
 import { getScrollAcceleration } from "../../util/scroll"
 import { useCompactLayout } from "../../ui/compact-layout"
-import { useProjects } from "../../context/projects"
-import { Orchestra } from "@opencode/schema/orchestra"
-import { ProjectDodEntry } from "../../component/project-dod"
 
 export function Sidebar(props: { sessionID: string }) {
   const data = useData()
-  const projects = useProjects()
   const theme = useTheme()
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
-  const projectDirectory = createMemo(() => {
-    const current = session()
-    if (!current) return
-    return (
-      Orchestra.ownerOf(projects.list(), current.location.directory, projects.owner(current.id))?.directory ??
-      current.location.directory
-    )
-  })
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const layout = useCompactLayout()
 
@@ -60,9 +48,6 @@ export function Sidebar(props: { sessionID: string }) {
             {withTimestampedFallback(session())}
           </title_shimmer>
         </box>
-        <Show when={projectDirectory()} keyed>
-          {(directory) => <ProjectDodEntry directory={directory()} />}
-        </Show>
         <scrollbox
           flexGrow={1}
           minHeight={0}
