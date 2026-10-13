@@ -469,9 +469,11 @@ test("vertical session tabs switch to horizontal below readable content width", 
   await setup.waitForFrame(hasVerticalTitle)
 
   setup.resize(100, 30)
+  await setup.renderOnce()
   await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
   expect(setup.captureCharFrame()).not.toContain("⌕")
   setup.resize(120, 30)
+  await setup.renderOnce()
   await setup.waitForFrame(hasVerticalTitle)
 })
 
