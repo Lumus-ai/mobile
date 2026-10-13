@@ -148,7 +148,7 @@ describe("Orchestra team", () => {
       expect(yield* Dod.read(tmp.path)).toMatchObject({ status: "ready", items: [] })
       expect(project.main).toBeDefined()
       const main = yield* orchestra.main(project.id)
-      expect(main.id).toBe(project.main)
+      expect(main.id).toBe(project.main!)
       expect(main.title).toBe("No team · Orchestrator")
       expect(main.agent).toBe(Orchestra.agent)
       expect(yield* orchestra.mainOf(main.id)).toMatchObject({ id: project.id })
