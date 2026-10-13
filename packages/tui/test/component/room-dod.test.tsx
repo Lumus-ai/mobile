@@ -63,6 +63,18 @@ test("a DoD that cannot be read says why instead of listing nothing", async () =
   }
 })
 
+test("a synchronous DoD adapter failure is rendered as a connection error", async () => {
+  const setup = await render(() => {
+    throw new Error("synchronous adapter failure")
+  })
+  try {
+    const frame = await frameWith(setup, "DoD connection error")
+    expect(frame).toContain("synchronous adapter failure")
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
 test("a failed refresh keeps the board and says since when it is stale", async () => {
   const outcomes = [Promise.resolve(board)]
   const setup = await render(() => outcomes.shift() ?? Promise.reject(new Error("connection reset")))
