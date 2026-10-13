@@ -14,7 +14,6 @@ import { AppProcess } from "@opencode/util/process"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
 import { ProjectSchema } from "./project/schema.js"
-import { Dod } from "./dod.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { WorktreeTable } from "./worktree/sql.js"
 
@@ -114,16 +113,6 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       yield* upsertProject(db, project).pipe(Effect.orDie)
-      // Project identity is first established here. Create its DoD on first resolution,
-      // and safely repair a missing board later without replacing project-authored content.
-      yield* Dod.initialize(project.directory).pipe(
-        Effect.catchTag("Dod.Error", (error) =>
-          Effect.logError("failed to initialize project DoD", {
-            directory: project.directory,
-            message: error.message,
-          }).pipe(Effect.as("unavailable" as const)),
-        ),
-      )
       // Clones share a project ID; only replace a canonical directory that is gone.
       if (
         previous &&
