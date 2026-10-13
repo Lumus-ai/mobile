@@ -382,6 +382,28 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
           const workerRemoved = session === undefined
 
+          const hasPreparedTerminalReport =
+            task.value.reportPrepared === true &&
+            task.value.reportState !== undefined &&
+            task.value.reportState !== "recovered"
+          if (state === "recovered" && !workerRemoved && !hasPreparedTerminalReport) {
+            // Recovery is based on an idle snapshot. Recheck immediately before preparing a report,
+            // because the worker may have been resumed after recoverPending took that snapshot.
+            const suspended = yield* sessionStore.listSuspended()
+            const active = yield* sessions.active
+            if (active.has(sessionID) || suspended.includes(sessionID)) {
+              if (task.value.reportPrepared === true) {
+                // A recovered payload that was prepared but not admitted is provisional too.
+                // Leave the stable ID in place, but let the actual terminal event prepare its payload.
+                yield* kv.set(
+                  TASK + sessionID,
+                  Schema.encodeSync(Task)({ ...task.value, reportPrepared: false }),
+                )
+              }
+              return
+            }
+          }
+
           // A worker may finish unrelated work while its dispatched task is still queued.
           // Do not consume the task marker or report that unrelated answer upstream.
           const taskMessage =
@@ -477,6 +499,49 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       }),
     )
 
+    // Discard only a genuinely orphaned reservation. A queued Inbox row, a projected user
+    // message, or a live execution claim means the task belongs to real work and must be preserved.
+    const reconcileUndelivered = (sessionID: SessionID, messageID: SessionMessage.ID) =>
+      dispatchLocks.withLock(sessionID)(
+        Effect.gen(function* () {
+          const key = TASK + sessionID
+          const current = decodeTask(yield* kv.get(key))
+          if (Option.isNone(current) || current.value.messageID !== messageID) return "changed" as const
+
+          const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
+          if (!session) return "missing" as const
+
+          const active = yield* sessions.active
+          if (active.has(sessionID)) return "active" as const
+          const suspended = yield* sessionStore.listSuspended()
+          if (suspended.includes(sessionID)) return "active" as const
+
+          const visible = yield* sessions.message({ sessionID, messageID })
+          if (visible?.type === "user") return "delivered" as const
+
+          const pending = yield* sessions
+            .inbox(sessionID)
+            .pipe(Effect.orElseSucceed((): SessionInbox.Info[] => []))
+          if (pending.some((item) => item.id === messageID && item.type === "user")) return "queued" as const
+
+          // Promotion moves the user item from Inbox into history transactionally. Recheck both
+          // the message and execution claim before clearing in case the worker changed while reading.
+          const visibleAfterInbox = yield* sessions.message({ sessionID, messageID })
+          if (visibleAfterInbox?.type === "user") return "delivered" as const
+          const activeAfterRead = yield* sessions.active
+          if (activeAfterRead.has(sessionID)) return "active" as const
+          const suspendedAfterRead = yield* sessionStore.listSuspended()
+          if (suspendedAfterRead.includes(sessionID)) return "active" as const
+          const stillExists = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
+          if (!stillExists) return "missing" as const
+
+          // The exact message ID is absent from both durable history and Inbox, while the worker
+          // is idle; only now is it safe to release this task reservation for a fresh dispatch.
+          yield* kv.remove(key)
+          return "discarded" as const
+        }),
+      )
+
     // Bus subscriptions only observe live events. Reconcile task markers left behind when a
     // worker completed before its terminal event could be observed by this process.
     const recoverPending = Effect.fn("Orchestra.recoverPending")(function* (mainID?: SessionID) {
@@ -515,8 +580,19 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             }
             if (task.value.messageID) {
               const input = yield* sessions.message({ sessionID, messageID: task.value.messageID })
-              // The task may still be queued while the worker finishes unrelated work.
-              if (input?.type !== "user") return
+              if (input?.type !== "user") {
+                const result = yield* reconcileUndelivered(sessionID, task.value.messageID)
+                if (result === "missing") {
+                  yield* report(
+                    sessionID,
+                    "failed",
+                    "Worker session was removed before its task could be reported.",
+                  )
+                }
+                // Queued/active/stale reservations are preserved; an orphan is cleared so dispatch can retry.
+                // Only a projected user message is evidence that this task actually reached the worker.
+                if (result !== "delivered") return
+              }
             }
             const recent = yield* sessions
               .messages({

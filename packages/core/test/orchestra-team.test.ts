@@ -415,6 +415,37 @@ describe("Orchestra team", () => {
       expect(yield* reports(project.main!)).toHaveLength(1)
     }).pipe(Effect.scoped),
   ),
+  it.live("clears an orphaned task reservation when its prompt was never admitted", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-orphaned-task-")))
+      const orchestra = yield* Orchestra.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Orphaned task", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      const messageID = SessionMessage.ID.create()
+      const reportID = SessionMessage.ID.create()
+      const taskKey = `orchestra/task/${worker.id}`
+
+      // Simulate a process crash after writing the reservation but before prompt admission.
+      yield* kv.set(taskKey, { main: project.main!, sent: Date.now(), messageID, reportID })
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      yield* orchestra.mainOf(project.main!)
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+      expect(yield* reports(project.main!)).toHaveLength(0)
+
+      // The stale marker no longer blocks the worker from accepting a fresh assignment.
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Retry after recovery" })
+      const [report] = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(report).toContain("Developer: task answer")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("reports a failed task when its worker session is deleted", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-deleted-worker-")))
@@ -509,6 +540,11 @@ describe("Orchestra team", () => {
 
       yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
       yield* Effect.sleep("50 millis")
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // A real queued Inbox item must survive recovery even though it is not in projected history yet.
+      yield* orchestra.mainOf(project.main!)
       expect(yield* reports(project.main!)).toHaveLength(0)
       expect(yield* orchestra.pending(worker.id)).toBeNumber()
 
