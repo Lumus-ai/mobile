@@ -76,10 +76,9 @@ export function ProjectTree(props: { width: number }) {
     }, 4_000)
   }
   const setHover = (id: string | undefined) => {
+    // Hover may briefly move between children when a label changes width. Confirmation is
+    // cleared by a different destructive action or by timeout, never by pointer bookkeeping.
     setHoverState(id)
-    // Moving onto another actual row/action cancels confirmation; transient leave events
-    // during layout changes do not, because they carry no new hover target.
-    if (id !== undefined && armed() && id !== armed()) clearArmed()
   }
   onCleanup(() => {
     if (armTimer !== undefined) clearTimeout(armTimer)
@@ -356,8 +355,6 @@ export function ProjectTree(props: { width: number }) {
                               </HoverAction>
                               <HoverAction
                                 id={`session-access:${session.id}`}
-                                paddingLeft={1}
-                                paddingRight={1}
                                 onMouseEnter={() => setHover(session.id)}
                                 onMouseLeave={() => setHover(session.id)}
                                 onClick={() => cycle(session.id)}
