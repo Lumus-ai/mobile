@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { FilePath } from "../../ui/file-path"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
@@ -7,11 +7,11 @@ import { usePromptMove } from "../../component/prompt/move"
 import { hasConnectedProvider } from "../../util/connected-provider"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
-import { HoverAction } from "../../component/hover-action"
 
 export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: string }) {
   const t = useT()
   const dimensions = useTerminalDimensions()
+  const [hoveredAction, setHoveredAction] = createSignal<"dismiss" | "connect">()
   const [onboarding, updateOnboarding] = props.context.storage.store("getting-started", {
     initial: { dismissed: false },
   })
@@ -46,18 +46,24 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
             <text fg={props.context.theme.text.base}>
               <b>{t("Getting started")}</b>
             </text>
-            <HoverAction
+            <box
               id="sidebar.footer.getting-started.dismiss"
               paddingLeft={1}
               paddingRight={1}
-              onClick={() => {
+              backgroundColor={
+                hoveredAction() === "dismiss" ? props.context.theme.increase(props.context.theme.background.base, 4) : undefined
+              }
+              onMouseOver={() => setHoveredAction("dismiss")}
+              onMouseOut={() => setHoveredAction(undefined)}
+              onMouseUp={(event) => {
+                event.stopPropagation()
                 void updateOnboarding((draft) => {
                   draft.dismissed = true
                 }).catch((error) => console.error("Failed to dismiss sidebar onboarding", error))
               }}
             >
               <text fg={props.context.theme.text.muted}>✕</text>
-            </HoverAction>
+            </box>
           </box>
           <text fg={props.context.theme.text.muted}>
             {t("Opencode++ includes free models so you can start immediately.")}
@@ -65,17 +71,26 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
           <text fg={props.context.theme.text.muted}>
             {t("Connect one of 75+ providers to use other models, including Claude, GPT and Gemini.")}
           </text>
-          <HoverAction
+          <box
             id="sidebar.footer.getting-started.connect"
+            flexDirection="row"
             flexGrow={1}
             flexShrink={1}
             gap={1}
             justifyContent="space-between"
-            onClick={() => props.context.keymap.dispatch("provider.connect")}
+            backgroundColor={
+              hoveredAction() === "connect" ? props.context.theme.increase(props.context.theme.background.base, 4) : undefined
+            }
+            onMouseOver={() => setHoveredAction("connect")}
+            onMouseOut={() => setHoveredAction(undefined)}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              props.context.keymap.dispatch("provider.connect")
+            }}
           >
             <text fg={props.context.theme.text.base}>{t("Connect provider")}</text>
             <text fg={props.context.theme.text.muted}>/connect</text>
-          </HoverAction>
+          </box>
         </box>
       </box>
     </Show>
