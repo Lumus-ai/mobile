@@ -74,7 +74,15 @@ export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (h
         orchestra
           .create(ctx.payload)
           .pipe(
-            Effect.catchTag("Orchestra.ProjectNotFoundError", missingProject),
+            // A concurrently removed project is an invalid creation state, not the
+            // project-detail 404 response used by the separate main/session routes.
+            Effect.catchTag(
+              "Orchestra.ProjectNotFoundError",
+              (error) =>
+                Effect.fail(
+                  new InvalidRequestError({ message: `Project disappeared during creation: ${error.projectID}` }),
+                ),
+            ),
             Effect.catchTag("Orchestra.DirectoryError", badDirectory),
             Effect.catchTag("Orchestra.TemplateNotFoundError", badTemplate),
             Effect.catchTag("Dod.Error", badDod),
