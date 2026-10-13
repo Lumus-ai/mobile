@@ -78,7 +78,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Bun
-        uses: $/.github/actions/setup-bun
+        uses: ./.github/actions/setup-bun
       - name: Test Effect simplification rules
         run: bun run test:effect-simplification-rules
       - name: Check Effect simplifications
