@@ -118,9 +118,12 @@ function cell(frame: string, needle: string) {
 test("a new session started from a project carries its project owner metadata", async () => {
   await using state = await tmpdir()
   const calls: Call[] = []
-  await using setup = await render(state.path, calls, [project])
+  // Keep the project panel comfortably inside the vertical layout range, and
+  // wait until the app has mounted before looking for its asynchronously loaded rows.
+  await using setup = await render(state.path, calls, [project], worker, "full", { width: 140 })
+  await setup.ready
 
-  const frame = await setup.waitForFrame((frame) => frame.includes("+ New session"))
+  const frame = await setup.waitForFrame((frame) => frame.includes("+ New session"), { maxPasses: 100 })
   const add = cell(frame, "+ New session")
   await setup.mockMouse.click(add.x + 1, add.y)
   // Navigating to Home swaps the session view for the prompt; wait for the UI to settle
