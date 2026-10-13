@@ -136,6 +136,20 @@ const reports = (sessionID: Session.ID) =>
   })
 
 describe("Orchestra team", () => {
+  it.live("creates a project DoD before returning even when no team is selected", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-project-")))
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "No team", directory: tmp.path })
+
+      const dodPath = path.join(tmp.path, Dod.FILE)
+      expect(yield* Effect.promise(() => Bun.file(dodPath).exists())).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(dodPath).text())).toContain("task_id: PROJECT-BOARD")
+      expect(yield* Dod.read(tmp.path)).toMatchObject({ status: "ready", items: [] })
+      expect(project.main).toBeUndefined()
+    }),
+  )
+
   it.live("a dispatched task reports back to the orchestrator when its run ends", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))
