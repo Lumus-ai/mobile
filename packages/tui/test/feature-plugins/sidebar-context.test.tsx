@@ -19,6 +19,9 @@ function context(options?: {
   const color = RGBA.fromInts(200, 200, 200)
   return {
     theme: {
+      // Hover tokens are intentionally absent; DoD must use its visible color fallback.
+      background: { base: RGBA.fromInts(20, 20, 20) },
+      increase: () => RGBA.fromInts(60, 60, 60),
       text: {
         base: color,
         muted: color,
