@@ -286,6 +286,11 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
           : state === "FAILED"
             ? theme.text.feedback.error.base
             : theme.text.muted
+  const errorHeading = () => {
+    const value = board()
+    return value.type === "error" ? t("DoD read error: {reason}", { reason: value.reason }) : ""
+  }
+
   const stateLabel = (state: string) => {
     const labels: Record<string, string> = {
       DONE: "Done",
@@ -326,7 +331,7 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
       </Show>
       <Show when={board().type === "error"}>
         <text fg={theme.text.feedback.error.base} wrapMode="word">
-          {t("DoD read error: {reason}", { reason: board().type === "error" ? board().reason : "" })}
+          {errorHeading()}
         </text>
       </Show>
       <Show when={board().type === "ready"}>
