@@ -216,8 +216,16 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
   const result = powershell
     ? ShellScan.scanPowerShell(command)
     : ShellScan.scan(command, name === "bash" || name === "zsh" ? name : "posix")
-  if (result.kind === "opaque")
-    return yield* Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${result.reason}`))
+  if (result.kind === "opaque") {
+    const shellName = powershell ? "PowerShell" : name
+    const hint =
+      powershell && result.reason === "invalid-structure"
+        ? "The command may mix PowerShell with POSIX syntax. PowerShell does not support Bash heredocs such as << 'PY'; set environment variables on a separate line, then pipe a PowerShell here-string to python -."
+        : "The command was not executed. Do not retry it unchanged. Rewrite it using syntax supported by the selected shell, simplify the command, or save the script to a file and invoke it. The scanner fails closed when it cannot safely determine command permissions."
+    return yield* Effect.fail(
+      new Error(`Portable shell scanner cannot analyze command for ${shellName}: ${result.reason}. ${hint}`),
+    )
+  }
 
   const output: Result = { commands: [], directories: [] }
   for (const item of result.commands) {
