@@ -52,12 +52,14 @@ async function untilEnabled(directory: string, tool: string, expected: boolean) 
   return false
 }
 
-// Value printed right after a summary label.
+// Value printed right after a summary label. Read the rendered row so varying
+// terminal spacing doesn't make the test depend on a fixed number of spaces.
 function rowValue(frame: string, label: string) {
-  return frame.match(new RegExp(`${label} (\\S+)`))?.[1]
+  const row = frame.split("\n").find((line) => line.includes(label))
+  return row?.slice(row.indexOf(label) + label.length).trim().split(/\s+/)[0]
 }
 
-// Cell of `needle` on the row naming `tool`: the tool's own row carries both —
+// // Cell of `needle` on the row naming `tool`: the tool's own row carries both —
 // a category line or a header may contain the name too, so one line must match.
 function cell(app: Awaited<ReturnType<typeof render>>, tool: string, needle: string) {
   const lines = app.captureCharFrame().split("\n")
@@ -293,6 +295,14 @@ test("search narrows the tool list by name or by what a recipe does", async () =
   await using tmp = await tmpdir()
   const app = await render({ probe, directory: tmp.path })
   try {
+    // Focus the actual input with a mouse click; the component's deferred focus
+    // can otherwise race with typeText on fast Windows test runs.
+    const lines = app.captureCharFrame().split("\n")
+    const row = lines.findIndex((line) => line.includes("tool, category or task:"))
+    expect(row).toBeGreaterThanOrEqual(0)
+    const x = lines[row]!.indexOf("tool, category or task:")
+    await app.mockMouse.click(x, row)
+    await Bun.sleep(10)
     await app.mockInput.typeText("yaml")
     await app.waitForFrame((frame) => frame.includes("[off] yq") && !frame.includes("[off] rg"))
     expect(app.captureCharFrame()).not.toContain("[off] git")
