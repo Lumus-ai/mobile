@@ -5,10 +5,23 @@ import { testRender } from "@opentui/solid"
 import type { Context } from "@opencode/plugin/tui/context"
 import { SidebarContext } from "../../src/feature-plugins/sidebar/context"
 
-function context(options?: { cost?: number; tokens?: number; limit?: number }) {
+function context(options?: {
+  cost?: number
+  tokens?: number
+  limit?: number
+  actionColor?: boolean
+  openPanel?: (name: string) => boolean
+}) {
   const color = RGBA.fromInts(200, 200, 200)
   return {
-    theme: { text: { base: color, muted: color, action: { primary: { base: color } }, feedback: { success: { base: color }, info: { base: color }, warning: { base: color }, error: { base: color } } } },
+    theme: {
+      text: {
+        base: color,
+        muted: color,
+        ...(options?.actionColor === false ? {} : { action: { primary: { base: color } } }),
+        feedback: { success: { base: color }, info: { base: color }, warning: { base: color }, error: { base: color } },
+      },
+    },
     data: {
       session: {
         get: () => ({ location: { directory: "/workspace" } }),
@@ -37,6 +50,11 @@ function context(options?: { cost?: number; tokens?: number; limit?: number }) {
           list: () =>
             options?.limit ? [{ providerID: "provider", id: "model", limit: { context: options.limit } }] : [],
         },
+      },
+    },
+    ui: {
+      panel: {
+        open: (name: string) => options?.openPanel?.(name) ?? true,
       },
     },
   } as unknown as Context
@@ -85,6 +103,40 @@ test("sidebar shows usage against the model context limit", async () => {
     expect(frame).toContain("█")
     expect(frame).toContain("150.0K / 200.0K tokens")
     expect(frame).toContain("$1.50 spent")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("DoD launcher remains visible and opens the existing task panel without an action theme color", async () => {
+  const opened: string[] = []
+  const app = await testRender(
+    () => (
+      <SidebarContext
+        context={context({
+          actionColor: false,
+          openPanel: (name) => {
+            opened.push(name)
+            return true
+          },
+        })}
+        sessionID="session"
+      />
+    ),
+    { width: 72, height: 12 },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("DoD")
+    const lines = frame.split("\n")
+    const y = lines.findIndex((line) => line.includes("DoD"))
+    expect(y).toBeGreaterThanOrEqual(0)
+    const x = lines[y].indexOf("DoD")
+    app.mockMouse.click(x, y)
+    await app.renderOnce()
+    expect(opened).toEqual(["opencode.sidebar.dod"])
   } finally {
     app.renderer.destroy()
   }
