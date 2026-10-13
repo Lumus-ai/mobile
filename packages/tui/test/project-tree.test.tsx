@@ -124,13 +124,19 @@ test("a new session started from a project carries its project owner metadata", 
   await using setup = await render(state.path, calls, [project], worker, "full", { width: 140 })
   await setup.ready
 
-  // Wait for the async project expansion too; otherwise its rows can appear between
-  // measuring the button coordinates and clicking, moving the button down the panel.
-  const frame = await setup.waitForFrame(
-    (frame) => frame.includes("+ New session") && frame.includes(worker.title),
+  // Wait for the entire project expansion, not just the session row. The session can
+  // render before its category/access metadata, which inserts rows and moves the button.
+  await setup.waitForFrame(
+    (frame) =>
+      frame.includes("+ New session") &&
+      frame.includes(worker.title) &&
+      frame.includes("Build") &&
+      frame.includes("[write]"),
     { maxPasses: 100 },
   )
-  const add = cell(frame, "+ New session")
+  // Use the current frame after a render so async row updates cannot stale the click position.
+  await setup.renderOnce()
+  const add = cell(setup.captureCharFrame(), "+ New session")
   // Click a visible character, not the whitespace after the plus sign.
   await setup.mockMouse.click(add.x + 2, add.y)
   // A route change can leave a render scheduled in OpenTUI's test renderer;
