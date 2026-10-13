@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Effect } from "effect"
 import { Dod } from "@opencode/core/dod"
+import { readInitial } from "./lib/instructions"
 import { tmpdir } from "./fixture/tmpdir"
 
 const FILE = `# The plan; comments stay.
@@ -59,6 +60,34 @@ describe("Dod", () => {
   test("a project without a DoD has no items", async () => {
     await using dir = await tmpdir()
     expect((await run(Dod.read(dir.path))).items).toEqual([])
+  })
+
+  test("the DoD source explicitly reports a missing board as disabled", async () => {
+    await using dir = await tmpdir()
+    const initial = await run(readInitial(Dod.instructions(dir.path)))
+    expect(initial.text).toContain("Project DoD status: DISABLED")
+    expect(initial.text).toContain(".opencode/dod.yaml does not exist")
+    expect(initial.text).not.toContain("Project DoD status: READY")
+  })
+
+  test("the DoD source is bound to each project's own root", async () => {
+    await using first = await project()
+    await using second = await tmpdir()
+    const firstText = (await run(readInitial(Dod.instructions(first.path)))).text
+    const secondText = (await run(readInitial(Dod.instructions(second.path)))).text
+    expect(firstText).toContain("Project DoD status: READY")
+    expect(firstText).toContain('"id": "L-001"')
+    expect(secondText).toContain("Project DoD status: DISABLED")
+    expect(secondText).not.toContain('"id": "L-001"')
+  })
+
+  test("a malformed DoD remains an error and never becomes ready", async () => {
+    await using dir = await project("leaves: [")
+    const board = await run(Dod.status(dir.path))
+    expect(board).toMatchObject({ type: "error" })
+    const prompt = (await run(readInitial(Dod.instructions(dir.path)))).text
+    expect(prompt).toContain("Project DoD status: ERROR")
+    expect(prompt).not.toContain("Project DoD status: READY")
   })
 
   test("taking an item edits only its owner and state lines", async () => {

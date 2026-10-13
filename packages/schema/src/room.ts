@@ -185,6 +185,9 @@ export interface DodNote extends Schema.Schema.Type<typeof DodNote> {}
 
 export const Dod = Schema.Struct({
   items: Schema.Array(DodItem),
+  // Explicit observation from the host: missing configuration is not a successful empty board.
+  // Optional for compatibility with older hosts that do not send a status yet.
+  status: Schema.Literals(["ready", "disabled"]).pipe(Schema.optional),
   // After a take: the item taken, and its handover note when one was written.
   taken: Schema.String.pipe(Schema.optional),
   note: DodNote.pipe(Schema.optional),

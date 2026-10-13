@@ -10,6 +10,7 @@ import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 const board: RoomDod = {
+  status: "ready",
   items: [
     { id: "auth", what: "Login works", stage: "build", state: "IN_PROGRESS", done: 1, total: 2 },
     { id: "docs", what: "Docs updated", stage: "build", state: "DONE", done: 1, total: 1 },
@@ -55,7 +56,7 @@ async function frameWith(setup: Awaited<ReturnType<typeof render>>, text: string
 test("a DoD that cannot be read says why instead of listing nothing", async () => {
   const setup = await render(() => Promise.reject(new Error("host unreachable")))
   try {
-    const frame = await frameWith(setup, "DoD could not be read")
+    const frame = await frameWith(setup, "DoD connection error")
     expect(frame).toContain("host unreachable")
   } finally {
     setup.renderer.destroy()
@@ -68,9 +69,56 @@ test("a failed refresh keeps the board and says since when it is stale", async (
   try {
     await frameWith(setup, "1/2")
     // The panel polls every five seconds; the second read fails.
-    const frame = await waitLong(setup, "DoD not updated since")
+    const frame = await waitLong(setup, "DoD response is stale")
     expect(frame).toContain("connection reset")
     expect(frame).toContain("1/2")
+  } finally {
+    setup.renderer.destroy()
+  }
+}, 12_000)
+
+test("a state-unknown response is not presented as ready", async () => {
+  const setup = await render(() => Promise.reject(new Error("Service did not answer: state unknown")))
+  try {
+    const frame = await frameWith(setup, "DoD state unknown")
+    expect(frame).toContain("Service did not answer: state unknown")
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a missing board is reported as disabled, not as an empty completed board", async () => {
+  const setup = await render(() => Promise.resolve({ items: [], status: "disabled" as const }))
+  try {
+    const frame = await frameWith(setup, "DoD is disabled")
+    expect(frame).toContain(".opencode/dod.yaml is missing")
+    expect(frame).not.toContain("Everything is done.")
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a response without an explicit state remains unknown", async () => {
+  const legacy: RoomDod = { items: board.items }
+  const setup = await render(() => Promise.resolve(legacy))
+  try {
+    const frame = await frameWith(setup, "DoD state unknown")
+    expect(frame).toContain("omitted the explicit service state")
+    expect(frame).toContain("1/2")
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a recovered connection returns the panel to ready", async () => {
+  const outcomes = [Promise.reject(new Error("connection reset")), Promise.resolve(board)]
+  const setup = await render(() => outcomes.shift() ?? Promise.resolve(board))
+  try {
+    const error = await frameWith(setup, "DoD connection error")
+    expect(error).toContain("connection reset")
+    const recovered = await waitLong(setup, "1/2")
+    expect(recovered).not.toContain("DoD connection error")
+    expect(recovered).not.toContain("DoD state unknown")
   } finally {
     setup.renderer.destroy()
   }

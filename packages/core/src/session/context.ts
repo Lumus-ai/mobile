@@ -1,6 +1,7 @@
 export * as SessionContext from "./context.js"
 
 import { Model } from "../model.js"
+import { Dod } from "../dod.js"
 import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
@@ -83,6 +84,7 @@ const layer = Layer.effect(
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
+    const projectDod = Dod.instructions(location.project.directory)
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const noteInstructions = yield* NoteInstructions.Service
@@ -155,6 +157,7 @@ const layer = Layer.effect(
         instructions: Instructions.combine([
           CodeModeInstructions.make(loaded.tools.codeModeCatalog),
           hubInstructions.load(),
+          projectDod,
           loaded.mcp,
           loaded.references,
           loaded.skills,

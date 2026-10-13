@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import type { RoomDod, RoomDodItem, RoomEvent, RoomFeed } from "@opencode/client/promise"
 import { useTheme } from "../context/theme"
 import { useToast } from "../ui/toast"
@@ -14,6 +14,14 @@ const FEED_SHOWN = 5
 // An empty feed answer waits this long on the host for the next event.
 const FEED_WAIT_MS = 20_000
 const FEED_RETRY_MS = 5_000
+
+type PanelState =
+  | { type: "starting" }
+  | { type: "ready" }
+  | { type: "disabled" }
+  | { type: "stale"; reason: string }
+  | { type: "connection-error"; reason: string }
+  | { type: "unknown"; reason: string }
 
 // The shared project's Definition of Done under a room in the Multiplayer panel: the
 // room's work queue, with who took each open item. A guest takes a free item or the next
@@ -39,28 +47,92 @@ export function RoomDodRows(props: {
   const [open, setOpen] = createSignal(false)
   const [armed, setArmed] = createSignal<string>()
   const [events, setEvents] = createSignal<readonly RoomEvent[]>([])
-  // Why the last read failed, and when one last succeeded. A failed read keeps the items
-  // already shown and says so: an empty list stays reserved for a project without a DoD,
-  // never for a host that is gone or a file that does not parse.
-  const [failure, setFailure] = createSignal<string>()
+  const [status, setStatus] = createSignal<PanelState>({ type: "starting" })
+  // Retain the last usable payload after a failed refresh, but never mark it as current.
   const [loadedAt, setLoadedAt] = createSignal<number>()
-  const read = () =>
+  let generation = 0
+  const read = () => {
+    const request = ++generation
+    const projectID = props.id
+    if (loadedAt() === undefined) setStatus({ type: "starting" })
     void props
       .load()
       .then((dod) => {
+        // A late response from the previous room/project must not overwrite the selected one.
+        if (request !== generation || projectID !== props.id) return
+        if (!dod || !Array.isArray(dod.items)) {
+          setStatus({ type: "unknown", reason: "The service returned an invalid DoD response." })
+          return
+        }
         setItems(dod.items)
-        setFailure()
         setLoadedAt(Date.now())
+        if (dod.status === "disabled") {
+          setItems([])
+          setStatus({ type: "disabled" })
+          return
+        }
+        if (dod.status === "ready") {
+          setStatus({ type: "ready" })
+          return
+        }
+        // An older server may return items without a status. The data can be shown, but
+        // the service state is unknown and must not be promoted to READY.
+        setStatus({
+          type: "unknown",
+          reason: "The response omitted the explicit service state; it is not being treated as ready.",
+        })
       })
-      .catch((error: unknown) => setFailure(errorMessage(error)))
+      .catch((error: unknown) => {
+        if (request !== generation || projectID !== props.id) return
+        const reason = errorMessage(error)
+        if (loadedAt() !== undefined) {
+          setStatus({ type: "stale", reason })
+        } else if (/service did not answer|state unknown|unknown state/i.test(reason)) {
+          setStatus({ type: "unknown", reason })
+        } else {
+          setStatus({ type: "connection-error", reason })
+        }
+      })
+  }
+
+  createEffect(
+    on(
+      () => props.id,
+      () => {
+        generation++
+        setItems([])
+        setEvents([])
+        setLoadedAt(undefined)
+        setStatus({ type: "starting" })
+        read()
+      },
+      { defer: false },
+    ),
+  )
+
+  const statusText = () => {
+    const current = status()
+    if (current.type === "ready") return
+    if (current.type === "starting") return t("DoD service is starting or checking the active project…")
+    if (current.type === "disabled") return t("DoD is disabled for this project: .opencode/dod.yaml is missing.")
+    if (current.type === "stale")
+      return t("DoD response is stale; last response at {time}. Refresh failed: {reason}", {
+        time: loadedAt() === undefined ? "unknown" : new Date(loadedAt()!).toLocaleTimeString(),
+        reason: current.reason,
+      })
+    if (current.type === "connection-error") return t("DoD connection error: {reason}", { reason: current.reason })
+    return t("DoD state unknown: {reason}", { reason: current.reason })
+  }
+  const showBoard = () => status().type === "ready" || (items().length > 0 && ["stale", "unknown"].includes(status().type))
+
   onMount(() => {
-    read()
     // Leases run out without an event, so the list still refreshes now and then.
     const timer = setInterval(read, 5000)
     const state = { alive: true, after: 0 }
     onCleanup(() => {
       clearInterval(timer)
       state.alive = false
+      generation++
     })
     const follow = async () => {
       while (state.alive) {
@@ -118,21 +190,26 @@ export function RoomDodRows(props: {
   const actionId = (item: RoomDodItem) => `${props.id}:dod:${item.id}`
 
   return (
-    <Show when={items().length > 0 || failure()}>
-      <Show when={failure()}>
-        {(reason) => (
+    <>
+      <Show when={statusText()}>
+        {(message) => (
           <box paddingLeft={6}>
-            <text fg={theme.text.feedback.error.base} wrapMode="word">
-              {loadedAt()
-                ? t("DoD not updated since {time}: {reason}", {
-                    time: new Date(loadedAt()!).toLocaleTimeString(),
-                    reason: reason(),
-                  })
-                : t("DoD could not be read: {reason}", { reason: reason() })}
+            <text
+              fg={
+                status().type === "starting"
+                  ? theme.text.muted
+                  : status().type === "disabled"
+                    ? theme.text.feedback.warning.base
+                    : theme.text.feedback.error.base
+              }
+              wrapMode="word"
+            >
+              {message()}
             </text>
           </box>
         )}
       </Show>
+      <Show when={showBoard()}>
       <Row id={`${props.id}:dod`} hover={props.hover} setHover={props.setHover} onClick={() => setOpen(!open())}>
         <text flexShrink={0} fg={theme.text.muted}>
           {open() ? "    ▾ " : "    ▸ "}
@@ -244,9 +321,14 @@ export function RoomDodRows(props: {
             )
           }}
         </For>
-        <Show when={remaining().length === 0}>
+        <Show when={items().length > 0 && remaining().length === 0}>
           <box paddingLeft={7} paddingRight={1}>
             <text fg={theme.text.feedback.success.base}>{t("Everything is done.")}</text>
+          </box>
+        </Show>
+        <Show when={items().length === 0}>
+          <box paddingLeft={7} paddingRight={1}>
+            <text fg={theme.text.muted}>{t("The DoD file exists but contains no tasks.")}</text>
           </box>
         </Show>
         <For each={events()}>
@@ -261,7 +343,8 @@ export function RoomDodRows(props: {
           )}
         </For>
       </Show>
-    </Show>
+      </Show>
+    </>
   )
 }
 
