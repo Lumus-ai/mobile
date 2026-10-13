@@ -4,7 +4,7 @@ import { contextUsage } from "../../util/session"
 import { Locale } from "../../util/locale"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
-import { SidebarDod } from "./dod"
+import { SidebarDod, SidebarDodPanel } from "./dod"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -82,6 +82,14 @@ export default Plugin.define({
     context.ui.slot({
       append: "sidebar.content",
       render: (props) => <SidebarContext context={context} sessionID={props.sessionID} />,
+    })
+    context.ui.slot({
+      append: "session.panel",
+      render: (panel) => (
+        <Show when={panel.name === "opencode.sidebar.dod"}>
+          <SidebarDodPanel context={context} panel={panel} />
+        </Show>
+      ),
     })
   },
 })
