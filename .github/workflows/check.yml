@@ -2,7 +2,7 @@ name: check
 
 on:
   push:
-    branches: [dev, v2]
+    branches: [dev, v2, lan-rooms]
   pull_request:
     branches: [dev, v2]
   workflow_dispatch:
