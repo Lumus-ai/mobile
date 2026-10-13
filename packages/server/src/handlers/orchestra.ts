@@ -1,4 +1,5 @@
 import { Orchestra } from "@opencode/core/orchestra"
+import { Dod } from "@opencode/core/dod"
 import { Session } from "@opencode/core/session"
 import { InvalidRequestError, ProjectNotFoundError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
@@ -26,6 +27,10 @@ function badDirectory(error: Orchestra.DirectoryError) {
 
 function badTeam(error: Orchestra.TeamError) {
   return Effect.fail(new InvalidRequestError({ message: error.message, field: error.field }))
+}
+
+function badDod(error: Dod.DodError) {
+  return Effect.fail(new InvalidRequestError({ message: error.message }))
 }
 
 export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (handlers) =>
@@ -71,6 +76,7 @@ export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (h
           .pipe(
             Effect.catchTag("Orchestra.DirectoryError", badDirectory),
             Effect.catchTag("Orchestra.TemplateNotFoundError", badTemplate),
+            Effect.catchTag("Dod.Error", badDod),
           ),
       )
       .handle("orchestra.project.update", (ctx) =>
@@ -91,7 +97,9 @@ export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (h
         }),
       )
       .handle("orchestra.project.main", (ctx) =>
-        orchestra.main(ctx.params.projectID).pipe(Effect.catchTag("Orchestra.ProjectNotFoundError", missingProject)),
+        orchestra
+          .main(ctx.params.projectID)
+          .pipe(Effect.catchTag("Orchestra.ProjectNotFoundError", missingProject), Effect.catchTag("Dod.Error", badDod)),
       )
       .handle(
         "orchestra.project.sessions",
