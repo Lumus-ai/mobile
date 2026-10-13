@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Schedule, Schema } from "effect"
+import { Effect, Exit, Fiber, Layer, Schedule, Schema, Scope } from "effect"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -256,9 +256,11 @@ describe("Orchestra team", () => {
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-create-delete-")))
       const orchestra = yield* Orchestra.Service
-      const creating = yield* Effect.fork(
-        orchestra.create({ name: "Create race", directory: tmp.path, template: "feature" }),
-      )
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const creating = yield* orchestra
+        .create({ name: "Create race", directory: tmp.path, template: "feature" })
+        .pipe(Effect.forkIn(scope, { startImmediately: true }))
 
       // A project becomes visible before its main Session finishes initialization. Remove it at
       // that boundary, which used to let template workers be created after their owner was gone.
@@ -269,7 +271,9 @@ describe("Orchestra team", () => {
         Effect.timeout("2 seconds"),
       )
       yield* orchestra.remove(project.id)
-      yield* Fiber.join(creating).pipe(Effect.either)
+      // Creation can either finish before removal acquires the lock, or observe that removal won.
+      // In both cases, the owner record must not survive under a project that no longer exists.
+      yield* Fiber.join(creating).pipe(Effect.ignore)
 
       expect((yield* orchestra.projects()).some((item) => item.id === project.id)).toBe(false)
       expect(Object.values(yield* orchestra.owners())).not.toContain(project.id)
