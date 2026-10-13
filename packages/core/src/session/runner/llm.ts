@@ -4,6 +4,7 @@ import { Message } from "@opencode/ai"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
+import { KV } from "../../kv.js"
 import { Bus } from "../../bus.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
 import { InstructionState } from "../instruction-state.js"
@@ -41,6 +42,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const lifecycle = yield* LocationLifecycle.Service
     const store = yield* SessionStore.Service
+    const kv = yield* KV.Service
     const context = yield* SessionContext.Service
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
@@ -206,14 +208,21 @@ const layer = Layer.effect(
     const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
-      const retry = yield* SessionRunnerRetry.make(bus, sessionID)
+      const retry = yield* SessionRunnerRetry.make(bus, sessionID, kv)
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
-        const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
+        let loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
+        // A sibling's 429 installs a shared provider gate. If we actually waited, reload
+        // the project DoD and the conversation so the resumed model request sees fresh state.
+        let waited = yield* retry.waitForGate(String(loaded.model.ref.providerID))
+        while (waited) {
+          loaded = yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load))
+          waited = yield* retry.waitForGate(String(loaded.model.ref.providerID))
+        }
         const compacted = yield* compaction.compact({ reason: "auto", context: loaded })
         if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })
         if (compacted.status === "completed") {
@@ -274,12 +283,14 @@ const layer = Layer.effect(
               decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
+              providerID: String(loaded.model.ref.providerID),
             }),
           Continue: Effect.fnUntraced(function* (outcome) {
             yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
+              providerID: String(loaded.model.ref.providerID),
             })
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
             assistantMessageID = SessionMessage.ID.create()
@@ -365,6 +376,7 @@ export const node = makeLocationNode({
     SessionContext.node,
     SessionModelTransport.node,
     SessionStore.node,
+    KV.node,
     SessionCompaction.node,
     Plugin.node,
     SessionTitle.node,
