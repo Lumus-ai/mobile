@@ -266,7 +266,26 @@ export const layer = (options?: Options) =>
               if (active.has(session.id)) return
               const claimed = yield* store.listSuspended()
               if (claimed.includes(session.id)) return
-              yield* execution.resume(session.id).pipe(Effect.ignore, Effect.forkIn(scope))
+              // Do not loop through startup after a failed/empty recovery that left the same
+              // runnable inbox work parked. A manual prompt/resume removes this marker.
+              const attempt = Effect.gen(function* () {
+                yield* execution.resume(session.id).pipe(Effect.ignore)
+                yield* execution.awaitIdle(session.id)
+                const active = yield* execution.active
+                if (active.has(session.id)) return
+                const claimed = yield* store.listSuspended()
+                if (claimed.includes(session.id)) return
+                const remaining = yield* sessions
+                  .inbox(session.id)
+                  .pipe(Effect.orElseSucceed((): SessionInbox.Info[] => []))
+                const stillRunnable = remaining.some((item) => {
+                  if (item.type === "move" || item.type === "compaction") return true
+                  if (item.type === "user") return item.payload.resumeOnStart ?? true
+                  return item.payload.resumeOnStart ?? (item.payload.metadata?.source !== "shell")
+                })
+                if (stillRunnable) yield* kv.set(resumeBlockedKey(session.id), true)
+              })
+              yield* attempt.pipe(Effect.ignore, Effect.forkIn(scope))
             }),
             { concurrency: "unbounded", discard: true },
           )

@@ -77,6 +77,45 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("parks startup recovery when a runnable inbox item remains undelivered", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const admission = yield* SessionInbox.Service
+      const kv = yield* KV.Service
+      const sessionID = Session.ID.make("ses_inbox_stays_pending")
+      yield* seedSessions(database, [sessionID])
+      yield* admission.admit({
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "user",
+          payload: SessionInbox.UserPayload.make({ text: "Work was not consumed", resumeOnStart: true }),
+          delivery: "queue",
+        },
+      })
+
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID: current }) => Effect.sync(() => void drained.push(current)),
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* restart.resumeSuspendedSessions
+      yield* execution.awaitIdle(sessionID)
+      expect(drained).toEqual([sessionID])
+      expect(yield* kv.get(resumeBlockedKey(sessionID))).toBe(true)
+      expect(yield* SessionInbox.list(database.db, sessionID)).toHaveLength(1)
+
+      yield* restart.resumeSuspendedSessions
+      expect(drained).toEqual([sessionID])
+      expect(yield* SessionInbox.list(database.db, sessionID)).toHaveLength(1)
+    }),
+  )
+
   it.effect("does not wake an idle session for a non-resumable synthetic notice", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
