@@ -252,13 +252,12 @@ describe("Orchestra team", () => {
 
       const result = yield* Effect.all(
         {
-          removed: orchestra.remove(project.id).pipe(Effect.either),
-          main: orchestra.main(project.id).pipe(Effect.either),
+          removed: orchestra.remove(project.id),
+          main: orchestra.main(project.id).pipe(Effect.orElseSucceed(() => undefined)),
         },
         { concurrency: "unbounded" },
       )
-      expect(result.removed._tag).toBe("Right")
-      if (result.main._tag === "Right") expect(result.main.right.id).toBe(project.main)
+      if (result.main) expect(result.main.id).toBe(project.main)
       expect((yield* orchestra.projects()).some((item) => item.id === project.id)).toBe(false)
     }).pipe(Effect.scoped),
   )
