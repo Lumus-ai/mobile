@@ -26,7 +26,7 @@ const STARTER = [
   "stages: []",
   "leaves: []",
   "",
-].join("\\n")
+].join("\n")
 
 // Idempotent and non-destructive: concurrent project resolution must never overwrite a
 // board that the user or another session has already created.
