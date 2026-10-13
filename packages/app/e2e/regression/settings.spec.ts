@@ -94,6 +94,35 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
+test("rapid theme changes settle on the last selected theme", async ({ page }) => {
+  const { settings } = await open(page)
+
+  // Theme JSON files are lazy-loaded chunks. Slow them down so several selection
+  // requests remain in flight at once, reproducing fast repeated clicks.
+  await page.route("**/*.js", async (route) => {
+    if (route.request().resourceType() === "script") {
+      await new Promise((resolve) => setTimeout(resolve, 1800))
+    }
+    await route.continue()
+  })
+
+  await settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+  const trigger = settings.locator('[data-action="settings-theme"] [data-component="select-v2"]')
+  await expect(trigger).toBeVisible({ timeout: 10000 })
+
+  for (const name of ["Aura", "Dracula", "Nord", "Solarized", "Vesper", "Cobalt2", "Vesper"]) {
+    await trigger.click()
+    await page.getByRole("option", { name, exact: true }).click()
+  }
+
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.theme), { timeout: 15000 })
+    .toBe("vesper")
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("opencode-theme-id")), { timeout: 15000 }).toBe(
+    "vesper",
+  )
+})
+
 test("another server's settings page survives refresh", async ({ page }) => {
   await mockRemoteServer(page, { directory: "/remote/settings-demo" })
   const { settings } = await open(page)

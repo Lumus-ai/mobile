@@ -216,6 +216,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     const loads = new Map<string, Promise<DesktopTheme | undefined>>()
+    let themeSelectionRevision = 0
+    let committedThemeId = themeId
 
     const load = (id: string) => {
       const next = id
@@ -264,10 +266,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       return [...all, ...extra]
     }
 
-    const loadThemes = () => Promise.all(themeIDs().map(load)).then(() => store.themes)
+    // A single missing chunk must not reject the whole preload or leave settings with
+    // an unhandled rejection. The selected theme is retried on demand.
+    const loadThemes = () =>
+      Promise.all(themeIDs().map((id) => load(id).catch(() => undefined))).then(() => store.themes)
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) {
+        const revision = ++themeSelectionRevision
         const next = resolveStoredTheme(e.newValue, store.themes)
 
         if (next !== e.newValue) {
@@ -278,20 +284,34 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         setStore("themeId", next)
 
         if (next === "oc-2") {
+          committedThemeId = next
           clear()
-
           return
         }
 
-        void load(next).then((theme) => {
-          if (!theme || store.themeId !== next) return
-          cacheThemeVariants(theme, next)
-        })
+        void load(next)
+          .then((theme) => {
+            if (revision !== themeSelectionRevision || store.themeId !== next) return
+            if (!theme) throw new Error(`Theme "${next}" could not be loaded`)
+            cacheThemeVariants(theme, next)
+            committedThemeId = next
+          })
+          .catch((error: unknown) => {
+            if (revision !== themeSelectionRevision || store.themeId !== next) return
+            const fallback = store.themes[committedThemeId] ? committedThemeId : "oc-2"
+            console.error(`Failed to load theme "${next}", restoring "${fallback}"`, error)
+            setStore("themeId", fallback)
+            committedThemeId = fallback
+            write(STORAGE_KEYS.THEME_ID, fallback)
+            if (fallback === "oc-2") clear()
+          })
       }
 
       if (e.key === STORAGE_KEYS.COLOR_SCHEME && e.newValue) {
-        setStore("colorScheme", e.newValue as ColorScheme)
-        setStore("mode", e.newValue === "system" ? getSystemMode() : (e.newValue as "light" | "dark"))
+        const scheme =
+          e.newValue === "light" || e.newValue === "dark" || e.newValue === "system" ? e.newValue : "system"
+        setStore("colorScheme", scheme)
+        setStore("mode", scheme === "system" ? getSystemMode() : scheme)
       }
     }
 
@@ -320,10 +340,23 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
       if (savedScheme !== store.colorScheme) setStore("colorScheme", savedScheme)
       setStore("mode", savedScheme === "system" ? getSystemMode() : savedScheme)
-      void load(savedTheme).then((theme) => {
-        if (!theme || store.themeId !== savedTheme) return
-        cacheThemeVariants(theme, savedTheme)
-      })
+      const revision = themeSelectionRevision
+      void load(savedTheme)
+        .then((theme) => {
+          if (revision !== themeSelectionRevision || store.themeId !== savedTheme) return
+          if (!theme) throw new Error(`Theme "${savedTheme}" could not be loaded`)
+          cacheThemeVariants(theme, savedTheme)
+          committedThemeId = savedTheme
+        })
+        .catch((error: unknown) => {
+          if (revision !== themeSelectionRevision || store.themeId !== savedTheme) return
+          const fallback = store.themes[committedThemeId] ? committedThemeId : "oc-2"
+          console.error(`Failed to restore theme "${savedTheme}", using "${fallback}"`, error)
+          setStore("themeId", fallback)
+          committedThemeId = fallback
+          write(STORAGE_KEYS.THEME_ID, fallback)
+          if (fallback === "oc-2") clear()
+        })
     })
 
     createEffect(() => {
@@ -338,30 +371,42 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
       if (!next) {
         console.warn(`Theme "${id}" not found`)
-
         return
       }
 
       if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) {
         console.warn(`Theme "${id}" not found`)
-
         return
       }
 
+      const revision = ++themeSelectionRevision
       setStore("themeId", next)
 
       if (next === "oc-2") {
+        committedThemeId = next
         write(STORAGE_KEYS.THEME_ID, next)
         clear()
-
         return
       }
 
-      void load(next).then((theme) => {
-        if (!theme || store.themeId !== next) return
-        cacheThemeVariants(theme, next)
-        write(STORAGE_KEYS.THEME_ID, next)
-      })
+      void load(next)
+        .then((theme) => {
+          if (revision !== themeSelectionRevision || store.themeId !== next) return
+          if (!theme) throw new Error(`Theme "${next}" could not be loaded`)
+          cacheThemeVariants(theme, next)
+          write(STORAGE_KEYS.THEME_ID, next)
+          committedThemeId = next
+        })
+        .catch((error: unknown) => {
+          // Do not let an older failed request overwrite a newer user choice.
+          if (revision !== themeSelectionRevision || store.themeId !== next) return
+          const fallback = store.themes[committedThemeId] ? committedThemeId : "oc-2"
+          console.error(`Failed to load theme "${next}", restoring "${fallback}"`, error)
+          setStore("themeId", fallback)
+          committedThemeId = fallback
+          write(STORAGE_KEYS.THEME_ID, fallback)
+          if (fallback === "oc-2") clear()
+        })
     }
 
     const setColorScheme = (scheme: ColorScheme) => {
@@ -388,30 +433,37 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
         if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) return
         setStore("previewThemeId", next)
-        void load(next).then((theme) => {
-          if (!theme || store.previewThemeId !== next) return
+        void load(next)
+          .then((theme) => {
+            if (!theme || store.previewThemeId !== next) return
 
-          const mode = store.previewScheme
-            ? store.previewScheme === "system"
-              ? getSystemMode()
-              : store.previewScheme
-            : store.mode
-
-          applyTheme(theme, next, mode, store.previewScheme ?? store.colorScheme)
-        })
+            const scheme = store.previewScheme ?? store.colorScheme
+            const mode = scheme === "system" ? getSystemMode() : scheme
+            applyTheme(theme, next, mode, scheme)
+          })
+          .catch((error: unknown) => {
+            if (store.previewThemeId !== next) return
+            console.error(`Failed to preview theme "${next}"`, error)
+            setStore("previewThemeId", null)
+            const current = store.themes[store.themeId]
+            if (current) applyTheme(current, store.themeId, store.mode, store.colorScheme)
+          })
       },
       previewColorScheme: (scheme: ColorScheme) => {
         setStore("previewScheme", scheme)
         const mode = scheme === "system" ? getSystemMode() : scheme
         const id = store.previewThemeId ?? store.themeId
-        void load(id).then((theme) => {
-          if (!theme) return
-
-          if ((store.previewThemeId ?? store.themeId) !== id) return
-
-          if (store.previewScheme !== scheme) return
-          applyTheme(theme, id, mode, scheme)
-        })
+        void load(id)
+          .then((theme) => {
+            if (!theme) return
+            if ((store.previewThemeId ?? store.themeId) !== id) return
+            if (store.previewScheme !== scheme) return
+            applyTheme(theme, id, mode, scheme)
+          })
+          .catch((error: unknown) => {
+            if ((store.previewThemeId ?? store.themeId) !== id || store.previewScheme !== scheme) return
+            console.error(`Failed to preview color scheme "${scheme}"`, error)
+          })
       },
       commitPreview: () => {
         if (store.previewThemeId) {
@@ -428,10 +480,25 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       cancelPreview: () => {
         setStore("previewThemeId", null)
         setStore("previewScheme", null)
-        void load(store.themeId).then((theme) => {
-          if (!theme) return
-          applyTheme(theme, store.themeId, store.mode, store.colorScheme)
-        })
+        const themeId = store.themeId
+        const mode = store.mode
+        const scheme = store.colorScheme
+        void load(themeId)
+          .then((theme) => {
+            // A cancelled preview must not paint stale colors after another choice wins.
+            if (
+              !theme ||
+              store.themeId !== themeId ||
+              store.mode !== mode ||
+              store.colorScheme !== scheme ||
+              store.previewThemeId !== null ||
+              store.previewScheme !== null
+            ) return
+            applyTheme(theme, themeId, mode, scheme)
+          })
+          .catch((error: unknown) => {
+            console.error(`Failed to restore theme "${themeId}" after preview`, error)
+          })
       },
     }
   },
