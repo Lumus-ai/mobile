@@ -7,6 +7,8 @@ import { ConfigProvider } from "../../src/config"
 import { ThemeProvider } from "../../src/context/theme"
 import { ToastProvider } from "../../src/ui/toast"
 import { DialogProvider } from "../../src/ui/dialog"
+import { Keymap } from "../../src/context/keymap"
+import { InteractivityProvider } from "../../src/context/interactivity"
 import { ProjectDodEntry } from "../../src/component/project-dod"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -36,11 +38,15 @@ async function renderBoard(directory: string) {
       <TestTuiContexts directory={directory}>
         <ConfigProvider config={createTuiResolvedConfig()}>
           <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
-            <ToastProvider>
-              <DialogProvider>
-                <ProjectDodEntry directory={directory} />
-              </DialogProvider>
-            </ToastProvider>
+            <InteractivityProvider enabled={true}>
+              <Keymap.Provider>
+                <ToastProvider>
+                  <DialogProvider>
+                    <ProjectDodEntry directory={directory} />
+                  </DialogProvider>
+                </ToastProvider>
+              </Keymap.Provider>
+            </InteractivityProvider>
           </ThemeProvider>
         </ConfigProvider>
       </TestTuiContexts>
