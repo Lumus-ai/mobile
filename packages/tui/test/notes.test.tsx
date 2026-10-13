@@ -251,7 +251,7 @@ test("a save that lost a race keeps the text and offers the latest version", asy
   await using setup = await render(state.path, { notes, calls, conflict: () => conflict })
   await setup.waitForFrame((frame) => frame.includes("Note: Release plan"))
   await click(setup, "Note: Release plan", 2)
-  await setup.waitForFrame((frame) => frame.includes("✎ Edit"))
+  await setup.waitForFrame((frame) => frame.includes("Edit"))
   await click(setup, "✎ Edit", 1)
   await setup.waitForFrame((frame) => frame.includes("ctrl+s save"))
   await Bun.sleep(50)
