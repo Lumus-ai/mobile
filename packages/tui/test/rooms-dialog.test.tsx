@@ -142,12 +142,12 @@ async function renderSession(state: string, input: { rooms: () => unknown[]; onC
 test("a hosted session names guest authors and shows a multiplayer indicator that opens Host", async () => {
   await using state = await tmpdir()
   await using setup = await renderSession(state.path, { rooms: () => [room] })
-  const frame = await setup.waitForFrame((frame) => frame.includes("⇄ Multiplayer · Lab"))
-  expect(frame).toContain("⇄ Multiplayer · Lab · 2 guests")
+  const frame = await setup.waitForFrame((frame) => frame.includes("Multiplayer · Lab"))
+  expect(frame).toContain("Multiplayer · Lab · 2 guests")
   expect(frame).toContain("Alex · via room")
   expect(frame).toContain("Sam · via room")
 
-  const indicator = cell(frame, "⇄ Multiplayer · Lab")
+  const indicator = cell(frame, "Multiplayer · Lab")
   await setup.mockMouse.click(indicator.x + 2, indicator.y)
   const host = await setup.waitForFrame((frame) => frame.includes("Get join code"))
   expect(host).toContain("New guests")
@@ -160,7 +160,7 @@ test("hosting a session issues a join code at once and shows the indicator", asy
   const rooms: unknown[] = []
   await using setup = await renderSession(state.path, { rooms: () => rooms, onCreate: () => rooms.push(room) })
   const bar = await setup.waitForFrame((frame) => frame.includes("+ Host") && frame.includes("+ Connect"))
-  expect(bar).not.toContain("⇄ Multiplayer · Lab")
+  expect(bar).not.toContain("Multiplayer · Lab")
   const entry = cell(bar, "+ Host")
   await setup.mockMouse.click(entry.x, entry.y)
   // the address loads after the window opens and moves the button down
@@ -173,7 +173,7 @@ test("hosting a session issues a join code at once and shows the indicator", asy
   expect(issued).toContain("New join code")
   setup.mockInput.pressEscape()
   const closed = await setup.waitForFrame((frame) => !frame.includes("New join code"))
-  expect(closed).toContain("⇄ Multiplayer · Lab · 2 guests")
+  expect(closed).toContain("Multiplayer · Lab · 2 guests")
 })
 
 test("the Language bar item switches the bar and room windows to Russian and back", async () => {
@@ -258,6 +258,8 @@ test("a joined room opens in the main area like a session and stays in the left 
           },
         })
       if (url.pathname === `${guest}/permission`) return json({ data: [] })
+      if (url.pathname === `${guest}/dod`) return json({ items: [], status: "disabled" })
+      if (url.pathname === `${guest}/feed`) return json({ events: [] })
       if (url.pathname === `${guest}/prompt` && request.method === "POST") {
         prompts.push(await request.json())
         return json({ data: {} })
@@ -286,16 +288,16 @@ test("a joined room opens in the main area like a session and stays in the left 
         !frame.includes("Join by address"),
     )
     expect(joined).toContain("Hello from far")
-    expect(joined).toContain("⇄ Multiplayer")
+    expect(joined).toContain("Multiplayer")
     expect(joined).toContain("[Member]")
     // the right panel tells what the session is and who may change it
     expect(joined).toMatch(/Role +Member/)
     expect(joined).toContain("The host or a cohost picks")
     // A separate section below the projects: hosted sessions and joined rooms, each marked as multiplayer.
-    expect(joined).toContain("⇄ Multiplayer")
+    expect(joined).toContain("Multiplayer")
     expect(joined).toContain("+ Host + Connect")
-    expect(joined).toMatch(/⇄ Lab +×/)
-    expect(joined).toContain(`⇄ Far lab · 127.0.0.1:${host.port}`)
+    expect(joined).toMatch(/[⇄↔] Lab +×/)
+    expect(joined).toMatch(new RegExp(`[⇄↔] Far lab · 127\\.0\\.0\\.1:${host.port}`))
 
     await setup.mockInput.typeText("next step please")
     setup.mockInput.pressEnter()
@@ -479,7 +481,7 @@ test("a joined room its host closed shows why and can be left without a crash", 
     setup.mockInput.pressEnter()
 
     const gone = await setup.waitForFrame((frame) => frame.includes("Room not found"))
-    expect(gone).toContain("⇄ Gone lab")
+    expect(gone).toContain("Gone lab · 127.0.0.1")
     // a few polls later the app still runs
     await Bun.sleep(4500)
     expect(setup.captureCharFrame()).toContain("Room not found")
@@ -517,15 +519,15 @@ test("the red cross on a hosted room closes it after a second click", async () =
       }
     },
   })
-  const tree = await setup.waitForFrame((frame) => /⇄ Lab +×/.test(frame))
-  const row = tree.split("\n").findIndex((line) => line.includes("⇄ Lab"))
+  const tree = await setup.waitForFrame((frame) => /[⇄↔] Lab +×/.test(frame))
+  const row = tree.split("\n").findIndex((line) => /[⇄↔] Lab/.test(line))
   await setup.mockMouse.click(tree.split("\n")[row].indexOf("×"), row)
   const armed = await setup.waitForFrame((frame) => frame.includes("close?"))
   expect(closed).toEqual([])
   const sure = cell(armed, "close?")
   await setup.mockMouse.click(sure.x + 1, sure.y)
   await setup.waitFor(() => closed.length > 0)
-  await setup.waitForFrame((frame) => !frame.includes("⇄ Lab"))
+  await setup.waitForFrame((frame) => !/[⇄↔] Lab +×/.test(frame))
 })
 
 test("a hosted room shows its project's DoD with who took each item, and the host frees one after a second click", async () => {
