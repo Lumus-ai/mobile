@@ -247,9 +247,46 @@ describe("Session.prompt", () => {
         id: message.id,
         sessionID,
         type: "user",
-        payload: { text: "Fix the failing tests" },
+        payload: { text: "Fix the failing tests", resumeOnStart: false },
         delivery: "steer",
       })
+    }),
+  )
+
+  it.effect("persists resume intent for an ordinary prompt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      wakeCalls.length = 0
+
+      const message = yield* session.prompt({ sessionID, text: "Continue after restart" })
+
+      expect(yield* admitted(message.id)).toMatchObject({
+        type: "user",
+        payload: { text: "Continue after restart", resumeOnStart: true },
+      })
+      expect(wakeCalls).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("persists the no-resume intent for a synthetic notice", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      wakeCalls.length = 0
+
+      const message = yield* session.synthetic({
+        sessionID,
+        text: "Background process finished",
+        metadata: { source: "shell" },
+        resume: false,
+      })
+
+      expect(yield* admitted(message.id)).toMatchObject({
+        type: "synthetic",
+        payload: { resumeOnStart: false, metadata: { source: "shell" } },
+      })
+      expect(wakeCalls).toEqual([])
     }),
   )
 
