@@ -74,7 +74,9 @@ test("clicking a backfilled thought group toggles it", async () => {
     const lines = setup.captureCharFrame().split("\n")
     const row = lines.findIndex((line) => line.includes("+ Thought: Turn 0"))
     expect(row).toBeGreaterThan(0)
-    await setup.mockMouse.click(6, row)
+    const x = lines[row]?.indexOf("+ Thought: Turn 0") ?? -1
+    expect(x).toBeGreaterThanOrEqual(0)
+    await setup.mockMouse.click(x + 1, row)
     await setup.waitForVisualIdle({ quietFrames: 3 })
     expect(setup.captureCharFrame()).toContain("A fixed thought.")
   } finally {
