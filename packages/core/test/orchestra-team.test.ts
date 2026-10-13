@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schedule, Schema } from "effect"
+import { Effect, Fiber, Layer, Schedule, Schema } from "effect"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -251,6 +251,30 @@ describe("Orchestra team", () => {
       expect(yield* orchestra.mainOf(repaired[0].id)).toMatchObject({ id: project.id })
     }).pipe(Effect.scoped),
   )
+
+  it.live("serializes project deletion with team creation so no workers remain claimed to a removed project", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-create-delete-")))
+      const orchestra = yield* Orchestra.Service
+      const creating = yield* Effect.fork(
+        orchestra.create({ name: "Create race", directory: tmp.path, template: "feature" }),
+      )
+
+      // A project becomes visible before its main Session finishes initialization. Remove it at
+      // that boundary, which used to let template workers be created after their owner was gone.
+      const project = yield* orchestra.projects().pipe(
+        Effect.map((items) => items.find((item) => item.name === "Create race" && item.main !== undefined)),
+        Effect.filterOrFail((item): item is Orchestra.Project => item !== undefined),
+        Effect.retry(Schedule.spaced("1 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      yield* orchestra.remove(project.id)
+      yield* Fiber.join(creating).pipe(Effect.either)
+
+      expect((yield* orchestra.projects()).some((item) => item.id === project.id)).toBe(false)
+      expect(Object.values(yield* orchestra.owners())).not.toContain(project.id)
+    }).pipe(Effect.scoped),
+  ),
 
   it.live("serializes project deletion with main recovery so a removed project cannot reappear", () =>
     Effect.gen(function* () {
