@@ -196,7 +196,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
             flexShrink={0}
             paddingLeft={1}
             paddingRight={1}
-            backgroundColor={hoveredAction() === "open" ? (theme.background?.action?.primary?.hovered ?? theme.increase(theme.background.base, 2)) : undefined}
+            backgroundColor={hoveredAction() === "open" ? theme.increase(theme.background.base, 4) : undefined}
             onMouseOver={() => setHoveredAction("open")}
             onMouseOut={() => setHoveredAction(undefined)}
             onMouseUp={(event) => {
