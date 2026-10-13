@@ -59,6 +59,9 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
+    // The project tree's "+ New session" click leaves focus on its row. When Home
+    // mounts for that route, move keyboard focus to the newly created prompt.
+    if (route.project && r) queueMicrotask(() => r.focus())
     if (once || !r || route.prompt || !args.prompt) return
     r.set({ text: args.prompt, files: [], agents: [], pasted: [] })
     once = true
