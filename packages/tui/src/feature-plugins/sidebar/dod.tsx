@@ -79,6 +79,7 @@ export function openDodPanel(context: Pick<Plugin.Context, "ui">) {
 // that the orchestrator and room board use; this is a view, not a second task store.
 export function SidebarDod(props: { context: Plugin.Context; sessionID: string }) {
   const theme = props.context.theme
+  const actionColor = theme.text.action?.primary?.base ?? theme.text.base
   const t = useT()
   const layout = useCompactLayout()
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
@@ -147,7 +148,7 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
       <box flexDirection="row" alignItems="center" gap={1}>
         <text
           id="sidebar.dod.preview-toggle"
-          fg={theme.text.action.primary.base}
+          fg={actionColor}
           onMouseUp={(event) => {
             event.stopPropagation()
             setOpen((value) => !value)
@@ -167,14 +168,14 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
           }}
         >
           <box flexGrow={1} minWidth={0}>
-            <text fg={theme.text.action.primary.base} wrapMode="none" truncate>
+            <text fg={actionColor} wrapMode="none" truncate>
               <b>{t("DoD")}</b>
             </text>
           </box>
           <text fg={theme.text.muted} wrapMode="none" truncate>
             {heading()}
           </text>
-          <text fg={theme.text.action.primary.base}>↗</text>
+          <text fg={actionColor}>↗</text>
         </box>
       </box>
 
