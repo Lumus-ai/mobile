@@ -58,6 +58,7 @@ export function createStorage(root: string, channel: string) {
   const directory = path.join(root, namespace, "tui")
   const locks = path.join(root, namespace, "locks")
   mkdirSync(directory, { recursive: true })
+  mkdirSync(locks, { recursive: true })
 
   const storage: Storage = {
     store<Value extends object>(key: string, options: Options<Value>) {
