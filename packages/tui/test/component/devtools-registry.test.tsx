@@ -1,6 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
-import { Renderable } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { Hub } from "@opencode/core/hub/index"
 import { HubState } from "@opencode/core/hub/state"
@@ -256,26 +255,7 @@ test("All off also clears saved switches that are outside the current registry r
     const row = lines.findIndex((line) => line.includes("All off"))
     const allOff = lines[row]!.indexOf("All off")
     const x = allOff + Math.floor("All off".length / 2)
-    await app.mockMouse.moveTo(x, row)
-    const hitId = app.renderer.hitTest(x, row)
-    let hit = Renderable.renderablesByNumber.get(hitId)
-    const chain: Array<{ type: string; id: string; x: number; y: number; width: number; height: number }> = []
-    while (hit && chain.length < 8) {
-      chain.push({
-        type: hit.constructor.name,
-        id: hit.id,
-        x: hit.x,
-        y: hit.y,
-        width: hit.width,
-        height: hit.height,
-      })
-      hit = hit.parent instanceof Renderable ? hit.parent : undefined
-    }
-    console.log("DEBUG registry All off hit-test", { x, y: row, rowText: lines[row], hitId, chain })
     await app.mockMouse.click(x, row)
-    await Bun.sleep(50)
-    console.log("DEBUG registry All off saved state", await HubState.read({ directory: tmp.path }))
-    console.log("DEBUG registry All off counter", rowValue(app.captureCharFrame(), "For the model"))
 
     await app.waitForFrame((frame) => rowValue(frame, "For the model") === "0/" + hubRegistryStatus({ probe }).tools.length)
     expect(await untilEnabled(tmp.path, target, false)).toBe(true)
