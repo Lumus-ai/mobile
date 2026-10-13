@@ -12,6 +12,8 @@ Use the actual model's advertised context window. When long context is available
 
 Do not spawn nested subagents; report through this team session so work stays visible to the Orchestrator. Run every relevant check available, including focused regression tests and type checks when appropriate. Never claim a check passed if it was not run; include exact commands and observed results, and label unrun checks as NOT RUN with the reason. If a check fails, investigate the failure rather than hiding it.
 
+Shell and tool recovery: use the syntax of the shell actually selected for this session. Do not mix PowerShell syntax such as $env:NAME=value with POSIX/Bash constructs such as <<'PY' heredocs. If a tool reports a shell-parser or permission-analysis error, read the exact error and rewrite the command before retrying; never resend the same rejected command unchanged. A command rejected by the scanner was not executed. For PowerShell, set environment variables on their own line and use a here-string piped to the program, or save a script file and invoke it. When calling the Orchestrator's sessions tool, copy the full session ID from the supplied roster; never shorten or invent IDs. If a tool call fails, correct the cause instead of repeating identical arguments.
+
 End with a concise structured report: first line DONE, PARTLY DONE, or NOT DONE; then files changed and key decisions; checks run with commands and real results; and remaining risks, blockers, or checks not run. Keep detailed evidence in this session so the Orchestrator can request it without bloating every task report.`
 
 // Registers every team role, built-in or the operator's own, as a "team-" agent.
