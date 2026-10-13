@@ -84,23 +84,28 @@ const launch = Effect.fn(function* (fixture: Effect.Success<typeof setup>, name:
     Effect.asVoid,
   )
   yield* Effect.addFinalizer(() => release)
-  const command =
-    process.platform === "win32"
-      ? `Write-Output '${name} started'; New-Item '${name}.started' -ItemType File | Out-Null; while (!(Test-Path '${name}.release') -and (Test-Path $PWD)) { Start-Sleep -Milliseconds 10 }; Write-Output '${name} finished'`
-      : `printf '${name} started\\n'; touch ${name}.started; while [ ! -f ${name}.release ] && [ -d "$PWD" ]; do sleep 0.01; done; printf '${name} finished\\n'`
+  // Use the same runner on Windows and POSIX. Session.shell honors user shell settings,
+  // so shell-specific marker commands can fail on machines configured with a different shell.
+  const command = `bun -e "const fs=require('node:fs'); console.log('${name} started'); fs.writeFileSync('${name}.started',''); while (!fs.existsSync('${name}.release')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10); console.log('${name} finished')"`
   const caller = yield* fixture.session
     .shell({ sessionID: fixture.created.id, command })
     .pipe(Effect.scoped, Effect.forkScoped)
   yield* Effect.promise(() => Bun.file(path.join(fixture.tmp.path, `${name}.started`)).exists()).pipe(
     Effect.repeat({ until: (exists) => exists, schedule: Schedule.spaced("10 millis") }),
-    Effect.timeout("5 seconds"),
+    Effect.timeoutOrElse({
+      duration: "5 seconds",
+      orElse: () => Effect.fail(new Error(`Timed out waiting for shell process to create ${name}.started`)),
+    }),
   )
   const event = yield* log(fixture.session, fixture.created.id, true).pipe(
     Stream.filter((event): event is SessionEvent.Shell.Started => event.type === "session.shell.started"),
     Stream.filter((event) => event.data.shell.command === command),
     Stream.runHead,
     Effect.map(Option.getOrThrow),
-    Effect.timeout("5 seconds"),
+    Effect.timeoutOrElse({
+      duration: "5 seconds",
+      orElse: () => Effect.fail(new Error(`Timed out waiting for session.shell.started for ${name}`)),
+    }),
   )
   return { caller, shellID: event.data.shell.id, release }
 })
