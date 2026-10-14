@@ -1,3 +1,5 @@
+import { clean, hasSensitiveContent, validLanguage } from "./policy"
+
 interface Env {
   DB: D1Database
   IDEA_BANK_ADMIN_TOKEN?: string
@@ -46,29 +48,6 @@ function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers })
 }
 
-function clean(value: unknown, max: number) {
-  if (typeof value !== "string") return ""
-  return value
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029]/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .trim()
-    .slice(0, max)
-}
-
-const sensitivePatterns = [
-  /(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})/u,
-  /-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/iu,
-  /\b(?:password|passwd|secret|(?:api[_ -]?)?key|(?:access[_ -]?)?token|authorization|bearer)\s*[:=]/iu,
-  /\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/u,
-  /https?:\/\/\S+/iu,
-  /(?:[A-Z]:\\Users\\|\/home\/[^/\s]+\/|\/Users\/[^/\s]+\/)/iu,
-  /\b(?:\d{1,3}\.){3}\d{1,3}\b/u,
-]
-
-function hasSensitiveContent(value: string) {
-  return sensitivePatterns.some((pattern) => pattern.test(value))
-}
-
 async function hash(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
@@ -93,10 +72,6 @@ function decodeIdea(row: IdeaRow): PublicIdea {
     updatedAt: row.updated_at,
     signalCount: row.signal_count,
   }
-}
-
-function validLanguage(value: string) {
-  return /^[a-z]{2}(?:-[A-Z]{2})?$/.test(value)
 }
 
 async function listIdeas(request: Request, env: Env) {
@@ -140,6 +115,30 @@ async function listIdeas(request: Request, env: Env) {
   return json({ items: result.results.map(decodeIdea), total: total?.total ?? 0, limit, offset })
 }
 
+async function readBoundedBody(request: Request, maxBytes: number) {
+  const reader = request.body?.getReader()
+  if (!reader) return { text: "", tooLarge: false as const }
+  const chunks: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const item = await reader.read()
+    if (item.done) break
+    total += item.value.byteLength
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {})
+      return { text: "", tooLarge: true as const }
+    }
+    chunks.push(item.value)
+  }
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return { text: new TextDecoder().decode(bytes), tooLarge: false as const }
+}
+
 async function submitIdea(request: Request, env: Env) {
   const contentLength = Number(request.headers.get("content-length") ?? 0)
   if (Number.isFinite(contentLength) && contentLength > 16_384)
@@ -148,7 +147,9 @@ async function submitIdea(request: Request, env: Env) {
     return json({ error: "Idea Bank is not configured: RATE_LIMIT_SALT is missing" }, 503)
   let raw: unknown
   try {
-    raw = await request.json()
+    const bounded = await readBoundedBody(request, 16_384)
+    if (bounded.tooLarge) return json({ error: "Idea submission body exceeds 16 KiB" }, 413)
+    raw = JSON.parse(bounded.text)
   } catch {
     return json({ error: "Body must be valid JSON" }, 400)
   }
