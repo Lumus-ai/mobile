@@ -40,7 +40,11 @@ function render(
   projects: (typeof project)[],
   listed = worker,
   layout: "compact" | "full" = "full",
-  options: { width?: number; sidebar?: "auto" | "hide" } = {},
+  options: {
+    width?: number
+    sidebar?: "auto" | "hide"
+    createdRosterGate?: Promise<void>
+  } = {},
 ) {
   let projectCreated = false
   return createAppFixture({
@@ -87,8 +91,12 @@ function render(
       if (url.pathname === "/api/orchestra/template") return json([team])
       if (url.pathname === `/api/orchestra/project/${project.id}/session`)
         return json({ data: [listed], access: { [worker.id]: "write" }, category: { [worker.id]: "Build" } })
-      if (url.pathname === `/api/orchestra/project/${createdProject.id}/session`)
+      if (url.pathname === `/api/orchestra/project/${createdProject.id}/session`) {
+        // Some backends can be slow to load a newly-created project's roster.
+        // Keep the route controllably pending to verify opening the main session is independent.
+        await options.createdRosterGate
         return json({ data: [], access: {}, category: {} })
+      }
       if (url.pathname === `/api/orchestra/project/${project.id}/main`) return json(main)
       if (url.pathname === `/api/orchestra/project/${createdProject.id}/main`) return json(createdMain)
       if (url.pathname.startsWith("/api/orchestra/access/")) return new Response(null, { status: 204 })
@@ -222,7 +230,11 @@ test("deleting a session takes two clicks on its ×", async () => {
 test("a project is created from a name and a path", async () => {
   await using state = await tmpdir()
   const calls: Call[] = []
-  await using setup = await render(state.path, calls, [])
+  let releaseRoster!: () => void
+  const createdRosterGate = new Promise<void>((resolve) => {
+    releaseRoster = resolve
+  })
+  await using setup = await render(state.path, calls, [], worker, "full", { createdRosterGate })
 
   // without projects the tree still shows, for Multiplayer; the bottom bar offers to create the first project
   const frame = await setup.waitForFrame((frame) => frame.includes("+ Project"))
@@ -238,10 +250,15 @@ test("a project is created from a name and a path", async () => {
     name: "Created",
     directory,
   })
-  // Creation opens the new project's permanent orchestrator automatically.
-  await setup.waitFor(() =>
-    calls.some((call) => call.method === "POST" && call.path === `/api/orchestra/project/${createdProject.id}/main`),
-  )
+  // The roster request is intentionally still blocked. Opening the project's permanent
+  // orchestrator must not wait for the session list endpoint to respond.
+  try {
+    await setup.waitFor(() =>
+      calls.some((call) => call.method === "POST" && call.path === `/api/orchestra/project/${createdProject.id}/main`),
+    )
+  } finally {
+    releaseRoster()
+  }
   // The project.main response schedules route navigation; render its pending frame before
   // asserting the title, as the TUI test renderer intentionally does not auto-flush it.
   await setup.renderOnce()
