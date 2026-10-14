@@ -59,6 +59,9 @@ jobs:
       - name: Typecheck the core chat tool
         run: bun run --cwd packages/core typecheck
 
+      - name: Test global Idea Bank chat tool permissions and privacy
+        run: bun --cwd packages/core test test/plugin/idea-bank.test.ts
+
       - name: Typecheck the TUI Idea Bank
         run: bun run --cwd packages/tui typecheck
 
