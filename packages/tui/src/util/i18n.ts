@@ -66,7 +66,7 @@ const ru: Record<string, string> = {
   "Public idea from the global bank": "Публичная идея из глобального банка",
   "Share globally": "Поделиться глобально",
   "Confirm public share": "Подтвердить публикацию",
-  "Click share again to submit this idea for public moderation.": "Нажми ещё раз, чтобы отправить идею на публичную модерацию.",
+  "Click share again to add this idea to the public global bank. Only this generic idea text is sent.": "Нажми ещё раз, чтобы добавить идею в общий банк. Отправляется только это обобщённое описание.",
   "Idea submitted for moderation; it is not public yet.": "Идея отправлена на модерацию; пока она не опубликована.",
   "Could not submit to global Idea Bank": "Не удалось отправить идею в глобальный банк",
   "This idea is already in the global bank.": "Эта идея уже находится в глобальном банке.",
