@@ -10,6 +10,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useToast } from "../../ui/toast"
 import { useConfig } from "../../config"
+import { stringWidth } from "../../util/string-width"
 
 export type MiniSkill = {
   id: string
@@ -189,10 +190,22 @@ export function PromptMiniSkills(props: {
 
   return (
     <Show when={loaded() && props.mode() === "normal"}>
-      <box flexDirection="row" flexShrink={0} gap={1} paddingBottom={1} width="100%">
+      <box
+        flexDirection="row"
+        flexShrink={0}
+        gap={1}
+        paddingLeft={3}
+        paddingBottom={1}
+        height={2}
+        width="100%"
+      >
         <For each={visibleSkills()}>
           {(skill) => (
             <box
+              height={1}
+              width={stringWidth(`${skill.icon} ${skill.label}`) + 2}
+              flexBasis={stringWidth(`${skill.icon} ${skill.label}`) + 2}
+              flexShrink={0}
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={theme.background.raised.base}
@@ -211,6 +224,10 @@ export function PromptMiniSkills(props: {
         </For>
         <Show when={skills().length > visibleSkills().length}>
           <box
+            height={1}
+            width={5}
+            flexBasis={5}
+            flexShrink={0}
             paddingLeft={1}
             paddingRight={1}
             backgroundColor={theme.background.raised.base}
@@ -220,10 +237,14 @@ export function PromptMiniSkills(props: {
               dialog.replace(() => <MiniSkillsManager skills={skills} save={save} insert={insert} />)
             }}
           >
-            <text fg={theme.text.muted}>+{skills().length - visibleSkills().length}</text>
+            <text fg={theme.text.muted} wrapMode="none" truncate>+{skills().length - visibleSkills().length}</text>
           </box>
         </Show>
         <box
+          height={1}
+          width={10}
+          flexBasis={10}
+          flexShrink={0}
           paddingLeft={1}
           paddingRight={1}
           backgroundColor={theme.background.raised.base}
@@ -233,7 +254,7 @@ export function PromptMiniSkills(props: {
             dialog.replace(() => <MiniSkillsManager skills={skills} save={save} insert={insert} />)
           }}
         >
-          <text fg={theme.text.muted}>⚙ Skills</text>
+          <text fg={theme.text.muted} wrapMode="none" truncate>⚙ Skills</text>
         </box>
       </box>
     </Show>
