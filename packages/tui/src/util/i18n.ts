@@ -198,6 +198,8 @@ const ru: Record<string, string> = {
   "DoD read error: {reason}": "Ошибка чтения DoD: {reason}",
   "No tasks yet": "Пока нет задач",
   "Project DoD": "Задачи проекта DoD",
+  "Full screen": "На весь экран",
+  "Restore panel": "Вернуть панель",
   Progress: "Прогресс",
   Close: "Закрыть",
   "In progress": "В работе",
