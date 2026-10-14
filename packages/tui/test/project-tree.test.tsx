@@ -101,6 +101,7 @@ function render(
       }
       if (url.pathname === `/api/session/${worker.id}`) return json({ data: listed })
       if (url.pathname === `/api/session/${main.id}`) return json({ data: main })
+      if (url.pathname === `/api/session/${createdMain.id}`) return json({ data: createdMain })
       if (/^\/api\/session\/[^/]+$/.test(url.pathname))
         return json({ data: session(url.pathname.split("/")[3] ?? "ses_new", "New session") })
       if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
@@ -241,7 +242,7 @@ test("a project is created from a name and a path", async () => {
   // The project.main response schedules route navigation; render its pending frame before
   // asserting the title, as the TUI test renderer intentionally does not auto-flush it.
   await setup.renderOnce()
-  await setup.waitForFrame((frame) => frame.includes("Created · Orchestrator"))
+  await setup.waitForFrame((frame) => frame.includes("Created · Orchestrator"), { maxPasses: 100 })
 })
 
 test("a new project can start with an AI team from a template", async () => {
