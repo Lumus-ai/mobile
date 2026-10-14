@@ -762,20 +762,18 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                 const reportRole = task.value.reportRole ?? session?.agent ?? "unknown"
                 const body = task.value.reportText ?? "(no text answer)"
                 const text =
-                  recorded?.type === "synthetic"
-                    ? recorded.text
-                    : pendingReport?.type === "synthetic"
-                      ? pendingReport.payload.text
-                      : renderTaskReport({
-                          workerID: sessionID,
-                          taskID: task.value.messageID,
-                          title: reportTitle,
-                          role: reportRole,
-                          state: reportState,
-                          outcome: reportOutcome,
-                          detail: task.value.reportDetail,
-                          body,
-                        })
+                  (recorded?.type === "synthetic" ? recorded.text : undefined) ??
+                  (pendingReport?.type === "synthetic" ? pendingReport.payload.text : undefined) ??
+                  renderTaskReport({
+                    workerID: sessionID,
+                    taskID: task.value.messageID,
+                    title: reportTitle,
+                    role: reportRole,
+                    state: reportState,
+                    outcome: reportOutcome,
+                    detail: task.value.reportDetail,
+                    body,
+                  })
                 const description =
                   recorded?.type === "synthetic"
                     ? recorded.description
