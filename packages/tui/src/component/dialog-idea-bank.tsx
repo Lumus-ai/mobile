@@ -247,18 +247,21 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
     const seen = new Set<string>()
     return [...globalIdeas(), ...(state.ideas ?? []), ...STARTER_IDEAS]
       .filter((idea) => {
+        if (terms.length > 0) {
+          const searchable = [idea.title, idea.category, idea.kind, idea.description]
+            .join(" ")
+            .normalize("NFKC")
+            .toLocaleLowerCase()
+          // Keep broad matches; the server ranks global results by number of matched terms.
+          if (!terms.some((term) => searchable.includes(term))) return false
+        }
         const key = [idea.title, idea.category]
           .map((value) => value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim())
           .join("|")
-        // Prefer the shared copy when a local signal or starter overlaps it.
+        // Prefer the shared copy when a matching local signal or starter overlaps it.
         if (seen.has(key)) return false
         seen.add(key)
-        if (terms.length === 0) return true
-        const searchable = [idea.title, idea.category, idea.kind, idea.description]
-          .join(" ")
-          .normalize("NFKC")
-          .toLocaleLowerCase()
-        return terms.every((term) => searchable.includes(term))
+        return true
       })
       .sort((a, b) => {
         if (a.global !== b.global) return a.global ? -1 : 1
