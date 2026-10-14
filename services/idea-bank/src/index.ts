@@ -14,6 +14,7 @@ type IdeaRow = {
   status: "pending" | "published" | "rejected"
   submitter_hash: string
   content_hash: string
+  signal_count: number
   created_at: number
   updated_at: number
   reviewed_at: number | null
@@ -28,6 +29,7 @@ type PublicIdea = {
   language: string
   createdAt: number
   updatedAt: number
+  signalCount: number
 }
 
 const headers = {
@@ -89,6 +91,7 @@ function decodeIdea(row: IdeaRow): PublicIdea {
     language: row.language,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    signalCount: row.signal_count,
   }
 }
 
@@ -129,7 +132,7 @@ async function listIdeas(request: Request, env: Env) {
     .bind(...bindings)
     .first<{ total: number }>()
   const result = await env.DB.prepare(
-    `SELECT id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, reviewed_at
+    `SELECT id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, signal_count, reviewed_at
      FROM ideas WHERE ${where} ORDER BY updated_at DESC, title COLLATE NOCASE LIMIT ? OFFSET ?`,
   )
     .bind(...bindings, limit, offset)
@@ -173,8 +176,26 @@ async function submitIdea(request: Request, env: Env) {
   const duplicate = await env.DB.prepare("SELECT id, status FROM ideas WHERE content_hash = ? LIMIT 1")
     .bind(contentHash)
     .first<{ id: string; status: string }>()
-  if (duplicate)
+  if (duplicate) {
+    if (duplicate.status === "published") {
+      const now = Date.now()
+      await env.DB.prepare(
+        "UPDATE ideas SET signal_count = signal_count + 1, updated_at = ? WHERE id = ? AND status = 'published'",
+      )
+        .bind(now, duplicate.id)
+        .run()
+      const updated = await env.DB.prepare("SELECT signal_count FROM ideas WHERE id = ?")
+        .bind(duplicate.id)
+        .first<{ signal_count: number }>()
+      return json({
+        id: duplicate.id,
+        status: "published",
+        signalCount: updated?.signal_count ?? 1,
+        message: "Similar idea already exists; its community signal was counted.",
+      })
+    }
     return json({ error: "A matching idea already exists", existingId: duplicate.id, status: duplicate.status }, 409)
+  }
 
   const ip = request.headers.get("CF-Connecting-IP") ?? "unknown"
   const salt = env.RATE_LIMIT_SALT
@@ -191,13 +212,13 @@ async function submitIdea(request: Request, env: Env) {
   const id = crypto.randomUUID()
   await env.DB.prepare(
     `INSERT INTO ideas
-      (id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+      (id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, signal_count, reviewed_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?, 1, ?)`,
   )
-    .bind(id, title, summary, category, JSON.stringify(tags), language, submitterHash, contentHash, now, now)
+    .bind(id, title, summary, category, JSON.stringify(tags), language, submitterHash, contentHash, now, now, now)
     .run()
 
-  return json({ id, status: "pending", message: "Submitted for moderation; public search shows it only after approval." }, 202)
+  return json({ id, status: "published", signalCount: 1, message: "Idea added to the public global bank after privacy and duplicate checks." }, 201)
 }
 
 function constantTimeEqual(left: string, right: string) {
@@ -218,7 +239,7 @@ async function adminQueue(request: Request, env: Env) {
   const rawLimit = Number(new URL(request.url).searchParams.get("limit") ?? 50)
   const limit = Number.isSafeInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50
   const result = await env.DB.prepare(
-    `SELECT id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, reviewed_at
+    `SELECT id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, signal_count, reviewed_at
      FROM ideas WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?`,
   )
     .bind(limit)
@@ -240,7 +261,7 @@ async function reviewIdea(request: Request, env: Env, id: string) {
     return json({ error: "status must be published or rejected" }, 400)
   const now = Date.now()
   const result = await env.DB.prepare(
-    "UPDATE ideas SET status = ?, updated_at = ?, reviewed_at = ? WHERE id = ? AND status = 'pending'",
+    "UPDATE ideas SET status = ?, updated_at = ?, reviewed_at = ? WHERE id = ? AND status != 'rejected'",
   )
     .bind(status, now, now, id)
     .run()
@@ -265,7 +286,7 @@ export default {
       const detail = /^\/v1\/ideas\/([a-zA-Z0-9_-]{1,80})$/.exec(pathname)
       if (detail && request.method === "GET") {
         const row = await env.DB.prepare(
-          "SELECT id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, reviewed_at FROM ideas WHERE id = ? AND status = 'published'",
+          "SELECT id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, signal_count, reviewed_at FROM ideas WHERE id = ? AND status = 'published'",
         )
           .bind(detail[1])
           .first<IdeaRow>()
