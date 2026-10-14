@@ -775,11 +775,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                     body,
                   })
                 const description =
-                  recorded?.type === "synthetic"
-                    ? recorded.description
-                    : pendingReport?.type === "synthetic"
-                      ? pendingReport.payload.description
-                      : `${reportTitle}: ${reportState}`
+                  (recorded?.type === "synthetic" ? recorded.description : undefined) ??
+                  (pendingReport?.type === "synthetic" ? pendingReport.payload.description : undefined) ??
+                  `${reportTitle}: ${reportState}`
                 yield* persistTaskReport({
                   task: task.value,
                   workerID: sessionID,
