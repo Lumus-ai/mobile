@@ -159,7 +159,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
   const prompt = props.prompt
   // The bundled ideas make the bank useful before any private-session signals are collected.
   // They are inspiration only: no market demand or novelty is claimed to have been verified.
-  const globalBase = () => process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, ""))
+  const globalBase = () => process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, "")
   const [globalIdeas, setGlobalIdeas] = createSignal<IdeaSignal[]>([])
   const [globalStatus, setGlobalStatus] = createSignal<"loading" | "connected" | "not-configured" | "error">("loading")
   const [globalTotal, setGlobalTotal] = createSignal(0)
