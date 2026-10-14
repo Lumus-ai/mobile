@@ -321,6 +321,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
         delete draft.processedMessageIDs
       })
       setClearArmed(false)
+      setShareArmed(undefined)
       toast.show({ variant: "success", message: t("Local Idea Bank data cleared") })
     } catch {
       setClearArmed(false)
@@ -398,12 +399,13 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
 
   const toggleCapture = () => {
     const enabled = !state.autoCapture
+    if (!enabled) setShareArmed(undefined)
     void update((draft) => {
       draft.autoCapture = enabled
       draft.ideas ??= []
       draft.lastProcessedBySession ??= {}
       delete draft.processedMessageIDs
-      // Turning local capture off also stops any automatic sharing.
+      // Turning local capture off also stops sharing and discards any pending confirmation.
       if (!enabled) draft.autoShareSignals = false
       // Consent applies only to future messages. Enabling never scans old chats.
       if (enabled) draft.autoCaptureSince = Date.now()
@@ -440,7 +442,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
       draft.autoShareSignals = true
       draft.lastSharedSignalAt ??= {}
     }).then(() => {
-      toast.show({ variant: "success", message: t("Anonymous global signal sharing enabled.") })
+      toast.show({ variant: "success", message: t("Generic global signal sharing enabled.") })
     }).catch(() => {
       toast.show({ variant: "error", message: t("Could not update global sharing setting") })
     })
