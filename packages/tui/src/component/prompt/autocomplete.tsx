@@ -481,7 +481,7 @@ export function Autocomplete(props: {
       // create duplicate rows with identical descriptions and actions.
       return [{
         display: `/${slash.name}`,
-        ...(slash.aliases?.length ? { aliases: slash.aliases.map((alias) => `/${alias}`) } : {}),
+        ...(slash.aliases?.length ? { aliases: slash.aliases } : {}),
         description: t(command.description ?? command.title ?? ""),
         onSelect: slash.arguments ? () => insertSlash(slash.name) : command.run,
       }]
