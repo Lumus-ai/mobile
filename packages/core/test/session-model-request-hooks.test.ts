@@ -5,13 +5,14 @@ import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Location } from "@opencode/core/location"
+import { Tool } from "@opencode/core/tool"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { DateTime, Effect, Stream } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
@@ -40,6 +41,52 @@ const transport = SessionModelTransport.Service.of({
 })
 
 describe("SessionModelRequest HTTP hooks", () => {
+  it.effect(
+    "advertises active CodeMode schemas to OpenCode Zen without changing other providers",
+    () =>
+      Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        yield* registry.transform((editor) =>
+          editor.add({
+            name: "zen-read",
+            description: "Read a test resource",
+            input: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }) => Effect.succeed({ output: { text } }),
+          }),
+        )
+        const tools = yield* registry.snapshot()
+        const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+        const makeModel = (provider: string) =>
+          SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "test-model", provider }), {
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
+            cost: [],
+            limit: { context: 200_000, output: 32_000 },
+          })
+
+        const zen = yield* requests.primary({
+          session,
+          agent: Agent.ID.make("build"),
+          model: makeModel("opencode"),
+          tools,
+          system: [],
+          messages: [],
+        })
+        expect(zen.request.tools?.map((tool) => tool.name)).toContain("zen-read")
+        expect(zen.request.tools?.map((tool) => tool.name)).toContain("execute")
+
+        const other = yield* requests.primary({
+          session,
+          agent: Agent.ID.make("build"),
+          model: makeModel("test"),
+          tools,
+          system: [],
+          messages: [],
+        })
+        expect(other.request.tools?.map((tool) => tool.name)).toContain("execute")
+        expect(other.request.tools?.map((tool) => tool.name)).not.toContain("zen-read")
+      }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
   it.effect("tags every Session request kind on http.request and http.response", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
