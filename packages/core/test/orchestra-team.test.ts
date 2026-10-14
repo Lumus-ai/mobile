@@ -1374,7 +1374,8 @@ describe("Orchestra team", () => {
           return event.effect
         })
       expect(String((yield* agents.get(Orchestra.role("developer")))?.name)).toBe("Developer")
-      const counterexampleRole = (yield* orchestra.roles()).find((item) => item.id === "counterexample-engineer")
+      const availableRoles = yield* orchestra.roles()
+      const counterexampleRole = availableRoles.find((item) => item.id === "counterexample-engineer")
       expect(counterexampleRole).toMatchObject({
         name: "Counterexample Engineer",
         readOnly: true,
