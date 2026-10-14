@@ -1,6 +1,6 @@
 export * as IdeaBankTool from "./idea-bank.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { Error as ToolError } from "@opencode/schema/tool"
 import { Permission } from "../../permission.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
@@ -30,7 +30,7 @@ export const Input = Schema.Struct({
 
 const Output = Schema.Struct({ output: Schema.String })
 
-const failure = (message: string, error?: unknown) => Effect.fail(new ToolFailure({ message, error }))
+const failure = (message: string, error?: unknown) => Effect.fail(new ToolError({ message, error }))
 
 export const Plugin = {
   id: "opencode.tool.idea-bank",
@@ -130,7 +130,7 @@ export const Plugin = {
                 return { ok: result.ok, status: result.status, data }
               },
               catch: (error) =>
-                new ToolFailure({ message: "Could not contact the global Idea Bank. Check its URL and availability.", error }),
+                new ToolError({ message: "Could not contact the global Idea Bank. Check its URL and availability.", error }),
             })
             const result = response.data && typeof response.data === "object" && !Array.isArray(response.data)
               ? (response.data as Record<string, unknown>)
@@ -143,9 +143,12 @@ export const Plugin = {
             return { output: { output }, content: output }
           }).pipe(
             Effect.mapError((error) =>
-              error instanceof ToolFailure
+              error instanceof ToolError
                 ? error
-                : new ToolFailure({ message: "Global Idea Bank action failed", error }),
+                : new ToolError({
+                    message: error instanceof globalThis.Error ? error.message : "Global Idea Bank action failed",
+                    error,
+                  }),
             ),
           ),
       }),
