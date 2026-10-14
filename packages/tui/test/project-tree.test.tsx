@@ -270,8 +270,11 @@ test("a project is created from a name and a path", async () => {
     releaseRoster()
     rosterReleased = true
 
-    // The main request is now held open. The create dialog must stay mounted until that
-    // request completes, otherwise its close/reset can race route navigation.
+    // Flush the render scheduled by the pending main-session request. Without this, the
+    // assertion could pass on the old frame before a premature dialog close has rendered.
+    await setup.renderOnce()
+    // The main request is still held open. The create dialog must stay mounted until it
+    // completes, otherwise its close/reset can race route navigation.
     await setup.waitForFrame((frame) => frame.includes("New project") && frame.includes("Path"), { maxPasses: 100 })
   } finally {
     if (!rosterReleased) releaseRoster()
