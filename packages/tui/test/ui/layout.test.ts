@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import {
+  clampHomeProjectPanelWidth,
   clampSessionPaneWidth,
   clampSessionTabsWidth,
   defaultSessionPaneWidth,
@@ -67,4 +68,12 @@ test("right panel resizing keeps the chat readable and allows useful width chang
   expect(clampSessionPaneWidth(30, 54)).toBe(1)
   expect(defaultSessionPaneWidth(108, false)).toBe(43)
   expect(defaultSessionPaneWidth(108, true)).toBe(38)
+})
+
+test("home panel resizing stays inside bounds and reserves room for the chat", () => {
+  expect(clampHomeProjectPanelWidth(10, 108)).toBe(30)
+  expect(clampHomeProjectPanelWidth(38, 108)).toBe(38)
+  expect(clampHomeProjectPanelWidth(100, 108)).toBe(44)
+  expect(clampHomeProjectPanelWidth(100, 150)).toBe(64)
+  expect(clampHomeProjectPanelWidth(20, 80)).toBe(16)
 })

@@ -61,7 +61,14 @@ export function sessionSidebarDocks(available: number, compact: boolean) {
 // for the centered prompt and cap the panel so it cannot swallow the main content.
 export const HOME_PROJECT_PANEL_MIN_WIDTH = 30
 export const HOME_PROJECT_PANEL_WIDTH = 42
-const HOME_CONTENT_MIN_WIDTH = 64
+export const HOME_PROJECT_PANEL_MAX_WIDTH = 64
+export const HOME_CONTENT_MIN_WIDTH = 64
+
+export function clampHomeProjectPanelWidth(width: number, available: number) {
+  const max = Math.max(1, Math.min(HOME_PROJECT_PANEL_MAX_WIDTH, available - HOME_CONTENT_MIN_WIDTH))
+  const min = Math.min(HOME_PROJECT_PANEL_MIN_WIDTH, max)
+  return Math.max(min, Math.min(width, max))
+}
 
 export function homeProjectPanelWidth(total: number, leftPanelWidth: number) {
   const available = total - leftPanelWidth - HOME_CONTENT_MIN_WIDTH
