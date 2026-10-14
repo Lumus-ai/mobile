@@ -54,8 +54,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const dialog = useDialog()
   const notes = useNotes()
   const theme = useTheme()
-  const [frameWidth, setFrameWidth] = createSignal(Math.max(0, dimensions().width - props.verticalTabsWidth))
-  const availableWidth = () => frameWidth()
+  // Derive the frame's current width from live terminal and left-rail dimensions.
+  // Cached width stayed at the note split size after switching back to Projects.
+  const availableWidth = () => Math.max(0, dimensions().width - props.verticalTabsWidth)
   const [canvasHostWidth, setCanvasHostWidth] = createSignal(availableWidth())
   const compactLayout = useCompactLayout()
   const activePanel = createMemo(() => {
@@ -85,9 +86,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       defaultPaneWidth(),
     defaultValue: defaultPaneWidth,
     clamp: (width) => clampSessionPaneWidth(width, panels.width()),
-    fromMouse: (event) => frameWidth() - (event.x - props.verticalTabsWidth) - 1,
+    fromMouse: (event) => availableWidth() - (event.x - props.verticalTabsWidth) - 1,
     contains: (event, width) => {
-      const boundary = props.verticalTabsWidth + frameWidth() - width
+      const boundary = props.verticalTabsWidth + availableWidth() - width
       return event.x >= boundary - 1 && event.x <= boundary
     },
     onCommit: (width) => {
@@ -104,9 +105,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     value: () => layout.sidebarWidth ?? defaultSidebarWidth(),
     defaultValue: defaultSidebarWidth,
     clamp: (width) => clampSessionSidebarWidth(width, panels.width()),
-    fromMouse: (event) => frameWidth() - (event.x - props.verticalTabsWidth) - 1,
+    fromMouse: (event) => availableWidth() - (event.x - props.verticalTabsWidth) - 1,
     contains: (event, width) => {
-      const boundary = props.verticalTabsWidth + frameWidth() - width
+      const boundary = props.verticalTabsWidth + availableWidth() - width
       return event.x >= boundary - 1 && event.x <= boundary
     },
     onCommit: (width) => {
@@ -230,7 +231,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   // a fallback before OpenTUI emits the first size event.
   const [measuredSessionPaneWidth, setMeasuredSessionPaneWidth] = createSignal(0)
   const transcriptWidth = () =>
-    resolveSessionPaneWidth(measuredSessionPaneWidth(), initialSessionTranscriptWidth())
+    resolveSessionPaneWidth(measuredSessionPaneWidth(), initialSessionTranscriptWidth(), canvas() !== undefined)
 
   const toggleSidebar = () => {
     batch(() => {
@@ -397,9 +398,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       minHeight={0}
       flexDirection="row"
       position="relative"
-      onSizeChange={function () {
-        setFrameWidth(this.width)
-      }}
       onMouseDrag={(event) => {
         paneResize.onMouseDrag(event)
         sidebarResize.onMouseDrag(event)
@@ -631,7 +629,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       >
         <PaneResizeHandle
           resize={rightPaneResize()}
-          left={frameWidth() - rightPaneResize().size() - 1}
+          left={availableWidth() - rightPaneResize().size() - 1}
           highlight="right"
         />
       </Show>

@@ -212,8 +212,10 @@ test("transcript width follows the active note split and visible side rail", () 
   ).toBe(107)
 })
 
-test("the actual session pane width supersedes the initial estimate after reflow", () => {
+test("measured transcript width is ignored after leaving Notes mode", () => {
   expect(resolveSessionPaneWidth(0, 72)).toBe(72)
   expect(resolveSessionPaneWidth(38, 72)).toBe(38)
+  expect(resolveSessionPaneWidth(42, 72, false)).toBe(72)
+  expect(resolveSessionPaneWidth(42, 72, true)).toBe(42)
   expect(resolveSessionPaneWidth(74, 72)).toBe(74)
 })

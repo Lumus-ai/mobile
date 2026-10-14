@@ -58,8 +58,10 @@ export function clampSessionPaneWidth(width: number, total: number) {
   return Math.max(min, Math.min(width, max))
 }
 
-export function resolveSessionPaneWidth(measured: number, initial: number) {
-  return measured > 0 ? measured : initial
+export function resolveSessionPaneWidth(measured: number, initial: number, preferMeasured = true) {
+  // Once the note canvas is closed, the measured session width may still refer to
+  // the old note/chat split. Ignore it and recalculate from the current frame.
+  return preferMeasured && measured > 0 ? measured : initial
 }
 
 export function sessionTranscriptWidth(input: {
