@@ -113,6 +113,38 @@ test("a docked session sidebar cannot be dragged into an unreadable strip", () =
   expect(clampSessionSidebarWidth(90, 90)).toBe(34)
 })
 
+test("the transcript width is recalculated from current layout rather than a stale measured width", () => {
+  const withNote = sessionTranscriptWidth({
+    availableWidth: 110,
+    hasCanvas: true,
+    stacked: false,
+    canvasHostWidth: 100,
+    noteChatWidth: 42,
+    rightPaneVisible: true,
+    rightPaneWidth: 38,
+    revealRailVisible: false,
+    revealRailWidth: 3,
+    fullscreenContentWidth: 0,
+    fullscreen: false,
+  })
+  const withoutNote = sessionTranscriptWidth({
+    availableWidth: 110,
+    hasCanvas: false,
+    stacked: false,
+    canvasHostWidth: 100,
+    noteChatWidth: 42,
+    rightPaneVisible: true,
+    rightPaneWidth: 38,
+    revealRailVisible: false,
+    revealRailWidth: 3,
+    fullscreenContentWidth: 0,
+    fullscreen: false,
+  })
+  expect(withNote).toBe(42)
+  expect(withoutNote).toBe(72)
+  expect(withoutNote).toBeGreaterThan(withNote)
+})
+
 test("the transcript fills the center column after switching from Notes to Projects", () => {
   expect(
     sessionTranscriptWidth({
