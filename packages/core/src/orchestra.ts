@@ -736,14 +736,15 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           // A crash can happen after synthetic admission but before deleting the task marker.
           // Find that durable report first; otherwise retrying with state="recovered" would
           // reuse the ID with a different payload and conflict forever.
-          if (task.value.reportID) {
+          const originalReportID = task.value.reportID
+          if (originalReportID) {
             const project = yield* projectForTask(task.value)
             const ledger = project
-              ? decodeTaskReport(yield* kv.get(reportKey(project.id, task.value.reportID)))
+              ? decodeTaskReport(yield* kv.get(reportKey(project.id, originalReportID)))
               : Option.none<TaskReportInfo>()
             const target = Option.getOrElse(ledger, () => ({
               deliveredTo: task.value.main,
-              deliveryID: task.value.reportID!,
+              deliveryID: originalReportID,
             }))
             const recorded = yield* sessions
               .message({ sessionID: target.deliveredTo, messageID: target.deliveryID })
