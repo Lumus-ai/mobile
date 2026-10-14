@@ -149,6 +149,8 @@ const ROLE = "orchestra/role/"
 const TEMPLATE = "orchestra/template/"
 // A project-owned write-ahead roster. Each Session ID is persisted before the worker is created.
 const TEAM_PLAN = "orchestra/team-plan/"
+// Durable intent for workspace moves interrupted between session relocations.
+const MOVE_PLAN = "orchestra/move-plan/"
 // The project that opened a session. Without it, every project in one directory would share one team.
 const OWNER = "orchestra/owner/"
 // Durable reservation for the main session being initialized. It bridges the KV/session-store write gap.
@@ -194,6 +196,21 @@ const TeamPlan = Schema.Struct({
   members: Schema.Array(PlannedTeamMember),
 })
 const decodeTeamPlan = Schema.decodeUnknownOption(TeamPlan)
+const ProjectMoveMember = Schema.Struct({
+  id: SessionID,
+  // Relative to the original source root, normalized to "/".
+  relative: Schema.String,
+  // Destination-relative path selected when the plan is written, or "" for the root.
+  targetRelative: Schema.String,
+  main: Schema.Boolean,
+})
+const ProjectMovePlanSchema = Schema.Struct({
+  from: Schema.String,
+  to: Schema.String,
+  members: Schema.Array(ProjectMoveMember),
+})
+type ProjectMovePlan = typeof ProjectMovePlanSchema.Type
+const decodeProjectMovePlan = Schema.decodeUnknownOption(ProjectMovePlanSchema)
 
 // Annotated: the layer calls Session operations whose types reach back through the
 // instance graph that includes this node, so an inferred type would be circular.
@@ -450,42 +467,14 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         message: `Could not move session "${session.title ?? session.id}" to "${directory}": ${String(error)}`,
       })
 
-    // A project path change is also a workspace migration for the sessions it owns. Move
-    // those that lived under the old root, preserve a relative subdirectory when it exists
-    // in the new workspace, and keep explicitly external sessions at their own locations.
-    // The project record is saved only after every required move has settled successfully.
-    const moveProjectSessions = Effect.fnUntraced(function* (project: Project, destination: string) {
-      const oldRoot = yield* fs.resolve(project.directory)
-      const nextRoot = yield* fs.resolve(destination)
-      if (oldRoot === nextRoot) return
-
-      const members = yield* projectSessions(project)
-      const main = project.main
-        ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      // Move the workers first and the main session last so the control plane remains at
-      // the old root until the rest of the team has completed its workspace handoff.
-      const candidates = [...members, ...(main ? [main] : [])]
-      for (const session of candidates) {
-        // Once included in this project, a session must remain owned by it after its
-        // directory changes and no longer matches the previous root's path rule.
+    // Apply a persisted plan. Paths are captured before moving anything, so retries remain
+    // deterministic and a session already outside the source root is not mistaken for an external one.
+    const applyProjectMove = Effect.fnUntraced(function* (project: Project, plan: ProjectMovePlan) {
+      const moveOne = Effect.fnUntraced(function* (session: SessionSchema.Info, targetDirectory: string) {
         yield* kv.set(OWNER + session.id, project.id)
         const currentDirectory = yield* fs.resolve(session.location.directory)
-        let targetDirectory: string
-        if (session.id === project.main) {
-          targetDirectory = destination
-        } else {
-          const relative = path.relative(oldRoot, currentDirectory)
-          const inside =
-            relative === "" ||
-            (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
-          if (!inside) continue
-          const mapped = relative ? path.resolve(destination, relative) : destination
-          targetDirectory = relative && (yield* fs.isDir(mapped)) ? mapped : destination
-        }
         const targetRoot = yield* fs.resolve(targetDirectory)
-        if (currentDirectory === targetRoot) continue
-
+        if (currentDirectory === targetRoot) return
         const failure = (error: unknown) => moveFailure(project, session, targetDirectory, error)
         yield* sessions
           .move({
@@ -498,9 +487,84 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         const moved = yield* sessions.get(session.id).pipe(Effect.mapError(failure))
         const actualRoot = yield* fs.resolve(moved.location.directory)
         if (actualRoot !== targetRoot) {
-          return yield* Effect.fail(failure(new Error(`Session location remained at ${moved.location.directory}`)))
+          return yield* Effect.fail(failure(new Error("Session location remained at " + moved.location.directory)))
         }
+      })
+
+      // Workers first, current main last: the project keeps its control session available through migration.
+      for (const member of plan.members.filter((item) => !item.main)) {
+        const session = yield* sessions.get(member.id).pipe(Effect.orElseSucceed(() => undefined))
+        if (!session) continue
+        const segments = member.targetRelative.split("/").filter(Boolean)
+        if (segments.some((segment) => segment === "." || segment === "..")) {
+          return yield* Effect.fail(
+            moveFailure(project, session, plan.to, new Error("Unsafe relative path in saved project move plan")),
+          )
+        }
+        const targetDirectory = segments.length > 0 ? path.resolve(plan.to, ...segments) : plan.to
+        yield* moveOne(session, targetDirectory)
       }
+
+      const main = project.main ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined)) : undefined
+      if (main) yield* moveOne(main, plan.to)
+    })
+
+    // Persist intent before moving the first session. If an interrupted migration is redirected to a
+    // new destination, the original relative roster is reused and the existing moved sessions follow it.
+    const moveProjectSessions = Effect.fnUntraced(function* (project: Project, destination: string) {
+      const oldRoot = yield* fs.resolve(project.directory)
+      const nextRoot = yield* fs.resolve(destination)
+      const key = MOVE_PLAN + project.id
+      const stored = decodeProjectMovePlan(yield* kv.get(key))
+      if (Option.isNone(stored) && oldRoot === nextRoot) return undefined
+
+      let plan: ProjectMovePlan
+      if (Option.isSome(stored)) {
+        const members = yield* Effect.forEach(stored.value.members, (member) =>
+          Effect.gen(function* () {
+            if (member.main || !member.relative) return { ...member, targetRelative: "" }
+            const segments = member.relative.split("/").filter(Boolean)
+            const mapped = path.resolve(destination, ...segments)
+            return { ...member, targetRelative: (yield* fs.isDir(mapped)) ? member.relative : "" }
+          }),
+        )
+        plan = { ...stored.value, to: destination, members }
+      } else {
+        const team = yield* projectSessions(project)
+        const entries: Array<ProjectMovePlan["members"][number]> = []
+        for (const session of team) {
+          const currentDirectory = yield* fs.resolve(session.location.directory)
+          const relative = path.relative(oldRoot, currentDirectory)
+          const inside =
+            relative === "" ||
+            (relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative))
+          // Explicitly external sessions stay where they are; only original descendants enter the plan.
+          if (!inside) continue
+          const normalized = relative.split(/[\\/]+/).filter(Boolean).join("/")
+          const mapped = normalized ? path.resolve(destination, ...normalized.split("/")) : destination
+          const targetRelative = normalized && (yield* fs.isDir(mapped)) ? normalized : ""
+          entries.push({ id: session.id, relative: normalized, targetRelative, main: false })
+        }
+        if (project.main) entries.push({ id: project.main, relative: "", targetRelative: "", main: true })
+        plan = { from: oldRoot, to: destination, members: entries }
+      }
+
+      yield* kv.set(key, Schema.encodeSync(ProjectMovePlanSchema)(plan))
+      yield* applyProjectMove(project, plan)
+      // Keep the plan until update() commits Project.directory; a crash in that gap is recoverable.
+      return plan
+    })
+
+    // Finish a persisted migration when the project is opened after interruption.
+    const reconcileProjectMoveUnlocked = Effect.fnUntraced(function* (project: Project) {
+      const key = MOVE_PLAN + project.id
+      const plan = Option.getOrUndefined(decodeProjectMovePlan(yield* kv.get(key)))
+      if (!plan) return project
+      yield* applyProjectMove(project, plan)
+      yield* initializeDod(plan.to)
+      const updated = yield* save({ ...project, directory: plan.to })
+      yield* kv.remove(key)
+      return updated
     })
 
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped" | "recovered", detail?: string): Effect.Effect<void> =>
@@ -872,23 +936,39 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         // Older project records may not yet have a main pointer. Repair them before entering
         // the update lock so a directory change cannot strand an orphaned main at the old root.
         if (input.directory !== undefined) yield* ensureMain(id)
-        // Serialize metadata changes with main-session initialization and project removal.
         return yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
-            const project = yield* get(id)
+            let project = yield* get(id)
             const nextDirectory = input.directory === undefined ? project.directory : yield* directory(input.directory)
-            if (nextDirectory !== project.directory) yield* moveProjectSessions(project, nextDirectory)
-            const updated = yield* save({
-              ...project,
-              name: input.name?.trim() || project.name,
-              directory: nextDirectory,
-            })
-            // The main session is the project's long-lived identity. Keep its visible title in sync
-            // when the project is renamed; ensureMain repairs this too if a crash interrupts the rename.
+            const pendingMove = decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + id))
+            let updated: Project
+            if (input.directory === undefined && Option.isSome(pendingMove)) {
+              // A rename must finish an interrupted move, not leave part of the team behind.
+              project = yield* reconcileProjectMoveUnlocked(project)
+              updated = yield* save({
+                ...project,
+                name: input.name?.trim() || project.name,
+              })
+            } else {
+              const plan =
+                nextDirectory !== project.directory || Option.isSome(pendingMove)
+                  ? yield* moveProjectSessions(project, nextDirectory)
+                  : undefined
+              // If either operation fails, the saved move plan remains for a future retry.
+              if (plan) yield* initializeDod(plan.to)
+              updated = yield* save({
+                ...project,
+                name: input.name?.trim() || project.name,
+                directory: nextDirectory,
+              })
+              if (plan) yield* kv.remove(MOVE_PLAN + id)
+            }
+            // The main session is the project's long-lived identity. Keep its visible title in sync;
+            // ensureMain repairs it too if a crash interrupts the rename.
             if (updated.main && updated.name !== project.name) {
               const main = yield* sessions.get(updated.main).pipe(Effect.orElseSucceed(() => undefined))
-              if (main && main.title !== `${updated.name} · Orchestrator`)
-                yield* sessions.rename({ sessionID: main.id, title: `${updated.name} · Orchestrator` }).pipe(Effect.orDie)
+              if (main && main.title !== updated.name + " · Orchestrator")
+                yield* sessions.rename({ sessionID: main.id, title: updated.name + " · Orchestrator" }).pipe(Effect.orDie)
             }
             return updated
           }),
@@ -904,6 +984,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             yield* kv.remove(PROJECT + id)
             // A leftover plan after a crash is harmless once the project record is gone.
             yield* kv.remove(TEAM_PLAN + id)
+            yield* kv.remove(MOVE_PLAN + id)
             // Its sessions go back to whichever project contains their directory.
             const claims = yield* owners()
             yield* Effect.forEach(
@@ -920,18 +1001,20 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         return yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
             const session = yield* ensureMainUnlocked(id)
-            // Project open also resumes any roster plan left behind by an interrupted create.
-            const project = yield* get(id)
+            // Resume a partially completed workspace move before rebuilding the team at its target root.
+            let project = yield* get(id)
+            project = yield* reconcileProjectMoveUnlocked(project)
             yield* reconcileTeamUnlocked(project)
             yield* recoverPending(session.id)
-            return session
+            return yield* sessions.get(session.id).pipe(Effect.orElseSucceed(() => session))
           }),
         )
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
         return yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
-            const project = yield* get(id)
+            let project = yield* get(id)
+            project = yield* reconcileProjectMoveUnlocked(project)
             yield* reconcileTeamUnlocked(project)
             return yield* projectSessions(project)
           }),
@@ -1019,9 +1102,10 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           Effect.gen(function* () {
             const current = decodeProject(yield* kv.get(PROJECT + candidate.id))
             if (Option.isNone(current) || current.value.main !== sessionID) return undefined
-            yield* reconcileTeamUnlocked(current.value)
+            const project = yield* reconcileProjectMoveUnlocked(current.value)
+            yield* reconcileTeamUnlocked(project)
             yield* recoverPending(sessionID)
-            return current.value
+            return project
           }),
         )
       }),

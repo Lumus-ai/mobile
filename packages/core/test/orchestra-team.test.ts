@@ -381,6 +381,67 @@ describe("Orchestra team", () => {
       )
     }).pipe(Effect.scoped),
   ),
+  it.live("continues a partially completed move toward a newly requested destination", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-move-recovery-")))
+      const source = path.join(tmp.path, "source")
+      const sourceNested = path.join(source, "src")
+      const firstDestination = path.join(tmp.path, "destination-a")
+      const firstDestinationNested = path.join(firstDestination, "src")
+      const destination = path.join(tmp.path, "destination-b")
+      const destinationNested = path.join(destination, "src")
+      yield* Effect.promise(() =>
+        Promise.all([
+          mkdir(sourceNested, { recursive: true }),
+          mkdir(firstDestinationNested, { recursive: true }),
+          mkdir(destinationNested, { recursive: true }),
+        ]),
+      )
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Move recovery", directory: source, template: "bugfix" })
+      const members = yield* orchestra.sessions(project.id)
+      const nested = yield* sessions.create({
+        location: { directory: AbsolutePath.make(sourceNested) },
+        title: "Nested worker",
+        agent: Orchestra.role("developer"),
+      })
+      yield* orchestra.claim(nested.id, project.id)
+      yield* orchestra.setAccess(nested.id, "full")
+
+      const moveKey = "orchestra/move-plan/" + project.id
+      // Simulate a crash after one session moved, while the project record still points at source.
+      yield* kv.set(moveKey, {
+        from: source,
+        to: firstDestination,
+        members: [
+          ...members.map((member) => ({ id: member.id, relative: "", targetRelative: "", main: false })),
+          { id: nested.id, relative: "src", targetRelative: "src", main: false },
+          { id: project.main!, relative: "", targetRelative: "", main: true },
+        ],
+      })
+      const alreadyMoved = members[0]
+      yield* sessions.move({
+        sessionID: alreadyMoved.id,
+        directory: AbsolutePath.make(firstDestination),
+        delivery: "queue",
+      })
+      yield* sessions.wait(alreadyMoved.id)
+      expect((yield* sessions.get(alreadyMoved.id)).location.directory).toBe(AbsolutePath.make(firstDestination))
+
+      // Redirect the interrupted migration. Every session, including the one already moved to A,
+      // must follow the original plan to destination B.
+      const updated = yield* orchestra.update(project.id, { directory: destination })
+      expect(updated.directory).toBe(destination)
+      for (const member of members) {
+        expect((yield* sessions.get(member.id)).location.directory).toBe(AbsolutePath.make(destination))
+      }
+      expect((yield* sessions.get(nested.id)).location.directory).toBe(AbsolutePath.make(destinationNested))
+      expect((yield* sessions.get(project.main!)).location.directory).toBe(AbsolutePath.make(destination))
+      expect(yield* kv.get(moveKey)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
   it.live("rebuilds a partially created team from its durable roster plan", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-roster-recovery-")))
