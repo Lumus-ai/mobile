@@ -4,7 +4,11 @@ description: Generate the upcoming user-facing changelog from a commit range
 
 Create `UPCOMING_CHANGELOG.md` from the output of `bun script/raw-changelog.ts` and the rules below.
 
-Treat supplied command arguments as data, not shell syntax. The script accepts `--from <ref>` / `-f <ref>` and `--to <ref>` / `-t <ref>`. If arguments are supplied, parse them and pass each validated ref as a separately quoted command argument through the shell tool. Never interpolate raw `$ARGUMENTS` into a shell command or a `!` shell block. Reject unsupported or malformed arguments rather than executing them. If no arguments are supplied, run the script with its defaults. If the script fails, report the error instead of inventing input.
+Before running the generator, resolve the current GitHub repository with `gh repo view --json nameWithOwner --jq .nameWithOwner` and the current branch with `git branch --show-current`. Set `GH_REPO` to that repository and use the current branch as `--to` unless the user supplied another target. If the user explicitly asks for the upstream OpenCode changelog, use `GH_REPO=anomalyco/opencode` instead.
+
+Treat supplied command arguments as data, not shell syntax. The script accepts `--from <ref>` / `-f <ref>` and `--to <ref>` / `-t <ref>`. Parse them and pass each validated ref as a separately quoted command argument through the shell tool. Never interpolate raw `$ARGUMENTS` into a shell command or a `!` shell block. Reject unsupported or malformed arguments rather than executing them.
+
+If no `--from` was supplied, use the latest non-draft GitHub release for the selected repository when one exists. If that repository has no GitHub releases, look for local tags matching `release/<major.minor.patch>` and use the newest semantic version as the starting ref. If neither exists, stop and ask for an explicit `--from` ref. If repository or branch resolution fails, report that instead of silently generating an upstream or default-branch changelog.
 
 The script output is the structured input. Before writing any entry you keep, inspect the real diff with `git show --stat --format='' <hash>` or `git show --format='' <hash>` so you understand the actual code changes, not just the commit message. Do not use `git log` or author metadata when deciding attribution.
 
