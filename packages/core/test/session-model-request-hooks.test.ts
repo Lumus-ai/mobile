@@ -3,6 +3,8 @@ import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Location } from "@opencode/core/location"
 import { Tool } from "@opencode/core/tool"
@@ -56,12 +58,19 @@ describe("SessionModelRequest HTTP hooks", () => {
         )
         const tools = yield* registry.snapshot()
         const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
-        const makeModel = (provider: string) =>
-          SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "test-model", provider }), {
+        const makeModel = (provider: string) => {
+          // OpenAIChat has a fixed route provider; only the model reference varies here because
+          // the request compatibility branch is keyed by the selected catalog provider.
+          const resolved = SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "test-model" }), {
             capabilities: { tools: true, input: ["text"], output: ["text"] },
             cost: [],
             limit: { context: 200_000, output: 32_000 },
           })
+          return {
+            ...resolved,
+            ref: Model.Ref.make({ id: resolved.ref.id, providerID: Provider.ID.make(provider) }),
+          }
+        }
 
         const zen = yield* requests.primary({
           session,
