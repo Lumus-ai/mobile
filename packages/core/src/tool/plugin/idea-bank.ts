@@ -56,7 +56,7 @@ export const Plugin = {
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
             }
-            const configured = process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, ""))
+            const configured = process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, "")
             if (!configured) {
               return {
                 output:
