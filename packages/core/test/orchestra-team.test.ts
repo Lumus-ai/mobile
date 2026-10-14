@@ -1388,7 +1388,8 @@ describe("Orchestra team", () => {
       )
       expect(counterexample.system.toLowerCase()).toContain("falsify")
       expect(counterexample.permissions).toContainEqual({ action: "edit", resource: "*", effect: "deny" })
-      expect(yield* evaluate(Orchestra.role("counterexample-engineer"), "edit")).toBe("deny")
+      const counterexampleEditEffect = yield* evaluate(Orchestra.role("counterexample-engineer"), "edit")
+      expect(counterexampleEditEffect).toBe("deny")
 
       const role = yield* orchestra.saveRole(undefined, {
         name: "Translator",
