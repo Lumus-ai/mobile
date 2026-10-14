@@ -505,6 +505,18 @@ export const templates: readonly (TemplateSpec & { id: string })[] = [
     ],
   },
   {
+    id: "proof-driven",
+    name: "Proof-driven",
+    description: "High-assurance work: design, implementation, independent acceptance tests, adversarial counterexamples and review",
+    members: [
+      member("architect", "Architect"),
+      member("developer", "Developer"),
+      member("tester", "Tester"),
+      member("counterexample-engineer", "Counterexample Engineer"),
+      member("reviewer", "Reviewer"),
+    ],
+  },
+  {
     id: "opencode-core",
     name: "OpenCode++ Core",
     description: "Evolve the entire Opencode++ monorepo: architecture, core implementation, cross-package contracts, platform parity, security, tests and independent review",

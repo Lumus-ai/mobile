@@ -49,6 +49,20 @@ describe("built-in Orchestra role contracts", () => {
     expect(memberAgents).not.toContain(role("counterexample-engineer"))
   })
 
+  test("offers a high-assurance template that explicitly includes counterexample analysis", () => {
+    const proofDriven = templates.find((item) => item.id === "proof-driven")
+    expect(proofDriven).toBeDefined()
+    if (!proofDriven) throw new Error("proof-driven template must be registered")
+    const memberAgents = proofDriven.members.map((member) => member.agent)
+    expect(memberAgents).toEqual([
+      role("architect"),
+      role("developer"),
+      role("tester"),
+      role("counterexample-engineer"),
+      role("reviewer"),
+    ])
+  })
+
   test("every built-in team template references registered roles", () => {
     for (const template of templates) {
       for (const member of template.members) {

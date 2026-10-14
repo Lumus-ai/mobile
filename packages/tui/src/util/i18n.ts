@@ -462,6 +462,7 @@ const ru: Record<string, string> = {
   Research: "Исследование",
   Docs: "Документация",
   Release: "Релиз",
+  "Proof-driven": "Доказательная разработка",
   // Command palette, slash commands, connection
   Commands: "Команды",
   Suggested: "Рекомендуемые",
