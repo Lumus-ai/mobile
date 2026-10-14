@@ -36,6 +36,10 @@ export const description = [
   "",
   "A hit is metadata only. Installing a skill is the user's decision: report what you found and let them choose.",
   "",
+  `Prefer this tool over the raw ${McpTool.name(server, "search_skills")} and ${McpTool.name(server, "get_skill")} for finding and reading skills: it bounds the answer, turns a server refusal into a readable error instead of raw text, and asks permission under both the server's tool name and its own, so a rule written for either one stops it.`,
+  "",
+  `The raw ${server}_* tools remain for what this tool does not cover — ${McpTool.name(server, "read_skill")}, ${McpTool.name(server, "list_categories")}, ${McpTool.name(server, "semantic_search_skills")}, ${McpTool.name(server, "get_cache_stats")}, ${McpTool.name(server, "warm_cache")} — and are not needed for search or get.`,
+  "",
   `Permission: each call is checked under the proxied MCP tool name (${McpTool.name(server, "search_skills")}, ${McpTool.name(server, "get_skill")}), the same name a deny rule aimed at that server already uses, and under ${name}.`,
 ].join("\n")
 

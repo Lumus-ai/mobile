@@ -696,6 +696,28 @@ describe("SkillCatalogTool", () => {
     expect(SkillCatalogTool.description).toContain(McpTool.name(SkillCatalogTool.server, "get_skill"))
   })
 
+  test("tells the model to take search and get here, and which raw tools are the fallback", () => {
+    // Two names, so the registry's "latest registration for a name wins" never fires and the raw
+    // `skillsmp_search_skills` / `skillsmp_get_skill` sit beside this tool on the model list. The
+    // description is the only thing that decides which of the two doors the model walks through,
+    // so the preference has to be spelled out for the model, not just for a reader.
+    expect(SkillCatalogTool.description).toContain(
+      `Prefer this tool over the raw ${McpTool.name(SkillCatalogTool.server, "search_skills")} and ${McpTool.name(SkillCatalogTool.server, "get_skill")} for finding and reading skills`,
+    )
+    // The other half of the promise: the raw tools are deferred to, not banned. Dropping
+    // semantic_search_skills from that list would quietly take semantic search away, since this
+    // tool does not cover it.
+    expect(SkillCatalogTool.description).toContain(
+      [
+        McpTool.name(SkillCatalogTool.server, "read_skill"),
+        McpTool.name(SkillCatalogTool.server, "list_categories"),
+        McpTool.name(SkillCatalogTool.server, "semantic_search_skills"),
+        McpTool.name(SkillCatalogTool.server, "get_cache_stats"),
+        McpTool.name(SkillCatalogTool.server, "warm_cache"),
+      ].join(", "),
+    )
+  })
+
   test("is registered in the internal pre list, the only place production loads it from", async () => {
     // A source check on purpose: deleting the line from `pre` leaves every other test green,
     // because they all register the plugin themselves.

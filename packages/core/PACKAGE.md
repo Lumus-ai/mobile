@@ -48,7 +48,12 @@ fork/revert, compaction, inbox.
 
 **Skill catalog** — `packages/core/src/tool/plugin/skill-catalog.ts`
 registers the `skill_catalog` tool, the one native path to the SkillsMP
-marketplace. It has two actions: `search` (a few words in `query`,
+marketplace. Both doors stay open, because the raw `skillsmp_search_skills`
+and `skillsmp_get_skill` MCP tools are registered beside it under a
+different name: the description therefore names this tool the preferred
+path for searching and reading, and defers to the raw ones only for what
+it does not cover (`read_skill`, `list_categories`,
+`semantic_search_skills`, `get_cache_stats`, `warm_cache`). It has two actions: `search` (a few words in `query`,
 optionally narrowed by `category`, `language`, `sort`, `limit` capped at 10) and `get` (one skill by the bare name a search row prints).
 Internally both are proxied calls to the `skillsmp` MCP server — its
 `search_skills` and `get_skill` tools — so the server must be configured
