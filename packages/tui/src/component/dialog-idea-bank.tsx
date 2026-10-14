@@ -249,12 +249,14 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
     const seen = new Set<string>()
     return [...globalIdeas(), ...(state.ideas ?? []), ...STARTER_IDEAS]
       .filter((idea) => {
-        if (terms.length > 0) {
+        // The server has already filtered and ranked community results. Do not
+        // filter them a second time here: local string matching can discard valid results
+        // from a multilingual/search-normalizing backend.
+        if (terms.length > 0 && !idea.global) {
           const searchable = [idea.title, idea.category, idea.kind, idea.description]
             .join(" ")
             .normalize("NFKC")
             .toLocaleLowerCase()
-          // Keep broad matches; the server ranks global results by number of matched terms.
           if (!terms.some((term) => searchable.includes(term))) return false
         }
         const key = [idea.title, idea.category]
