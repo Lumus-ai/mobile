@@ -277,7 +277,8 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
   const fullscreenHoverColor = () => theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action?.primary?.base ?? theme.text.base, 2)
   const fullscreen = () => props.panel.presentation === "fullscreen"
   const fullscreenLabel = () => fullscreen() ? t("Restore panel") : t("Full screen")
-  const fullscreenControl = () => props.panel.width >= 54 ? `${fullscreen() ? "↙" : "⛶"} ${fullscreenLabel()}` : fullscreen() ? "↙" : "⛶"
+  const fullscreenControl = () =>
+    props.panel.width >= 54 ? `${fullscreen() ? "↙" : "⛶"} ${fullscreenLabel()}` : fullscreenLabel()
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
   const [boardRoot, setBoardRoot] = createSignal<string>()
   let revision = 0
@@ -363,35 +364,45 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
             {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{props.context.ui.format.path(root())}</text>}
           </Show>
         </box>
-        <box
-          id="dod.panel.fullscreen"
-          flexShrink={0}
-          paddingLeft={1}
-          paddingRight={1}
-          backgroundColor={fullscreenHovered() ? hoverBackground(theme) : undefined}
-          onMouseOver={() => setFullscreenHovered(true)}
-          onMouseOut={() => setFullscreenHovered(false)}
-          onMouseUp={(event) => {
-            event.stopPropagation()
-            props.panel.toggleFullscreen()
-          }}
-        >
-          <text fg={fullscreenHovered() ? fullscreenHoverColor() : (theme.text.action?.primary?.base ?? theme.text.base)}>{fullscreenControl()}</text>
-        </box>
-        <box
-          id="dod.panel.close"
-          flexShrink={0}
-          paddingLeft={1}
-          paddingRight={1}
-          backgroundColor={closeHovered() ? hoverBackground(theme) : undefined}
-          onMouseOver={() => setCloseHovered(true)}
-          onMouseOut={() => setCloseHovered(false)}
-          onMouseUp={(event) => {
-            event.stopPropagation()
-            props.panel.close()
-          }}
-        >
-          <text fg={closeHovered() ? closeHoverColor() : (theme.text.action?.primary?.base ?? theme.text.base)}>{t("Close")} ✕</text>
+        <box flexDirection={props.panel.width >= 54 ? "row" : "column"} gap={1} flexShrink={0}>
+          <box
+            id="dod.panel.fullscreen"
+            flexShrink={0}
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={fullscreenHovered() ? hoverBackground(theme) : undefined}
+            onMouseOver={() => setFullscreenHovered(true)}
+            onMouseOut={() => setFullscreenHovered(false)}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              props.panel.toggleFullscreen()
+            }}
+          >
+            <text
+              fg={
+                fullscreenHovered()
+                  ? fullscreenHoverColor()
+                  : (theme.text.action?.primary?.base ?? theme.text.base)
+              }
+            >
+              {fullscreenControl()}
+            </text>
+          </box>
+          <box
+            id="dod.panel.close"
+            flexShrink={0}
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={closeHovered() ? hoverBackground(theme) : undefined}
+            onMouseOver={() => setCloseHovered(true)}
+            onMouseOut={() => setCloseHovered(false)}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              props.panel.close()
+            }}
+          >
+            <text fg={closeHovered() ? closeHoverColor() : (theme.text.action?.primary?.base ?? theme.text.base)}>{t("Close")} ✕</text>
+          </box>
         </box>
       </box>
 
