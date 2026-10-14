@@ -41,7 +41,7 @@ import { useT } from "../util/i18n"
 
 const ACCESS_ORDER: readonly OrchestraAccess[] = ["hidden", "read", "write", "full"]
 
-export function ProjectTree(props: { width: number }) {
+export function ProjectTree(props: { width: number; collapsed?: boolean; onHide?: () => void; onShow?: () => void }) {
   const t = useT()
   const client = useClient()
   const data = useData()
@@ -246,7 +246,25 @@ export function ProjectTree(props: { width: number }) {
   }
 
   return (
-    <box width={props.width} height="100%" flexShrink={0} backgroundColor={theme.background.raised.base} paddingTop={1}>
+    <Show
+      when={!props.collapsed}
+      fallback={
+        <box
+          width={props.width}
+          height="100%"
+          flexShrink={0}
+          backgroundColor={theme.background.raised.base}
+          border={["right"]}
+          borderColor={theme.border.base}
+          paddingTop={1}
+        >
+          <HoverAction id="project-tree.show" onClick={() => props.onShow?.()} paddingLeft={1} paddingRight={1}>
+            <text fg={theme.text.action.primary.base}>›</text>
+          </HoverAction>
+        </box>
+      }
+    >
+      <box width={props.width} height="100%" flexShrink={0} backgroundColor={theme.background.raised.base} paddingTop={1}>
       <box flexDirection="row" paddingLeft={1} paddingRight={1} paddingBottom={1}>
         <Tab tab="projects" label={t("Projects")} hover={hover} setHover={setHover} />
         <text fg={theme.text.muted}>│</text>
@@ -262,6 +280,11 @@ export function ProjectTree(props: { width: number }) {
             {t("+ New")}
           </text>
         </Row>
+        <Show when={props.onHide}>
+          <HoverAction id="project-tree.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
+            <text fg={theme.text.action.primary.base}>‹</text>
+          </HoverAction>
+        </Show>
       </box>
       <Show when={notes.tab() === "notes"}>
         <ProjectNotes />
@@ -528,7 +551,8 @@ export function ProjectTree(props: { width: number }) {
           </Show>
         </box>
       </scrollbox>
-    </box>
+      </box>
+    </Show>
   )
 }
 

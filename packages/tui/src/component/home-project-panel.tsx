@@ -7,6 +7,7 @@ import { useProjects } from "../context/projects"
 import { useRoute } from "../context/route"
 import { useTheme } from "../context/theme"
 import { useT } from "../util/i18n"
+import { HoverAction } from "./hover-action"
 import { parseDodBoard, resolveDodRoot, summarizeDodBoard, type DodTask } from "../feature-plugins/sidebar/dod"
 
 const MARK: Record<string, string> = {
@@ -24,7 +25,7 @@ type BoardState =
   | { type: "ready"; items: DodTask[] }
   | { type: "error"; reason: string }
 
-export function HomeProjectPanel(props: { width: number }) {
+export function HomeProjectPanel(props: { width: number; collapsed?: boolean; onHide?: () => void; onShow?: () => void }) {
   const theme = useTheme()
   const t = useT()
   const route = useRoute()
@@ -113,29 +114,54 @@ export function HomeProjectPanel(props: { width: number }) {
   }
 
   return (
-    <box
-      width={props.width}
-      height="100%"
-      flexShrink={0}
-      minWidth={0}
-      minHeight={0}
-      flexDirection="column"
-      padding={1}
-      gap={1}
-      backgroundColor={theme.background.raised.base}
-      border={["left"]}
-      borderColor={theme.border.base}
+    <Show
+      when={!props.collapsed}
+      fallback={
+        <box
+          width={props.width}
+          height="100%"
+          flexShrink={0}
+          backgroundColor={theme.background.raised.base}
+          border={["left"]}
+          borderColor={theme.border.base}
+          paddingTop={1}
+        >
+          <HoverAction id="home-project-panel.show" onClick={() => props.onShow?.()} paddingLeft={1} paddingRight={1}>
+            <text fg={theme.text.action.primary.base}>‹</text>
+          </HoverAction>
+        </box>
+      }
     >
-      <box flexDirection="row" alignItems="center" flexShrink={0}>
+      <box
+        width={props.width}
+        height="100%"
+        flexShrink={0}
+        minWidth={0}
+        minHeight={0}
+        flexDirection="column"
+        padding={1}
+        gap={1}
+        backgroundColor={theme.background.raised.base}
+        border={["left"]}
+        borderColor={theme.border.base}
+      >
+      <box flexDirection="row" alignItems="center" flexShrink={0} gap={1}>
         <box flexDirection="column" flexGrow={1} minWidth={0} gap={1}>
           <text fg={theme.text.base}>
             <b>{t("Project DoD")}</b>
           </text>
           <text fg={theme.text.muted} wrapMode="none" truncate>
-            {project()?.name ?? (boardRoot() ? props.width : t("Current directory"))}
-            {boardRoot() ? ` · ${boardRoot()}` : ""}
+            {project()?.name ?? t("Current directory")}
           </text>
+          <Show when={boardRoot()}>
+            {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
+          </Show>
         </box>
+        <Show when={props.onHide}>
+          <HoverAction id="home-project-panel.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
+            <text fg={theme.text.action.primary.base}>›</text>
+          </HoverAction>
+        </Show>
       </box>
 
       <Show when={board().type === "loading"}>
@@ -207,6 +233,7 @@ export function HomeProjectPanel(props: { width: number }) {
           </scrollbox>
         </box>
       </Show>
-    </box>
+      </box>
+    </Show>
   )
 }

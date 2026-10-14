@@ -28,6 +28,7 @@ import { PaneResizeHandle } from "../ui/pane-resize-handle"
 import { useToast } from "../ui/toast"
 import { TerminalPane } from "./terminal-pane"
 import { PanelHost } from "./panel-host"
+import { HoverAction } from "./hover-action"
 import { NoteCanvas } from "./note-canvas"
 
 export function SessionFrame(props: { sessionID: string; verticalTabsWidth: number }) {
@@ -435,8 +436,37 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               </Show>
             }
           >
-            <Sidebar sessionID={props.sessionID} />
+            <Sidebar sessionID={props.sessionID} onHide={toggleSidebar} />
           </Show>
+        </box>
+      </Show>
+      <Show
+        when={
+          !fullscreen() &&
+          rightPane() === undefined &&
+          !canvas() &&
+          !activePanel() &&
+          !selectedTerminal() &&
+          !data.session.get(props.sessionID)?.parentID
+        }
+      >
+        <box
+          width={3}
+          height="100%"
+          flexShrink={0}
+          backgroundColor={theme.background.raised.base}
+          border={["left"]}
+          borderColor={theme.border.base}
+          paddingTop={1}
+        >
+          <HoverAction
+            id="session.sidebar.show"
+            onClick={() => toggleSidebar()}
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            <text fg={theme.text.action.primary.base}>‹</text>
+          </HoverAction>
         </box>
       </Show>
       <Show when={!fullscreen() && (rightPane() === "terminal" || rightPane() === "panel") && availableWidth() >= 3}>
@@ -452,7 +482,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           alignItems="flex-end"
           backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
         >
-          <Sidebar sessionID={props.sessionID} />
+          <Sidebar sessionID={props.sessionID} onHide={toggleSidebar} />
         </box>
       </Show>
     </box>

@@ -2,6 +2,7 @@ import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
+import { HoverAction } from "../../component/hover-action"
 import { Slot } from "../../plugin/render"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { TextAttributes } from "@opentui/core"
@@ -10,7 +11,7 @@ import "../../component/title-shimmer"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useCompactLayout } from "../../ui/compact-layout"
 
-export function Sidebar(props: { sessionID: string }) {
+export function Sidebar(props: { sessionID: string; onHide?: () => void }) {
   const data = useData()
   const theme = useTheme()
   const config = useConfig().data
@@ -30,23 +31,30 @@ export function Sidebar(props: { sessionID: string }) {
         paddingRight={layout.compact() ? 1 : 2}
         position="relative"
       >
-        <box flexShrink={0} paddingRight={2} paddingBottom={1}>
-          <title_shimmer
-            fg={theme.text.base}
-            rename={{
-              pending: data.session.title.pending(props.sessionID),
-              title: withTimestampedFallback(session()),
-            }}
-            enabled={config.animations ?? true}
-            backdrop={theme.background.raised.base}
-            attributes={
-              data.session.title.pending(props.sessionID) && config.animations === false
-                ? TextAttributes.DIM
-                : TextAttributes.BOLD
-            }
-          >
-            {withTimestampedFallback(session())}
-          </title_shimmer>
+        <box flexDirection="row" alignItems="center" flexShrink={0} paddingRight={1} paddingBottom={1} gap={1}>
+          <box flexGrow={1} minWidth={0}>
+            <title_shimmer
+              fg={theme.text.base}
+              rename={{
+                pending: data.session.title.pending(props.sessionID),
+                title: withTimestampedFallback(session()),
+              }}
+              enabled={config.animations ?? true}
+              backdrop={theme.background.raised.base}
+              attributes={
+                data.session.title.pending(props.sessionID) && config.animations === false
+                  ? TextAttributes.DIM
+                  : TextAttributes.BOLD
+              }
+            >
+              {withTimestampedFallback(session())}
+            </title_shimmer>
+          </box>
+          <Show when={props.onHide}>
+            <HoverAction id="session.sidebar.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
+              <text fg={theme.text.action.primary.base}>›</text>
+            </HoverAction>
+          </Show>
         </box>
         <scrollbox
           flexGrow={1}

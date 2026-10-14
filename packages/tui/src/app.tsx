@@ -126,6 +126,8 @@ registerOpencodeSpinner()
 
 const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as const
 
+const PANEL_RAIL_WIDTH = 3
+
 const sessionTabBindingCommands = [
   "session.tab.next",
   "session.tab.previous",
@@ -551,6 +553,8 @@ function App() {
     },
   })
   const [openSessions, setOpenSessions] = createSignal<SessionInfo[]>([])
+  const [leftPanelHidden, setLeftPanelHidden] = createSignal(false)
+  const [homePanelHidden, setHomePanelHidden] = createSignal(false)
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
   // the same problem on every refresh while still re-alerting if the state changes.
@@ -619,16 +623,18 @@ function App() {
     panels.presentation() === "fullscreen"
   const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+  const leftPanelVisible = () => verticalTabsVisible() && !leftPanelHidden()
+  const leftPanelOccupiedWidth = () =>
+    verticalTabsVisible() ? (leftPanelHidden() ? PANEL_RAIL_WIDTH : tabsResize.size()) : 0
+
   // Home gets the same right-hand project DoD panel as a session, but only when
   // the terminal can fit it without squeezing the prompt below a readable width.
   const homePanelWidth = createMemo(() =>
-    route.data.type === "home"
-      ? homeProjectPanelWidth(dimensions().width, verticalTabsVisible() ? tabsResize.size() : 0)
-      : 0,
+    route.data.type === "home" ? homeProjectPanelWidth(dimensions().width, leftPanelOccupiedWidth()) : 0,
   )
 
-  // Measure the prospective split layout, even while full-screen hides the tabs.
-  createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
+  // Measure the prospective split layout using the width the left panel currently occupies.
+  createEffect(() => panels.setWidth(dimensions().width - leftPanelOccupiedWidth()))
   createEffect(() => {
     const current = panels.current()
     if (!current || (route.data.type === "session" && route.data.sessionID === current.sessionID)) return
@@ -1208,21 +1214,6 @@ function App() {
         category: "System",
       },
       {
-        name: "app.layout",
-        title: "Switch panel layout",
-        slash: { name: "layout" },
-        run: () => {
-          const order = ["auto", "compact", "full"] as const
-          void config
-            .update((draft) => {
-              draft.layout = order[(order.indexOf(config.data.layout ?? "auto") + 1) % order.length]
-            })
-            .catch(toast.error)
-          dialog.clear()
-        },
-        category: "System",
-      },
-      {
         name: "registry.open",
         title: "Open tool registry",
         slash: { name: "registry", aliases: ["tools"] },
@@ -1499,7 +1490,12 @@ function App() {
         onMouseUp={tabsResize.onMouseUp}
       >
         <Show when={verticalTabsVisible()}>
-          <ProjectTree width={tabsResize.size()} />
+          <ProjectTree
+            width={leftPanelHidden() ? PANEL_RAIL_WIDTH : tabsResize.size()}
+            collapsed={leftPanelHidden()}
+            onHide={() => setLeftPanelHidden(true)}
+            onShow={() => setLeftPanelHidden(false)}
+          />
         </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
@@ -1511,7 +1507,12 @@ function App() {
                       <Home />
                     </box>
                     <Show when={homePanelWidth() > 0}>
-                      <HomeProjectPanel width={homePanelWidth()} />
+                      <HomeProjectPanel
+                        width={homePanelHidden() ? PANEL_RAIL_WIDTH : homePanelWidth()}
+                        collapsed={homePanelHidden()}
+                        onHide={() => setHomePanelHidden(true)}
+                        onShow={() => setHomePanelHidden(false)}
+                      />
                     </Show>
                   </box>
                 </Match>
@@ -1520,7 +1521,7 @@ function App() {
                     {(sessionID) => (
                       <SessionFrame
                         sessionID={sessionID}
-                        verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
+                        verticalTabsWidth={leftPanelOccupiedWidth()}
                       />
                     )}
                   </Show>
@@ -1557,7 +1558,7 @@ function App() {
             <NotesCommands />
           </Show>
         </box>
-        <Show when={verticalTabsVisible()}>
+        <Show when={leftPanelVisible()}>
           <PaneResizeHandle resize={tabsResize} left={tabsResize.size() - 1} />
         </Show>
       </box>
