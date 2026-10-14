@@ -159,39 +159,12 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
       >
         <box flexDirection="row" alignItems="center" flexShrink={0} gap={1}>
           <box flexDirection="column" flexGrow={1} minWidth={0} gap={1}>
-            <box flexDirection="row" alignItems="center" gap={1}>
+            <box flexDirection="row" alignItems="center" gap={1} minWidth={0}>
               <box flexGrow={1} minWidth={0}>
-                <text fg={theme.text.base}>
+                <text fg={theme.text.base} wrapMode="none" truncate>
                   <b>{t("Project DoD")}</b>
                 </text>
               </box>
-              <Show when={props.onHide}>
-                <box
-                  id="home-project-panel-hide"
-                  flexShrink={0}
-                  minWidth={3}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : undefined}
-                  onMouseOver={() => setCloseHovered(true)}
-                  onMouseOut={() => setCloseHovered(false)}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onMouseUp={(event) => {
-                    event.stopPropagation()
-                    props.onHide?.()
-                  }}
-                >
-                  <text
-                    fg={
-                      closeHovered()
-                        ? (theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action.primary.base, 2))
-                        : theme.text.action.primary.base
-                    }
-                  >
-                    ›
-                  </text>
-                </box>
-              </Show>
             </box>
             <text fg={theme.text.muted} wrapMode="none" truncate>
               {project()?.name ?? t("Current directory")}
@@ -200,6 +173,35 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
               {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
             </Show>
           </box>
+          <Show when={props.onHide}>
+            <box
+              id="home-project-panel-hide"
+              flexShrink={0}
+              width={5}
+              minWidth={5}
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : theme.background.raised.base}
+              onMouseOver={() => setCloseHovered(true)}
+              onMouseOut={() => setCloseHovered(false)}
+              onMouseDown={(event) => event.stopPropagation()}
+              onMouseUp={(event) => {
+                event.stopPropagation()
+                props.onHide?.()
+              }}
+            >
+              <text
+                fg={
+                  closeHovered()
+                    ? (theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action.primary.base, 2))
+                    : theme.text.action.primary.base
+                }
+                wrapMode="none"
+              >
+                ›
+              </text>
+            </box>
+          </Show>
         </box>
 
         <Show when={board().type === "loading"}>
@@ -216,18 +218,12 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
 
         <Show when={board().type === "ready"}>
           <box flexDirection="column" gap={1} flexShrink={0}>
-            <box flexDirection="row" alignItems="center" gap={1}>
+            <box flexDirection="row" alignItems="center" gap={1} minWidth={0}>
               <text fg={theme.text.base} flexShrink={0}>{t("Progress")}</text>
               <box flexGrow={1} minWidth={0} />
-              <box
-                flexShrink={0}
-                minWidth={10}
-                backgroundColor={theme.background.raised.base}
-              >
-                <text fg={theme.text.feedback.success.base} wrapMode="none">
-                  {`${summary().finished}/${summary().total} · ${summary().percent}%`}
-                </text>
-              </box>
+              <text fg={theme.text.feedback.success.base} wrapMode="none" flexShrink={0}>
+                {`${summary().finished}/${summary().total} · ${summary().percent}%`}
+              </text>
             </box>
             <text wrapMode="none">
               <span style={{ fg: theme.text.feedback.success.base }}>{"█".repeat(filled())}</span>
