@@ -39,7 +39,12 @@ const IS_PREVIEW = CHANNEL !== "latest"
 // the nearest supported stable release as the base and append the exact source commit as build
 // metadata; this is valid semver and lets the background service distinguish rebuilt checkouts.
 const MINIMUM_ANNOUNCED_VERSION = "1.18.0"
-const FALLBACK_VERSION = "2.0.0"
+const FALLBACK_VERSION =
+  typeof rootPkg.version === "string" &&
+  semver.valid(rootPkg.version) &&
+  semver.gte(rootPkg.version, MINIMUM_ANNOUNCED_VERSION)
+    ? rootPkg.version
+    : "2.0.0"
 
 const VERSION = await (async () => {
   if (!IS_PREVIEW) {
@@ -84,7 +89,7 @@ async function gitCommit() {
 async function releaseTagVersion() {
   const tag = await $`git describe --tags --abbrev=0`
     .text()
-    .then((x) => x.trim().replace(/^v/, ""))
+    .then((x) => x.trim().replace(/^(?:v|release\/)/, ""))
     .catch(() => "")
   if (!semver.valid(tag)) return undefined
   return semver.lt(tag, MINIMUM_ANNOUNCED_VERSION) ? undefined : tag
