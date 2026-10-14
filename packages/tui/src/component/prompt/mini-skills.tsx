@@ -343,7 +343,6 @@ function MiniSkillEditor(props: {
   const theme = useTheme().surface("dialog")
   const toast = useToast()
   const config = useConfig().data
-  const [target, setTarget] = createSignal<TextareaRenderable>()
   let labelInput: TextareaRenderable
   let instructionInput: TextareaRenderable
 
@@ -364,8 +363,6 @@ function MiniSkillEditor(props: {
 
   Keymap.createLayer(() => ({
     mode: "modal",
-    target,
-    enabled: target() !== undefined,
     priority: 2,
     commands: [
       {
@@ -380,7 +377,6 @@ function MiniSkillEditor(props: {
         group: "Mini skills",
         run: () => {
           instructionInput?.focus()
-          if (instructionInput) setTarget(() => instructionInput)
         },
       },
       {
@@ -389,7 +385,6 @@ function MiniSkillEditor(props: {
         group: "Mini skills",
         run: () => {
           labelInput?.focus()
-          if (labelInput) setTarget(() => labelInput)
         },
       },
     ],
@@ -399,7 +394,6 @@ function MiniSkillEditor(props: {
     setTimeout(() => {
       if (!labelInput || labelInput.isDestroyed) return
       labelInput.focus()
-      setTarget(() => labelInput)
     }, 1)
     dialog.setSize("large")
   })
@@ -420,9 +414,7 @@ function MiniSkillEditor(props: {
         cursorStyle={config.cursor}
         ref={(value: TextareaRenderable) => {
           labelInput = value
-          setTarget(() => value)
         }}
-        onFocus={() => setTarget(() => labelInput)}
       />
       <text fg={theme.text.muted}>Instruction to insert into the prompt</text>
       <textarea
@@ -438,7 +430,6 @@ function MiniSkillEditor(props: {
         ref={(value: TextareaRenderable) => {
           instructionInput = value
         }}
-        onFocus={() => setTarget(() => instructionInput)}
       />
       <box flexDirection="row" gap={2}>
         <text fg={theme.text.base}>Ctrl+S <span style={{ fg: theme.text.muted }}>save</span></text>
