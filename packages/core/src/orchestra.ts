@@ -964,36 +964,75 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         yield* kv.set(CATEGORY + sessionID, name)
       }),
       dispatch: Effect.fn("Orchestra.dispatch")(function* (input) {
-        const main = input.project.main
-        if (!main) return
-        yield* dispatchLocks.withLock(input.sessionID)(
+        // Lock ordering is project -> worker. Project deletion/migration and task admission must
+        // not race: otherwise a late send can create a durable task owned by a forgotten project.
+        yield* mainLocks.withLock(input.project.id)(
           Effect.gen(function* () {
-            const key = TASK + input.sessionID
-            const existing = decodeTask(yield* kv.get(key))
-            if (Option.isSome(existing))
+            const project = yield* get(input.project.id).pipe(
+              Effect.mapError(
+                (error) =>
+                  new DispatchError({ message: `Project ${error.projectID} no longer exists. Reopen the project before dispatching work.` }),
+              ),
+            )
+            const main = project.main
+            if (!main)
               return yield* new DispatchError({
-                message: `Session ${input.sessionID} already has an outstanding task. Wait for its <team-report> before sending another.`,
+                message: `Project "${project.name}" has no main orchestrator session. Reopen the project to repair it.`,
+              })
+            if (input.project.main !== main)
+              return yield* new DispatchError({
+                message: `The main session for project "${project.name}" changed or is stale. Reopen the current orchestrator before dispatching work.`,
+              })
+            if (!input.text.trim())
+              return yield* new DispatchError({ message: "Task text cannot be empty." })
+
+            const mainSession = yield* sessions.get(main).pipe(Effect.orElseSucceed(() => undefined))
+            if (!mainSession || mainSession.agent !== Orchestra.agent)
+              return yield* new DispatchError({
+                message: `The main orchestrator session for project "${project.name}" is missing or invalid. Reopen the project to repair it.`,
+              })
+            const worker = yield* sessions.get(input.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+            if (!worker)
+              return yield* new DispatchError({ message: `Worker session ${input.sessionID} no longer exists.` })
+            if (
+              worker.id === main ||
+              worker.agent === Orchestra.agent ||
+              !(yield* owns(project, worker))
+            )
+              return yield* new DispatchError({
+                message: `Session ${input.sessionID} does not belong to project "${project.name}" or is not a worker session.`,
               })
 
-            const messageID = SessionMessage.ID.create()
-            const reportID = SessionMessage.ID.create()
-            // Queue work instead of interrupting whatever the worker is doing right now.
-            yield* kv.set(
-              key,
-              Schema.encodeSync(Task)({ main, sent: Date.now(), messageID, reportID }),
+            yield* dispatchLocks.withLock(input.sessionID)(
+              Effect.gen(function* () {
+                const key = TASK + input.sessionID
+                const existing = decodeTask(yield* kv.get(key))
+                if (Option.isSome(existing))
+                  return yield* new DispatchError({
+                    message: `Session ${input.sessionID} already has an outstanding task. Wait for its <team-report> before sending another.`,
+                  })
+
+                const messageID = SessionMessage.ID.create()
+                const reportID = SessionMessage.ID.create()
+                // Queue work instead of interrupting whatever the worker is doing right now.
+                yield* kv.set(
+                  key,
+                  Schema.encodeSync(Task)({ main, sent: Date.now(), messageID, reportID }),
+                )
+                yield* sessions
+                  .prompt({
+                    sessionID: input.sessionID,
+                    id: messageID,
+                    delivery: "queue",
+                    text: input.text,
+                    metadata: { orchestra: { project: project.id, from: main, taskID: messageID } },
+                  })
+                  .pipe(
+                    Effect.tapError(() => kv.remove(key)),
+                    Effect.mapError((error) => new DispatchError({ message: String(error) })),
+                  )
+              }),
             )
-            yield* sessions
-              .prompt({
-                sessionID: input.sessionID,
-                id: messageID,
-                delivery: "queue",
-                text: input.text,
-                metadata: { orchestra: { project: input.project.id, from: main, taskID: messageID } },
-              })
-              .pipe(
-                Effect.tapError(() => kv.remove(key)),
-                Effect.mapError((error) => new DispatchError({ message: String(error) })),
-              )
           }),
         )
       }),

@@ -677,6 +677,47 @@ describe("Orchestra team", () => {
       expect(yield* orchestra.pending(worker.id)).toBeUndefined()
     }).pipe(Effect.scoped),
   ),
+  it.live("rejects dispatch to a worker owned by another project in the same directory", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-cross-project-dispatch-")))
+      const orchestra = yield* Orchestra.Service
+      const first = yield* orchestra.create({ name: "First", directory: tmp.path, template: "bugfix" })
+      const second = yield* orchestra.create({ name: "Second", directory: tmp.path, template: "bugfix" })
+      const foreign = (yield* orchestra.sessions(second.id)).find((session) => session.title === "Developer")!
+      expect(yield* orchestra.owns(first, foreign)).toBe(false)
+
+      const failure = yield* orchestra
+        .dispatch({ project: first, sessionID: foreign.id, text: "Should never reach the second project" })
+        .pipe(Effect.flip)
+      expect(failure.message).toContain("does not belong to project")
+      expect(yield* orchestra.pending(foreign.id)).toBeUndefined()
+      expect(yield* reports(second.main!)).toHaveLength(0)
+    }).pipe(Effect.scoped),
+  ),
+
+  it.live("rejects stale or removed projects instead of treating dispatch as success", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-stale-dispatch-")))
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "Stale", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+
+      const stale = { ...project, main: undefined }
+      const staleFailure = yield* orchestra
+        .dispatch({ project: stale, sessionID: worker.id, text: "Stale caller" })
+        .pipe(Effect.flip)
+      expect(staleFailure.message).toContain("stale")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+
+      yield* orchestra.remove(project.id)
+      const removedFailure = yield* orchestra
+        .dispatch({ project, sessionID: worker.id, text: "Removed project" })
+        .pipe(Effect.flip)
+      expect(removedFailure.message).toContain("no longer exists")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("does not report an unrelated completion for an undispatched queued task", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-task-")))
