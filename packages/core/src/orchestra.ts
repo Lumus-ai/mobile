@@ -138,6 +138,8 @@ const CATEGORY = "orchestra/category/"
 const TASK = "orchestra/task/"
 const ROLE = "orchestra/role/"
 const TEMPLATE = "orchestra/template/"
+// A project-owned write-ahead roster. Each Session ID is persisted before the worker is created.
+const TEAM_PLAN = "orchestra/team-plan/"
 // The project that opened a session. Without it, every project in one directory would share one team.
 const OWNER = "orchestra/owner/"
 // Durable reservation for the main session being initialized. It bridges the KV/session-store write gap.
@@ -173,6 +175,16 @@ const StoredTemplate = Schema.Struct({ ...Orchestra.TemplateSpec.fields, created
 const decodeRole = Schema.decodeUnknownOption(StoredRole)
 const decodeTemplate = Schema.decodeUnknownOption(StoredTemplate)
 const decodeCreated = Schema.decodeUnknownOption(Schema.Struct({ created: Schema.Number }))
+const PlannedTeamMember = Schema.Struct({
+  id: SessionID,
+  ...Orchestra.Member.fields,
+  model: Model.Ref.pipe(Schema.optional),
+})
+const TeamPlan = Schema.Struct({
+  created: Schema.Number,
+  members: Schema.Array(PlannedTeamMember),
+})
+const decodeTeamPlan = Schema.decodeUnknownOption(TeamPlan)
 
 // Annotated: the layer calls Session operations whose types reach back through the
 // instance graph that includes this node, so an inferred type would be circular.
@@ -382,7 +394,52 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         return main
       })
 
-    const ensureMain = (id: ProjectID) => mainLocks.withLock(id)(ensureMainUnlocked(id))
+    // Complete a saved roster plan idempotently. Session IDs and role/model snapshots come from
+    // the plan, so a crash after creating one worker never duplicates it or changes the remaining roster.
+    const reconcileTeamUnlocked = Effect.fn("Orchestra.reconcileTeam")(function* (project: Project) {
+      const plan = decodeTeamPlan(yield* kv.get(TEAM_PLAN + project.id))
+      if (Option.isNone(plan)) return
+      for (const member of plan.value.members) {
+        // Claim before creation so an interruption between these writes is safe to resume.
+        yield* kv.set(OWNER + member.id, project.id)
+        const existing = yield* sessions.get(member.id).pipe(Effect.orElseSucceed(() => undefined))
+        if (!existing) {
+          yield* sessions
+            .create({
+              id: member.id,
+              location: { directory: AbsolutePath.make(project.directory) },
+              title: member.title,
+              agent: member.agent,
+              model: member.model,
+            })
+            .pipe(Effect.orDie)
+        }
+        yield* Effect.all([
+          kv.set(ACCESS + member.id, "full"),
+          kv.set(CATEGORY + member.id, member.category),
+        ])
+      }
+      // Only the final write clears the intent. Any failure above leaves it for the next project open.
+      yield* kv.remove(TEAM_PLAN + project.id)
+    })
+
+    const reconcileTeam = (id: ProjectID) =>
+      mainLocks.withLock(id)(
+        Effect.gen(function* () {
+          const project = yield* get(id)
+          yield* reconcileTeamUnlocked(project)
+        }),
+      )
+
+    const ensureMain = (id: ProjectID) =>
+      mainLocks.withLock(id)(
+        Effect.gen(function* () {
+          const main = yield* ensureMainUnlocked(id)
+          const project = yield* get(id)
+          yield* reconcileTeamUnlocked(project)
+          return main
+        }),
+      )
 
     const moveFailure = (project: Project, session: SessionSchema.Info, directory: string, error: unknown) =>
       new ProjectMoveError({
@@ -769,44 +826,38 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         if (input.template && !template) return yield* new TemplateNotFoundError({ template: input.template })
         const resolved = yield* directory(input.directory)
         yield* initializeDod(resolved)
-        const project = yield* save({
+        const record = {
           id: ProjectID.create(),
           name: input.name.trim() || path.basename(resolved),
           directory: resolved,
           created: Date.now(),
-        })
+        }
+        if (template) {
+          const team = yield* roles()
+          const plan = {
+            created: record.created,
+            members: template.members.toReversed().map((member) => {
+              const model = modelOf(team.find((role) => role.agent === member.agent))
+              return {
+                id: SessionID.create(),
+                ...member,
+                ...(model ? { model } : {}),
+              }
+            }),
+          }
+          // Save the exact roster before making the project visible. A restart can recreate
+          // every intended worker with the same IDs even if the original template is later edited.
+          yield* kv.set(TEAM_PLAN + record.id, Schema.encodeSync(TeamPlan)(plan))
+        }
+        const project = yield* save(record)
         // Serialize main initialization and the full team roster against project deletion or movement.
-        // If removal wins after the initial record is saved, ensureMainUnlocked fails before a
-        // worker can be claimed by a project that no longer exists.
+        // If removal wins after the initial record is saved, ensureMainUnlocked fails before
+        // a worker can be claimed by a project that no longer exists.
         return yield* mainLocks.withLock(project.id)(
           Effect.gen(function* () {
             const main = yield* ensureMainUnlocked(project.id)
             const current = yield* get(project.id)
-            if (template) {
-              const team = yield* roles()
-              // Sessions list newest first, so opening the last member first shows the team in template order.
-              yield* Effect.forEach(
-                template.members.toReversed(),
-                (member) => {
-                  // Claimed before it exists, so nothing ever lists the session under another project.
-                  const id = SessionID.create()
-                  return kv.set(OWNER + id, project.id).pipe(
-                    Effect.andThen(
-                      sessions.create({
-                        id,
-                        location: { directory: AbsolutePath.make(current.directory) },
-                        title: member.title,
-                        agent: member.agent,
-                        model: modelOf(team.find((role) => role.agent === member.agent)),
-                      }),
-                    ),
-                    Effect.orDie,
-                    Effect.andThen(Effect.all([kv.set(ACCESS + id, "full"), kv.set(CATEGORY + id, member.category)])),
-                  )
-                },
-                { discard: true },
-              )
-            }
+            yield* reconcileTeamUnlocked(current)
             return { ...current, main: main.id }
           }),
         )
@@ -845,6 +896,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             yield* get(id)
             yield* kv.remove(MAIN_INITIALIZING + id)
             yield* kv.remove(PROJECT + id)
+            // A leftover plan after a crash is harmless once the project record is gone.
+            yield* kv.remove(TEAM_PLAN + id)
             // Its sessions go back to whichever project contains their directory.
             const claims = yield* owners()
             yield* Effect.forEach(
@@ -863,8 +916,13 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         return session
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
-        const project = yield* get(id)
-        return yield* projectSessions(project)
+        return yield* mainLocks.withLock(id)(
+          Effect.gen(function* () {
+            const project = yield* get(id)
+            yield* reconcileTeamUnlocked(project)
+            return yield* projectSessions(project)
+          }),
+        )
       }),
       owns,
       owners,
@@ -876,7 +934,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         const project = (yield* projects()).find((item) => item.main === sessionID)
         if (!project) return undefined
         // Context hooks also query worker sessions. Only an actual project's main session
-        // is a recovery checkpoint, and it only reconciles its own tasks.
+        // is a recovery checkpoint, and it only reconciles its own roster and tasks.
+        yield* reconcileTeam(project.id)
         yield* recoverPending(sessionID)
         return project
       }),

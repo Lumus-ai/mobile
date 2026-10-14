@@ -339,6 +339,64 @@ describe("Orchestra team", () => {
       )
     }).pipe(Effect.scoped),
   ),
+  it.live("rebuilds a partially created team from its durable roster plan", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-roster-recovery-")))
+      const orchestra = yield* Orchestra.Service
+      const sessionService = yield* Session.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Roster recovery", directory: tmp.path })
+      const existingID = Session.ID.create()
+      const missingID = Session.ID.create()
+      const location = { directory: (yield* sessionService.get(project.main!)).location.directory }
+
+      // The first worker made it to durable Session storage; the second never got created before the crash.
+      yield* sessionService.create({
+        id: existingID,
+        location,
+        title: "Recovered Architect",
+        agent: Orchestra.role("architect"),
+      })
+      const key = `orchestra/team-plan/${project.id}`
+      yield* kv.set(key, {
+        created: Date.now(),
+        members: [
+          { id: existingID, agent: Orchestra.role("architect"), title: "Recovered Architect", category: "Planning" },
+          { id: missingID, agent: Orchestra.role("developer"), title: "Recovered Developer", category: "Build" },
+        ],
+      })
+
+      // Reopening the project's main session replays the same roster without duplicating the existing worker.
+      const main = yield* orchestra.main(project.id)
+      expect(main.id).toBe(project.main!)
+      expect(yield* kv.get(key)).toBeUndefined()
+      const members = yield* orchestra.sessions(project.id)
+      expect(members.filter((item) => item.id === existingID)).toHaveLength(1)
+      expect(members.filter((item) => item.id === missingID)).toHaveLength(1)
+      expect(members.find((item) => item.id === existingID)).toMatchObject({
+        title: "Recovered Architect",
+        agent: Orchestra.role("architect"),
+      })
+      expect(members.find((item) => item.id === missingID)).toMatchObject({
+        title: "Recovered Developer",
+        agent: Orchestra.role("developer"),
+      })
+      expect((yield* orchestra.owners())[existingID]).toBe(project.id)
+      expect((yield* orchestra.owners())[missingID]).toBe(project.id)
+      expect(yield* orchestra.access(existingID)).toBe("full")
+      expect(yield* orchestra.access(missingID)).toBe("full")
+      expect(yield* orchestra.categories([existingID, missingID])).toEqual({
+        [existingID]: "Planning",
+        [missingID]: "Build",
+      })
+
+      // Reopening again is idempotent because the plan was cleared only after all writes succeeded.
+      yield* orchestra.main(project.id)
+      expect((yield* orchestra.sessions(project.id)).filter((item) => item.id === existingID)).toHaveLength(1)
+      expect((yield* orchestra.sessions(project.id)).filter((item) => item.id === missingID)).toHaveLength(1)
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("a dispatched task reports back to the orchestrator when its run ends", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))
