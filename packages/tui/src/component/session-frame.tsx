@@ -234,7 +234,11 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   // Drop the previous mode's width immediately. The fallback formula is used for
   // the first frame, then onSizeChange supplies the newly allocated width.
   createEffect(on(canvas, () => setMeasuredSessionPaneWidth(0), { defer: true }))
-  const transcriptWidth = () => resolveSessionPaneWidth(measuredSessionPaneWidth(), initialSessionTranscriptWidth())
+  // The measured width may still be the narrower Notes split for one render after
+  // switching tabs. In Projects mode, ignore that stale measurement and recalculate
+  // from the current center width minus the docked right pane.
+  const transcriptWidth = () =>
+    resolveSessionPaneWidth(measuredSessionPaneWidth(), initialSessionTranscriptWidth(), canvas() !== undefined)
 
   const toggleSidebar = () => {
     batch(() => {

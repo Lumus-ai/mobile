@@ -214,11 +214,14 @@ test("transcript width follows the active note split and visible side rail", () 
 })
 
 test("measured transcript width is ignored after leaving Notes mode", () => {
-  expect(resolveSessionPaneWidth(0, 72)).toBe(72)
-  expect(resolveSessionPaneWidth(38, 72)).toBe(38)
+  // A stale 42-column Notes measurement must not pin the Projects chat to 42
+  // columns when its newly allocated width is 72.
+  expect(resolveSessionPaneWidth(0, 72, false)).toBe(72)
+  expect(resolveSessionPaneWidth(38, 72, false)).toBe(72)
   expect(resolveSessionPaneWidth(42, 72, false)).toBe(72)
+  // Notes mode still honours the measured right-hand chat column.
   expect(resolveSessionPaneWidth(42, 72, true)).toBe(42)
-  expect(resolveSessionPaneWidth(74, 72)).toBe(74)
+  expect(resolveSessionPaneWidth(74, 72, true)).toBe(74)
 })
 
 test("switching from Notes to Projects explicitly expands the session pane", () => {
