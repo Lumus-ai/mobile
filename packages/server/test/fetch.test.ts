@@ -7,6 +7,7 @@ import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
 import { Effect, Exit, Layer, Schedule, Schema, Scope } from "effect"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { Orchestra } from "@opencode/core/orchestra"
 import { Session } from "@opencode/schema/session"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -45,6 +46,33 @@ it.live("cancels boot recovery when the fetch application scope closes", () =>
 
     yield* Scope.close(scope, Exit.void)
     expect(interrupted).toBe(true)
+  }).pipe(Effect.scoped),
+)
+
+it.live("recovers Orchestra tasks even when the session restart sweep fails", () =>
+  Effect.gen(function* () {
+    let recovered = false
+    const restart = SessionRestart.Service.of({
+      resumeSuspendedSessions: Effect.die(new Error("simulated session restart failure")),
+    })
+    const orchestra = Orchestra.Service.of({
+      recoverPendingTasks: Effect.sync(() => {
+        recovered = true
+      }),
+    } as Orchestra.Interface)
+
+    yield* ServerFetch.make(options, {
+      overrides: [
+        SessionRestart.node.replace(Layer.succeed(SessionRestart.Service, restart)),
+        Orchestra.node.replace(Layer.succeed(Orchestra.Service, orchestra)),
+      ],
+    })
+
+    // The restart failure is logged, but it must not suppress independent task recovery.
+    yield* Effect.gen(function* () {
+      if (!recovered) return yield* Effect.fail(new Error("Orchestra task recovery did not run"))
+    }).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("1 second"))
+    expect(recovered).toBe(true)
   }).pipe(Effect.scoped),
 )
 

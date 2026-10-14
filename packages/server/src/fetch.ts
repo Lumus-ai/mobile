@@ -1,6 +1,6 @@
 export * as ServerFetch from "./fetch"
 
-import { Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer } from "effect"
 import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Orchestra } from "@opencode/core/orchestra"
@@ -47,7 +47,24 @@ export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOpti
   // may have been lost. Suspended/active workers are skipped by the Orchestra recovery sweep.
   const restart = Context.get(context, SessionRestart.Service)
   const orchestra = Context.get(context, Orchestra.Service)
-  yield* Effect.forkScoped(restart.resumeSuspendedSessions.pipe(Effect.andThen(orchestra.recoverPendingTasks())))
+  const reportStartupFailure = (label: string, effect: Effect.Effect<void>) =>
+    effect.pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.logError(label, { cause }),
+      ),
+    )
+  const resumeAndRecover = reportStartupFailure(
+    "Failed to resume suspended sessions during fetch startup",
+    restart.resumeSuspendedSessions,
+  ).pipe(
+    Effect.andThen(
+      reportStartupFailure(
+        "Failed to recover Orchestra task reports during fetch startup",
+        orchestra.recoverPendingTasks(),
+      ),
+    ),
+  )
+  yield* Effect.forkScoped(resumeAndRecover)
   return Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(

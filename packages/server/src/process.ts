@@ -251,7 +251,24 @@ const installRestartContinuity = Effect.fnUntraced(function* (
 ) {
   // This server owns the durable restart sweep; after registering resumed turns, also
   // reconcile idle task markers whose terminal event notification may have been missed.
-  yield* Effect.forkScoped(restart.resumeSuspendedSessions.pipe(Effect.andThen(orchestra.recoverPendingTasks())))
+  const reportStartupFailure = (label: string, effect: Effect.Effect<void>) =>
+    effect.pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.logError(label, { cause }),
+      ),
+    )
+  const resumeAndRecover = reportStartupFailure(
+    "Failed to resume suspended sessions during server startup",
+    restart.resumeSuspendedSessions,
+  ).pipe(
+    Effect.andThen(
+      reportStartupFailure(
+        "Failed to recover Orchestra task reports during server startup",
+        orchestra.recoverPendingTasks(),
+      ),
+    ),
+  )
+  yield* Effect.forkScoped(resumeAndRecover)
 })
 
 function isLoopback(hostname: string) {
