@@ -47,10 +47,9 @@ export const Plugin = {
           Effect.gen(function* () {
             const configured = process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, "")
             if (!configured) {
-              return {
-                output:
-                  "The global Idea Bank is not connected. Set OPENCODE_IDEA_BANK_URL to the shared public service URL and restart OpenCode++. No idea was sent anywhere.",
-              }
+              const output =
+                "The global Idea Bank is not connected. Set OPENCODE_IDEA_BANK_URL to the shared public service URL and restart OpenCode++. No idea was sent anywhere."
+              return { output: { output }, content: output }
             }
 
             let base: URL
@@ -140,7 +139,8 @@ export const Plugin = {
               const message = typeof result.error === "string" ? result.error : "Request failed"
               return yield* failure(`Global Idea Bank returned HTTP ${response.status}: ${message}`)
             }
-            return { output: JSON.stringify(result, null, 2) }
+            const output = JSON.stringify(result, null, 2)
+            return { output: { output }, content: output }
           }).pipe(
             Effect.mapError((error) =>
               error instanceof ToolFailure
