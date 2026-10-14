@@ -27,7 +27,6 @@ import {
   clampSessionSidebarWidth,
   defaultSessionPaneWidth,
   noteCanvasFlexGrow,
-  sessionPaneContentWidth,
   sessionPanesStacked,
   sessionSidebarDocks,
 } from "../ui/layout"
@@ -55,6 +54,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const theme = useTheme()
   const availableWidth = () => Math.max(0, dimensions().width - props.verticalTabsWidth)
   const [canvasHostWidth, setCanvasHostWidth] = createSignal(availableWidth())
+  const [sessionPaneWidth, setSessionPaneWidth] = createSignal(availableWidth())
   const compactLayout = useCompactLayout()
   const defaultPaneWidth = () => defaultSessionPaneWidth(panels.width(), compactLayout.compact())
   const [layout, updateLayout] = useStorage().store<{
@@ -189,19 +189,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     if (selectedTerminal()) return "terminal"
     if (sidebarVisible()) return "sidebar"
   })
-  const sessionContentWidth = createMemo(() =>
-    sessionPaneContentWidth({
-      available: availableWidth(),
-      hasCanvas: canvas() !== undefined,
-      stacked: stacked(),
-      canvasHost: canvasHostWidth(),
-      noteChatWidth: noteChatResize.size(),
-      rightPaneDocked:
-        !rightPaneHidden() &&
-        (rightPane() === "terminal" || rightPane() === "panel" || (rightPane() === "sidebar" && wide())),
-      rightPaneWidth: rightPaneResize().size(),
-    }),
-  )
   const toggleSidebar = () => {
     batch(() => {
       const visible = rightPane() === "sidebar"
@@ -434,6 +421,11 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
                 : undefined
           }
           height="100%"
+          onSizeChange={function () {
+            // Measure the actual flex allocation. Calculating from saved splitter
+            // widths can leave the transcript narrow after Notes -> Projects.
+            setSessionPaneWidth(this.width)
+          }}
         >
           <InteractivityProvider enabled={activePane() === "session" && !fullscreen()}>
             <Session
@@ -445,7 +437,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={sessionContentWidth()}
+              width={sessionPaneWidth()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>
