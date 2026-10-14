@@ -119,6 +119,19 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
       })
 
     const templates = (yield* call("/api/orchestra/template")).body
+    const coreTemplate = templates.find((item: { id: string }) => item.id === "opencode-core")
+    expect(coreTemplate).toBeDefined()
+    expect(coreTemplate.members.map((member: { agent: string }) => member.agent)).toEqual([
+      "team-architect",
+      "team-core-maintainer",
+      "team-integration-engineer",
+      "team-api-contract-engineer",
+      "team-compatibility-engineer",
+      "team-security-auditor",
+      "team-tester",
+      "team-reviewer",
+    ])
+
     const feature = templates.find((item: { id: string }) => item.id === "feature")
     expect(
       feature.members.map((member: { agent: string; category: string }) => [member.agent, member.category]),
@@ -169,7 +182,23 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
     expect((yield* call(`/api/session/${main.id}`)).body.data.agent).toBe("orchestrator")
 
     // role agents are registered by plugin activation, which finishes in the background
-    const roles = ["orchestrator", "team-architect", "team-developer", "team-tester", "team-reviewer", "team-devops"]
+    const roles = [
+      "orchestrator",
+      "team-architect",
+      "team-developer",
+      "team-tester",
+      "team-reviewer",
+      "team-devops",
+      "team-core-maintainer",
+      "team-integration-engineer",
+      "team-api-contract-engineer",
+      "team-security-auditor",
+      "team-performance-engineer",
+      "team-compatibility-engineer",
+      "team-data-migration-engineer",
+      "team-reliability-engineer",
+      "team-dependency-auditor",
+    ]
     yield* call("/api/agent").pipe(
       Effect.map((response) => response.body.data.map((agent: { id: string }) => agent.id)),
       Effect.filterOrFail((ids: string[]) => roles.every((role) => ids.includes(role))),
