@@ -145,28 +145,28 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
         border={["left"]}
         borderColor={theme.border.base}
       >
-      <box flexDirection="row" alignItems="center" flexShrink={0} gap={1}>
-        <box flexDirection="column" flexGrow={1} minWidth={0} gap={1}>
-          <box flexDirection="row" alignItems="center" gap={1}>
-            <box flexGrow={1} minWidth={0}>
-              <text fg={theme.text.base}>
-                <b>{t("Project DoD")}</b>
-              </text>
+        <box flexDirection="row" alignItems="center" flexShrink={0} gap={1}>
+          <box flexDirection="column" flexGrow={1} minWidth={0} gap={1}>
+            <box flexDirection="row" alignItems="center" gap={1}>
+              <box flexGrow={1} minWidth={0}>
+                <text fg={theme.text.base}>
+                  <b>{t("Project DoD")}</b>
+                </text>
+              </box>
+              <Show when={props.onHide}>
+                <HoverAction id="home-project-panel.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
+                  <text fg={theme.text.action.primary.base}>›</text>
+                </HoverAction>
+              </Show>
             </box>
-            <Show when={props.onHide}>
-              <HoverAction id="home-project-panel.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
-                <text fg={theme.text.action.primary.base}>›</text>
-              </HoverAction>
+            <text fg={theme.text.muted} wrapMode="none" truncate>
+              {project()?.name ?? t("Current directory")}
+            </text>
+            <Show when={boardRoot()}>
+              {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
             </Show>
           </box>
-          <text fg={theme.text.muted} wrapMode="none" truncate>
-            {project()?.name ?? t("Current directory")}
-          </text>
-          <Show when={boardRoot()}>
-            {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
-          </Show>
         </box>
-      </box>
 
         <Show when={board().type === "loading"}>
           <text fg={theme.text.muted}>{t("Loading DoD…")}</text>
