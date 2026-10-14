@@ -243,10 +243,20 @@ export const layer = Layer.effect(
         definitions: [],
         execute: () => new Tool.Error({ message: "Tools are not available for this request" }),
       }
+      // OpenCode Zen's free-tier validator rejects requests when a permission rule removes
+      // built-in read/bash from the advertised tool list. Keep their schemas in the request for
+      // the built-in OpenCode provider, while Tool.snapshot.execute still enforces local policy.
+      // This does not grant permission to execute either tool: hidden tools are not present in the
+      // snapshot's active executor maps.
+      const compatibility = model.ref.providerID === "opencode" ? (tools.compatibilityDefinitions ?? []) : []
+      const advertised = [
+        ...tools.definitions,
+        ...compatibility.filter((candidate) => !tools.definitions.some((tool) => tool.name === candidate.name)),
+      ]
       // Remember which tool each definition object came from. Hooks rename a tool by moving
       // its definition to a new key, so after the hook we find the tool by object identity.
       const given = new Map(
-        tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
+        advertised.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
       // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
       // because their reasoning is hard to budget.
