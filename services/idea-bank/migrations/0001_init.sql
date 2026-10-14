@@ -10,12 +10,21 @@ CREATE TABLE IF NOT EXISTS ideas (
   content_hash TEXT NOT NULL UNIQUE,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  reviewed_at INTEGER
+  signal_count INTEGER NOT NULL DEFAULT 1,
+  reviewed_at INTEGER,
+  search_text TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS ideas_public_order ON ideas(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS ideas_category_language ON ideas(status, category, language);
 CREATE INDEX IF NOT EXISTS ideas_submitter_time ON ideas(submitter_hash, created_at);
+
+CREATE TABLE IF NOT EXISTS submission_rate_limits (
+  submitter_hash TEXT NOT NULL,
+  window_start INTEGER NOT NULL,
+  count INTEGER NOT NULL,
+  PRIMARY KEY (submitter_hash, window_start)
+);
 
 -- Curated seeds make a new installation useful immediately.
 INSERT OR IGNORE INTO ideas
@@ -29,3 +38,11 @@ VALUES
   ('seed-local-energy', 'Private home-energy explainer', 'Turn personal electricity readings into understandable trends without uploading the readings to a cloud service.', 'Environment', '["privacy","energy","dashboard"]', 'en', 'published', 'system', 'seed-local-energy-v1', unixepoch() * 1000, unixepoch() * 1000, unixepoch() * 1000),
   ('seed-note-garden', 'Local knowledge garden', 'Find duplicate notes, stale instructions, and disconnected pieces of personal knowledge while keeping them on-device.', 'Productivity', '["notes","knowledge","search"]', 'en', 'published', 'system', 'seed-note-garden-v1', unixepoch() * 1000, unixepoch() * 1000, unixepoch() * 1000),
   ('seed-agent-audit', 'AI-agent permissions auditor', 'Explain what an agent can do, identify broad permissions, and show a readable history of risky operations.', 'Developer tools', '["agents","security","permissions"]', 'en', 'published', 'system', 'seed-agent-audit-v1', unixepoch() * 1000, unixepoch() * 1000, unixepoch() * 1000);
+
+-- Make curated ideas searchable using the normalized field used by the Worker.
+UPDATE ideas
+SET search_text = lower(title || ' ' || summary || ' ' || category || ' ' || tags)
+WHERE search_text = '';
+
+CREATE INDEX IF NOT EXISTS ideas_published_signal_count
+  ON ideas(status, signal_count DESC);
