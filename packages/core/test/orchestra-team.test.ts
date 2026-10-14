@@ -714,6 +714,41 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   ),
 
+  it.live("does not report a later user prompt as the assigned worker task's answer", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-answer-boundary-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Answer boundary", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      yield* Effect.acquireRelease(
+        Effect.sync(() => suppressTerminalEvent.add(worker.id)),
+        () => Effect.sync(() => suppressTerminalEvent.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the assigned bug" })
+      yield* Effect.sleep("50 millis")
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // A direct user prompt arrives before the missing terminal event is reconciled.
+      // Its completion must not overwrite the answer to the task already assigned by the orchestrator.
+      yield* sessions.prompt({ sessionID: worker.id, text: "Now answer an unrelated question" })
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      yield* orchestra.recoverPendingTasks()
+      const [report] = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(report).toContain('state="recovered"')
+      expect(report).toContain("Developer: task answer")
+      expect(report).not.toContain("Developer: unrelated answer")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
   it.live("recovers a completed worker task when its terminal event was missed", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-recovery-")))

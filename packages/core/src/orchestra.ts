@@ -684,9 +684,14 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                     : {}),
                 })
                 .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+          // The query is ordered newest-first and starts after the dispatched user message.
+          // If the operator sent another user prompt before recovery/reporting, ignore answers
+          // newer than that prompt; they belong to unrelated work, not this assigned task.
+          const nextUser = recent.findIndex((message) => message.type === "user")
+          const taskMessages = nextUser < 0 ? recent : recent.slice(nextUser + 1)
           const answer = workerRemoved
             ? "(worker session was deleted before it could report)"
-            : recent.flatMap(finalText).at(0) ?? "(no text answer)"
+            : taskMessages.flatMap(finalText).at(0) ?? "(no text answer)"
           const firstLine = answer.split(/\r?\n/).map((line) => line.trim()).find(Boolean)?.toUpperCase() ?? ""
           // A worker's execution can finish while its assigned task is only partly complete.
           // Keep that semantic outcome separate from the execution event's terminal state.
@@ -820,11 +825,23 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         .log({ sessionID, follow: false })
         .pipe(
           Stream.runForEach((event) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               if (event.type === SessionEvent.InboxDelivered.type) {
                 if (event.data.inboxID === messageID) {
                   delivered = true
                   terminal = undefined
+                  return
+                }
+                // A later delivered user prompt starts unrelated work. If the terminal event
+                // for the assigned task is missing, don't adopt that later run's terminal state.
+                if (delivered && !terminal) {
+                  const next = yield* sessions
+                    .message({ sessionID, messageID: event.data.inboxID })
+                    .pipe(Effect.orElseSucceed(() => undefined))
+                  if (next?.type === "user") {
+                    delivered = false
+                    terminal = undefined
+                  }
                 }
                 return
               }
