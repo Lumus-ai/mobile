@@ -267,13 +267,11 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       return Orchestra.ownerOf(yield* projects(), session.location.directory, claimed)?.id === project.id
     })
 
-    const projectSessions = Effect.fn("Orchestra.projectSessions")(function* (project: Project) {
-      const all = yield* projects()
-      const claims = yield* owners()
+    // Reuse one complete, stable scan wherever project ownership must outlive arbitrary
+    // numbers of unrelated chats. A one-page lookup can miss both old workers and an orphaned main.
+    const topLevelSessions = Effect.fn("Orchestra.topLevelSessions")(function* () {
       const found: SessionSchema.Info[] = []
       let anchor: SessionSchema.ListAnchor | undefined
-      // SCAN_LIMIT is a page size, not a cap. A project can have old sessions behind hundreds
-      // of unrelated recent chats, so keep paging until the session store says there is no next page.
       while (true) {
         const page = (
           yield* sessions.list({
@@ -285,17 +283,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         ).data
         // An invalid/repeated anchor must not spin forever or duplicate a page.
         if (anchor && page.at(-1)?.id === anchor.id) break
-        for (const session of page) {
-          const claimed = claims[session.id] ?? Orchestra.sessionOwner(session.metadata)
-          // Another project in the same directory has its own orchestrator; it never joins this team.
-          if (
-            session.id !== project.main &&
-            session.agent !== Orchestra.agent &&
-            Orchestra.ownerOf(all, session.location.directory, claimed)?.id === project.id
-          ) {
-            found.push(session)
-          }
-        }
+        found.push(...page)
         if (page.length < SCAN_LIMIT) break
         const last = page.at(-1)
         if (!last) break
@@ -306,6 +294,21 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         }
       }
       return found
+    })
+
+    const projectSessions = Effect.fn("Orchestra.projectSessions")(function* (project: Project) {
+      const all = yield* projects()
+      const claims = yield* owners()
+      const recent = yield* topLevelSessions()
+      // Another project in the same directory has its own orchestrator; it never joins this team.
+      return recent.filter((session) => {
+        const claimed = claims[session.id] ?? Orchestra.sessionOwner(session.metadata)
+        return (
+          session.id !== project.main &&
+          session.agent !== Orchestra.agent &&
+          Orchestra.ownerOf(all, session.location.directory, claimed)?.id === project.id
+        )
+      })
     })
 
     // When a main Session is deleted, its replacement has a new ID. Keep any outstanding
@@ -424,7 +427,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           // Older versions created the Session before saving Project.main. Recover that orphan
           // by its explicit project owner and orchestrator title rather than creating a duplicate.
           const claims = yield* owners()
-          const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
+          const recent = yield* topLevelSessions()
           const orphan = recent.find(
             (session) => claims[session.id] === project.id && session.title?.endsWith(" · Orchestrator"),
           )

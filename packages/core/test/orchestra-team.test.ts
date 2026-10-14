@@ -514,11 +514,12 @@ describe("Orchestra team", () => {
       const orchestra = yield* Orchestra.Service
       const sessions = yield* Session.Service
       const project = yield* orchestra.create({ name: "Pagination", directory: projectDir.path })
+      const originalMainID = project.main!
       const oldWorker = yield* sessions.create({
         location: { directory: AbsolutePath.make(projectDir.path) },
         title: "Older project worker",
       })
-      // Separate update timestamps so all 501 unrelated chats sort strictly after this worker.
+      // Separate update timestamps so all 501 unrelated chats sort strictly after the project sessions.
       yield* Effect.sleep("10 millis")
       yield* Effect.forEach(
         Array.from({ length: 501 }, (_, index) => index),
@@ -529,6 +530,22 @@ describe("Orchestra team", () => {
           }),
         { concurrency: 1, discard: true },
       )
+
+      // Simulate the legacy crash window: the main session exists, but Project.main was not saved.
+      const kv = yield* KV.Service
+      yield* kv.set(
+        `orchestra/project/${project.id}`,
+        Schema.encodeSync(Orchestra.Project)({
+          id: project.id,
+          name: project.name,
+          directory: project.directory,
+          created: project.created,
+        }),
+      )
+      const main = yield* orchestra.main(project.id)
+      expect(main.id).toBe(originalMainID)
+      expect((yield* orchestra.projects()).find((item) => item.id === project.id)?.main).toBe(originalMainID)
+      expect(yield* orchestra.mainOf(originalMainID)).toMatchObject({ id: project.id })
 
       const listed = yield* orchestra.sessions(project.id)
       expect(listed.map((session) => session.id)).toContain(oldWorker.id)
