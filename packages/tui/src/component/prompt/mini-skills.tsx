@@ -113,7 +113,7 @@ export function PromptMiniSkills(props: {
   const filePath = path.join(paths.state, "mini-skills.json")
   const [skills, setSkills] = createSignal<MiniSkill[]>(DEFAULT_MINI_SKILLS.map((item) => ({ ...item })))
   const [loaded, setLoaded] = createSignal(false)
-  let writes = Promise.resolve()
+  let writes: Promise<void> = Promise.resolve()
 
   async function save(next: MiniSkill[]) {
     const previous = skills()
@@ -370,6 +370,12 @@ function MiniSkillEditor(props: {
         title: "Save mini skill",
         group: "Mini skills",
         run: save,
+      },
+      {
+        bind: "escape",
+        title: "Back to mini skills",
+        group: "Mini skills",
+        run: props.onCancel,
       },
       {
         bind: "tab",
