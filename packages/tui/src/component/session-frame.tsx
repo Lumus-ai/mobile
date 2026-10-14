@@ -21,7 +21,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { Session } from "../routes/session"
 import { Sidebar } from "../routes/session/sidebar"
-import { clampSessionPaneWidth, defaultSessionPaneWidth, sessionSidebarDocks } from "../ui/layout"
+import { clampSessionPaneWidth, defaultSessionPaneWidth, sessionPanesStacked, sessionSidebarDocks } from "../ui/layout"
 import { useCompactLayout } from "../ui/compact-layout"
 import { createPaneResize } from "../ui/pane-resize"
 import { PaneResizeHandle } from "../ui/pane-resize-handle"
@@ -127,8 +127,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const fullscreen = () => activePanel() !== undefined && panels.presentation() === "fullscreen"
   // A session bound to a note in Notes mode shows the note as its document, with the chat beside it.
   const canvas = createMemo(() => (fullscreen() ? undefined : notes.canvas(props.sessionID)))
-  // Too narrow for side by side: the document goes on top of the chat.
-  const stacked = () => availableWidth() < 100
+  // Keep a bound note in the center with its chat on the right on narrow terminals;
+  // only stack them when there is not enough room for two usable columns.
+  const stacked = () => sessionPanesStacked(availableWidth(), canvas() !== undefined)
   createEffect(
     on([activePanel, () => selectedTerminal()?.id], ([panel, terminal], previous) => {
       if (panel && panel !== previous?.[0]) {

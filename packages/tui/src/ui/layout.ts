@@ -27,6 +27,12 @@ export function clampSessionTabsWidth(width: number, total: number) {
 export const SESSION_PANEL_MIN_WIDTH = 28
 export const SESSION_CHAT_MIN_WIDTH = 56
 
+// When a note is open, prefer the intended document-left/chat-right layout at
+// compact terminal widths; normal sessions still stack their auxiliary content sooner.
+export function sessionPanesStacked(available: number, hasNoteCanvas: boolean) {
+  return available < (hasNoteCanvas ? 64 : 100)
+}
+
 export function clampSessionPaneWidth(width: number, total: number) {
   // The right pane can never take the chat below its readable minimum. On very
   // narrow terminals it shrinks with the available space instead of covering chat.

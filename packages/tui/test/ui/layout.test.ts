@@ -5,6 +5,7 @@ import {
   clampSessionTabsWidth,
   defaultSessionPaneWidth,
   homeProjectPanelWidth,
+  sessionPanesStacked,
   sessionSidebarDocks,
   sessionTabsFitVertically,
   SESSION_SIDEBAR_MAX_WIDTH,
@@ -76,4 +77,12 @@ test("home panel resizing stays inside bounds and reserves room for the chat", (
   expect(clampHomeProjectPanelWidth(100, 108)).toBe(44)
   expect(clampHomeProjectPanelWidth(100, 150)).toBe(64)
   expect(clampHomeProjectPanelWidth(20, 80)).toBe(16)
+})
+
+test("a bound note stays centered with its chat on the right at compact widths", () => {
+  expect(sessionPanesStacked(63, true)).toBe(true)
+  expect(sessionPanesStacked(64, true)).toBe(false)
+  expect(sessionPanesStacked(75, true)).toBe(false)
+  expect(sessionPanesStacked(99, false)).toBe(true)
+  expect(sessionPanesStacked(100, false)).toBe(false)
 })
