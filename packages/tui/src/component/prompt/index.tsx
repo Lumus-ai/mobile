@@ -1693,6 +1693,7 @@ export function Prompt(props: PromptProps) {
     <>
       <PromptMiniSkills
         mode={() => store.mode}
+        visible={props.visible !== false}
         onInsert={(instruction) => {
           if (!input || input.isDestroyed || disabled()) return
           input.gotoBufferEnd()
