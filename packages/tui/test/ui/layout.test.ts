@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   clampSessionTabsWidth,
+  sessionSidebarDocks,
   sessionTabsFitVertically,
   SESSION_SIDEBAR_MAX_WIDTH,
   SESSION_SIDEBAR_WIDTH,
@@ -28,4 +29,14 @@ test("vertical tab width preserves minimum rail and content widths", () => {
   expect(clampSessionTabsWidth(42, 54)).toBe(10)
   expect(sessionTabsFitVertically(69, SESSION_TABS_COMPACT_WIDTH)).toBe(true)
   expect(sessionTabsFitVertically(68, SESSION_TABS_COMPACT_WIDTH)).toBe(false)
+})
+
+test("the session sidebar docks beside a readable chat at laptop widths", () => {
+  // After the left project tree is taken out, a ~100-column content area must still
+  // show the right sidebar rather than stretching the transcript across the window.
+  expect(sessionSidebarDocks(94, false)).toBe(true)
+  expect(sessionSidebarDocks(93, false)).toBe(false)
+  expect(sessionSidebarDocks(98, false)).toBe(true)
+  expect(sessionSidebarDocks(96, true)).toBe(true)
+  expect(sessionSidebarDocks(95, true)).toBe(false)
 })

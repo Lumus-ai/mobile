@@ -25,10 +25,11 @@ export function clampSessionPaneWidth(width: number, total: number) {
 // Compact layout keeps both side panels open on a laptop-sized terminal: the
 // project panel gets its own narrower width and the session sidebar docks beside
 // the chat as long as the chat keeps its preferred width.
-// Below the automatic range a side panel leaves too little room for the chat, so the
-// project panel hides as in the full layout.
+// Full layout uses the normal-width sidebar, but may dock it once the chat can still
+// retain its readable minimum. Otherwise the sidebar remains available via its toggle.
 export const SESSION_TABS_COMPACT_LAYOUT_WIDTH = 34
 export const SESSION_SIDEBAR_COMPACT_WIDTH = 32
+const SESSION_SIDEBAR_DOCK_GUTTER = 8
 const COMPACT_LAYOUT_AUTO_FROM = 110
 const COMPACT_LAYOUT_AUTO_BELOW = 170
 
@@ -40,7 +41,7 @@ export function compactLayout(mode: "auto" | "compact" | "full" | undefined, tot
 
 export function sessionSidebarDocks(available: number, compact: boolean) {
   if (compact) return available >= SESSION_SIDEBAR_COMPACT_WIDTH + SESSION_CONTENT_PREFERRED_WIDTH
-  return available > 120
+  return available >= SESSION_SIDEBAR_WIDTH + SESSION_CONTENT_MIN_WIDTH + SESSION_SIDEBAR_DOCK_GUTTER
 }
 
 // A terminal or plugin panel opens at half the room in the full layout and at
