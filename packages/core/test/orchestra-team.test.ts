@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, Layer, Schedule, Schema, Scope } from "effect"
+import { Effect, Exit, Fiber, Layer, Schedule, Schema, Scope, Stream } from "effect"
 import { Money } from "@opencode/schema/money"
+import { Event } from "@opencode/schema/event"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -129,6 +130,9 @@ const it = testEffect(
       Agent.node,
     ]),
     [
+      // Keep durable event rows in this suite so recovery can prove whether the
+      // terminal event committed even when the live subscriber never saw it.
+      Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(executionNode),
       Global.node.replace(tempGlobalLayer),
       Location.node.replace(
@@ -651,6 +655,57 @@ describe("Orchestra team", () => {
         Effect.timeout("2 seconds"),
       )
       expect(report).toContain('state="recovered"')
+      expect(report).toContain("Developer: task answer")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
+
+  it.live("uses a durable terminal event when its live notification was missed", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-durable-terminal-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const bus = yield* Bus.Service
+      const project = yield* orchestra.create({ name: "Durable terminal", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      yield* Effect.acquireRelease(
+        Effect.sync(() => suppressTerminalEvent.add(worker.id)),
+        () => Effect.sync(() => suppressTerminalEvent.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      yield* Effect.sleep("50 millis")
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // Simulate the crash window: persist Execution.Succeeded without publishing a live
+      // notification to the Orchestra subscriber. Recovery must trust the ordered durable log.
+      const events = yield* Stream.runCollect(sessions.log({ sessionID: worker.id, follow: false }))
+      const lastSequence = events.reduce(
+        (last, item) =>
+          item.type === "log.synced" ? Math.max(last, Number(item.seq ?? -1)) : Math.max(last, Number(item.durable.seq)),
+        -1,
+      )
+      yield* bus.replay(
+        {
+          id: Event.ID.create(),
+          type: SessionEvent.Execution.Succeeded.type,
+          created: Date.now(),
+          seq: lastSequence + 1,
+          aggregateID: worker.id,
+          data: { sessionID: worker.id },
+        },
+        { publish: false },
+      )
+
+      yield* orchestra.recoverPendingTasks()
+      const [report] = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(report).toContain('state="done"')
+      expect(report).not.toContain('state="recovered"')
       expect(report).toContain("Developer: task answer")
       expect(yield* orchestra.pending(worker.id)).toBeUndefined()
     }).pipe(Effect.scoped),

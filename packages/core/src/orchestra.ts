@@ -123,6 +123,8 @@ export interface Interface {
   }) => Effect.Effect<void, DispatchError>
   // When a dispatched task was sent, while its report is still outstanding.
   readonly pending: (sessionID: SessionID) => Effect.Effect<number | undefined>
+  // Reconcile persisted worker-task markers after restart without waiting for a UI request.
+  readonly recoverPendingTasks: () => Effect.Effect<void>
   // Team roles and templates: the built-in ones, with the operator's edits
   // applied, followed by the operator's own in the order they were created.
   readonly roles: () => Effect.Effect<ReadonlyArray<Role>>
@@ -805,6 +807,49 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         }),
       )
 
+    // The durable log is the source of truth when a terminal event was committed but its
+    // live notification was lost. Only accept a terminal after this exact dispatched message
+    // was delivered; otherwise a previous unrelated run could be mistaken for this task.
+    const terminalAfterDelivery = Effect.fn("Orchestra.terminalAfterDelivery")(function* (
+      sessionID: SessionID,
+      messageID: SessionMessage.ID,
+    ) {
+      let delivered = false
+      let terminal: { state: "done" | "failed" | "stopped"; detail?: string } | undefined
+      yield* sessions
+        .log({ sessionID, follow: false })
+        .pipe(
+          Stream.runForEach((event) =>
+            Effect.sync(() => {
+              if (event.type === SessionEvent.InboxDelivered.type) {
+                if (event.data.inboxID === messageID) {
+                  delivered = true
+                  terminal = undefined
+                }
+                return
+              }
+              if (!delivered || terminal) return
+              if (event.type === SessionEvent.Execution.Succeeded.type) {
+                terminal = { state: "done" }
+                return
+              }
+              if (event.type === SessionEvent.Execution.Failed.type) {
+                terminal = { state: "failed", detail: `Run failed: ${event.data.error.message}` }
+                return
+              }
+              if (
+                event.type === SessionEvent.Execution.Interrupted.type &&
+                event.data.reason !== "shutdown"
+              ) {
+                terminal = { state: "stopped", detail: `Run was interrupted (${event.data.reason}).` }
+              }
+            }),
+          ),
+          Effect.orElseSucceed(() => undefined),
+        )
+      return terminal
+    })
+
     // Bus subscriptions only observe live events. Reconcile task markers left behind when a
     // worker completed before its terminal event could be observed by this process.
     const recoverPending = Effect.fn("Orchestra.recoverPending")(function* (mainID?: SessionID) {
@@ -871,10 +916,16 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             // the projected user message plus an idle, non-suspended session proves the work stopped;
             // even a run with no text answer must produce a report instead of leaking the task marker.
             if (!task.value.messageID && !recent.some((message) => finalText(message).length > 0)) return
+            const terminal = task.value.messageID
+              ? yield* terminalAfterDelivery(sessionID, task.value.messageID)
+              : undefined
             yield* report(
               sessionID,
-              "recovered",
-              "Recovered a completed worker task after startup; its execution terminal event was not observed.",
+              terminal?.state ?? "recovered",
+              terminal?.detail ??
+                (terminal
+                  ? undefined
+                  : "Recovered a completed worker task after startup; its execution terminal event was not observed."),
             )
           }),
         { concurrency: "unbounded", discard: true },
@@ -1270,6 +1321,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       pending: Effect.fn("Orchestra.pending")(function* (sessionID) {
         return Option.getOrUndefined(Option.map(decodeTask(yield* kv.get(TASK + sessionID)), (task) => task.sent))
       }),
+      recoverPendingTasks: () => recoverPending(),
       roles,
       saveRole: Effect.fn("Orchestra.saveRole")(function* (id, input) {
         const spec = yield* requireRole(input)
