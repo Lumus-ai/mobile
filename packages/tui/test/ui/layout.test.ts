@@ -3,6 +3,7 @@ import {
   clampHomeProjectPanelWidth,
   clampNoteChatWidth,
   clampSessionPaneWidth,
+  noteCanvasFlexGrow,
   clampSessionTabsWidth,
   defaultSessionPaneWidth,
   homeProjectPanelWidth,
@@ -93,4 +94,11 @@ test("the note/chat divider keeps both columns readable and can move in either d
   expect(clampNoteChatWidth(56, 140)).toBe(56)
   expect(clampNoteChatWidth(120, 140)).toBe(92)
   expect(clampNoteChatWidth(100, 96)).toBe(48)
+})
+
+test("a hidden note canvas releases its layout space to the chat", () => {
+  expect(noteCanvasFlexGrow(false, false)).toBe(0)
+  expect(noteCanvasFlexGrow(false, true)).toBe(0)
+  expect(noteCanvasFlexGrow(true, false)).toBe(0)
+  expect(noteCanvasFlexGrow(true, true)).toBe(3)
 })

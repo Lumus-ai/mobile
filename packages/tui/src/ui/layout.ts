@@ -32,6 +32,13 @@ export const SESSION_CHAT_MIN_WIDTH = 56
 export const NOTE_CANVAS_MIN_WIDTH = 48
 export const NOTE_CHAT_MIN_WIDTH = 48
 
+// A canvas hidden in full-chat mode must not keep a flex share and leave a
+// blank column beside the chat.
+export function noteCanvasFlexGrow(hasCanvas: boolean, stacked: boolean) {
+  if (!hasCanvas) return 0
+  return stacked ? 3 : 0
+}
+
 export function clampNoteChatWidth(width: number, available: number) {
   const max = Math.max(1, available - NOTE_CANVAS_MIN_WIDTH)
   const min = Math.min(NOTE_CHAT_MIN_WIDTH, max)

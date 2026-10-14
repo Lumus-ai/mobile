@@ -21,7 +21,14 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { Session } from "../routes/session"
 import { Sidebar } from "../routes/session/sidebar"
-import { clampNoteChatWidth, clampSessionPaneWidth, defaultSessionPaneWidth, sessionPanesStacked, sessionSidebarDocks } from "../ui/layout"
+import {
+  clampNoteChatWidth,
+  clampSessionPaneWidth,
+  defaultSessionPaneWidth,
+  noteCanvasFlexGrow,
+  sessionPanesStacked,
+  sessionSidebarDocks,
+} from "../ui/layout"
 import { useCompactLayout } from "../ui/compact-layout"
 import { createPaneResize } from "../ui/pane-resize"
 import { PaneResizeHandle } from "../ui/pane-resize-handle"
@@ -369,9 +376,15 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         <box
           id="note-canvas"
           visible={canvas() !== undefined}
-          flexGrow={canvas() && !stacked() ? 0 : 3}
+          flexGrow={noteCanvasFlexGrow(canvas() !== undefined, stacked())}
           flexBasis={canvas() && !stacked() ? undefined : 0}
-          width={canvas() && !stacked() ? Math.max(0, canvasHostWidth() - noteChatResize.size()) : undefined}
+          width={
+            canvas()
+              ? stacked()
+                ? undefined
+                : Math.max(0, canvasHostWidth() - noteChatResize.size())
+              : 0
+          }
           minWidth={0}
           minHeight={0}
           border={[stacked() ? "bottom" : "right"]}
