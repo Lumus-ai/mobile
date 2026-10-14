@@ -110,7 +110,7 @@ async function listIdeas(request: Request, env: Env) {
   // Search individual terms rather than requiring the exact phrase. This behaves
   // better with natural-language queries issued by the chat agent, while retaining
   // bounded work and parameterized SQL.
-  const terms = query.split(/\\s+/).filter((term) => term.length > 1).slice(0, 8)
+  const terms = query.split(/\ s+/).filter((term) => term.length > 1).slice(0, 8)
   const searchable = "lower(title || ' ' || summary || ' ' || category || ' ' || tags)"
   for (const term of terms) {
     clauses.push(`instr(${searchable}, lower(?)) > 0`)
