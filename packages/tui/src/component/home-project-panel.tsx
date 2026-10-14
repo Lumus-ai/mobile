@@ -196,9 +196,9 @@ export function HomeProjectPanel(props: { width: number }) {
                       </box>
                     </box>
                     <text fg={color(item.state)}>{stateLabel(item.state)}</text>
-                    {#if item.total > 0}
+                    <Show when={item.total > 0}>
                       <text fg={theme.text.muted}>{item.done}/{item.total} steps</text>
-                    {/if}
+                    </Show>
                   </box>
                 )}
               </For>
