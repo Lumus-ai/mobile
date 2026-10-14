@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite"
 import { describe, expect, it } from "bun:test"
 import { readFile } from "node:fs/promises"
 
@@ -5,26 +6,64 @@ const initial = await readFile(new URL("../migrations/0001_init.sql", import.met
 const upgrade = await readFile(new URL("../migrations/0002_global_search_signals.sql", import.meta.url), "utf8")
 
 describe("Global Idea Bank D1 migrations", () => {
-  it("creates the original idea catalogue and seed ideas", () => {
-    expect(initial).toContain("CREATE TABLE IF NOT EXISTS ideas")
-    expect(initial).toContain("content_hash TEXT NOT NULL UNIQUE")
-    expect((initial.match(/'seed-[a-z-]+'/g) ?? []).length).toBeGreaterThanOrEqual(8)
+  it("applies cleanly in order and creates every column used by the worker", () => {
+    const db = new Database(":memory:")
+    try {
+      db.exec(initial)
+      const originalColumns = (db.query("PRAGMA table_info(ideas)").all() as { name: string }[]).map((item) => item.name)
+      expect(originalColumns).toContain("content_hash")
+      expect(originalColumns).not.toContain("search_text")
+
+      db.exec(upgrade)
+      const columns = (db.query("PRAGMA table_info(ideas)").all() as { name: string }[]).map((item) => item.name)
+      expect(columns).toContain("signal_count")
+      expect(columns).toContain("search_text")
+      expect(columns).toContain("reviewed_at")
+
+      const quotaTable = db
+        .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get("submission_rate_limits") as { name: string } | null
+      expect(quotaTable?.name).toBe("submission_rate_limits")
+    } finally {
+      db.close()
+    }
   })
 
-  it("adds every column used by search and community signals without rewriting migration 0001", () => {
-    expect(upgrade).toContain("ALTER TABLE ideas ADD COLUMN signal_count INTEGER NOT NULL DEFAULT 0")
-    expect(upgrade).toContain("ALTER TABLE ideas ADD COLUMN search_text TEXT NOT NULL DEFAULT ''")
-    expect(upgrade).toContain("DROP INDEX IF EXISTS ideas_public_order")
-    expect(upgrade).toContain("ideas_public_order ON ideas(status, signal_count DESC, updated_at DESC)")
-    expect(initial).not.toContain("signal_count INTEGER")
-    expect(initial).not.toContain("search_text TEXT")
+  it("backfills seed ideas for search and starts each with one catalogue signal", () => {
+    const db = new Database(":memory:")
+    try {
+      db.exec(initial)
+      db.exec(upgrade)
+      const seed = db
+        .query("SELECT title, summary, signal_count, search_text FROM ideas WHERE id = ?")
+        .get("seed-game-localization") as {
+          title: string
+          summary: string
+          signal_count: number
+          search_text: string
+        }
+      expect(seed.signal_count).toBe(1)
+      expect(seed.search_text).toContain("translation")
+      expect(seed.search_text).toContain(seed.title.toLowerCase())
+      expect(seed.search_text).toContain(seed.summary.toLowerCase())
+    } finally {
+      db.close()
+    }
   })
 
-  it("creates the atomic daily quota and initializes existing seed ideas for global search", () => {
-    expect(upgrade).toContain("CREATE TABLE IF NOT EXISTS submission_rate_limits")
-    expect(upgrade).toContain("PRIMARY KEY (submitter_hash, window_start)")
-    expect(upgrade).toContain("count BETWEEN 1 AND 5")
-    expect(upgrade).toContain("UPDATE ideas SET signal_count = 1 WHERE id LIKE 'seed-%'")
-    expect(upgrade).toContain("SET search_text = lower(title || ' ' || summary || ' ' || category || ' ' || tags)")
+  it("enforces the contribution quota schema", () => {
+    const db = new Database(":memory:")
+    try {
+      db.exec(initial)
+      db.exec(upgrade)
+      db.query("INSERT INTO submission_rate_limits (submitter_hash, window_start, count) VALUES (?, ?, ?)")
+        .run("hashed-address", 20000, 5)
+      expect(() =>
+        db.query("INSERT INTO submission_rate_limits (submitter_hash, window_start, count) VALUES (?, ?, ?)")
+          .run("over-limit", 20000, 6),
+      ).toThrow()
+    } finally {
+      db.close()
+    }
   })
 })
