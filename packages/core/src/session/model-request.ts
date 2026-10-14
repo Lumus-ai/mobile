@@ -282,6 +282,14 @@ export const layer = Layer.effect(
           return t ? [[name, { ...t, description: d.description, inputSchema: d.input }] as const] : []
         }),
       )
+      // Context hooks may intentionally trim the advertised tool set. Re-add only the two
+      // compatibility schemas for the OpenCode provider after hooks run; the original snapshot
+      // executor still rejects calls to tools removed by permissions.
+      if (model.ref.providerID === "opencode") {
+        for (const candidate of compatibility) {
+          if (!hooked.has(candidate.name)) hooked.set(candidate.name, candidate)
+        }
+      }
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
