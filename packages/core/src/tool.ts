@@ -51,10 +51,15 @@ export interface NormalizedResult extends Tool.Result {
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
   /**
-   * Tool schemas hidden by a deny rule but needed by OpenCode Zen's free-tier request validator.
-   * These schemas may be advertised for compatibility; execute() still resolves only active tools.
+   * Tool schemas hidden by a blanket deny rule but retained for the OpenCode Zen request validator.
+   * These schemas may be advertised for compatibility; execute() never resolves denied tools.
    */
   readonly compatibilityDefinitions?: ReadonlyArray<ToolDefinition>
+  /**
+   * Active tools normally represented only in the CodeMode catalog. The OpenCode provider may
+   * need their native schemas at the request boundary; model-request hooks can still remove them.
+   */
+  readonly codeModeDefinitions?: ReadonlyArray<ToolDefinition>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
@@ -232,20 +237,21 @@ const layer = Layer.effect(
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
-          // OpenCode Zen's free-tier gate currently validates the shape of the standard tool
-          // list rather than the caller's actual permissions. Preserve schemas hidden by a local
-          // deny rule for the request only; the active executor below still contains allowed tools.
-          const compatibilityDefinitions = compatibilityToolNames(data.tools, rules)
-            .flatMap((name) => {
-              const tool = data.tools.get(name)
-              return tool ? [definition(tool)] : []
-            })
           for (const [name, tool] of data.tools) {
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
           const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
+          // Zen's free-tier validator can reject a reduced tool array. Keep denied schemas separate
+          // from active CodeMode tools: both can be advertised where necessary, but only active
+          // tools may execute, and context hooks must still be able to remove an active tool.
+          const compatibilityDefinitions = compatibilityToolNames(data.tools, rules)
+            .flatMap((name) => {
+              const tool = data.tools.get(name)
+              return tool ? [definition(tool)] : []
+            })
+          const codeModeDefinitions = Array.from(codeModeTools.values()).map(definition)
           const namespaces = data.namespaces
           const codeModeInventory = { tools: codeModeTools, namespaces }
           const codeModeEnabled = !whollyDisabled("execute", rules)
@@ -267,6 +273,7 @@ const layer = Layer.effect(
           if (codeModeCatalog) catalog = { data, names, value: codeModeCatalog }
           return {
             ...(compatibilityDefinitions.length ? { compatibilityDefinitions } : {}),
+            ...(codeModeDefinitions.length ? { codeModeDefinitions } : {}),
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
               ...Array.from(direct)
@@ -284,13 +291,17 @@ const layer = Layer.effect(
               }
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
-              // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
+              // Preserve context-hook removal and alias resolution, also for native CodeMode tools.
+              if (
+                !requested &&
+                input.definitions &&
+                (direct.has(event.tool) || codeModeTools.has(event.tool) || codeModeTool?.name === event.tool)
+              )
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
               if (name === "execute" && codeModeTool)
                 return yield* executeTool(codeModeTool, name, event.input, context)
-              const tool = direct.get(name)
+              const tool = direct.get(name) ?? (requested ? codeModeTools.get(name) : undefined)
               if (tool) return yield* executeTool(tool, name, event.input, context)
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
