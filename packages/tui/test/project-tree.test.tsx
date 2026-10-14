@@ -154,7 +154,7 @@ test("a new session started from a project carries its project owner metadata", 
   await setup.waitForFrame(
     (frame) => {
       // Home prompt suggestions can wrap across rows at narrow transcript widths.
-      const visible = frame.replace(/\\s+/g, " ")
+      const visible = frame.replace(/\s+/g, " ")
       return ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"].some((text) =>
         visible.includes(text),
       )
