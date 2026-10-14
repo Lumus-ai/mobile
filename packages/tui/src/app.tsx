@@ -93,6 +93,7 @@ import { createPaneResize } from "./ui/pane-resize"
 import { useCompactLayout } from "./ui/compact-layout"
 import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { ThemeErrorToast } from "./component/theme-error-toast"
+import { IdeaBankCapture } from "./component/dialog-idea-bank"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
 import { PromptHistoryProvider } from "./prompt/history"
@@ -1615,6 +1616,7 @@ function App() {
         <Reconnecting managed={client.restart !== undefined} />
       </Show>
       <MigrationOverlay />
+      <IdeaBankCapture />
       <Toast />
     </box>
   )
