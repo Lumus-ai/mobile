@@ -742,6 +742,7 @@ describe("Orchestra team", () => {
         () => Effect.sync(() => deliverRegularInput.delete(worker.id)),
       )
       yield* sessions.prompt({ sessionID: worker.id, text: "Now answer an unrelated question" })
+      yield* sessions.prompt({ sessionID: worker.id, text: "One more unrelated question" })
       expect(yield* reports(project.main!)).toHaveLength(0)
       expect(yield* orchestra.pending(worker.id)).toBeNumber()
 

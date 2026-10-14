@@ -685,9 +685,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                 })
                 .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
           // The query is ordered newest-first and starts after the dispatched user message.
-          // If the operator sent another user prompt before recovery/reporting, ignore answers
-          // newer than that prompt; they belong to unrelated work, not this assigned task.
-          const nextUser = recent.findIndex((message) => message.type === "user")
+          // If the operator sent later user prompts, use the OLDEST such prompt as the boundary:
+          // every assistant answer newer than it belongs to unrelated work, not this assigned task.
+          const nextUser = recent.findLastIndex((message) => message.type === "user")
           const taskMessages = nextUser < 0 ? recent : recent.slice(nextUser + 1)
           const answer = workerRemoved
             ? "(worker session was deleted before it could report)"
