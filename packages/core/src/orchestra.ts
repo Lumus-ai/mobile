@@ -940,8 +940,14 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       owns,
       owners,
       claim: Effect.fn("Orchestra.claim")(function* (sessionID, projectID) {
-        yield* get(projectID)
-        yield* kv.set(OWNER + sessionID, projectID)
+        // Owner assignment and project removal share the same lock. Otherwise a claim can
+        // pass get(projectID), lose a race to remove(), and write an orphan owner afterward.
+        yield* mainLocks.withLock(projectID)(
+          Effect.gen(function* () {
+            yield* get(projectID)
+            yield* kv.set(OWNER + sessionID, projectID)
+          }),
+        )
       }),
       createMember: Effect.fn("Orchestra.createMember")(function* (input) {
         return yield* mainLocks.withLock(input.project.id)(

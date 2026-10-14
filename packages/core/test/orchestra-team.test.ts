@@ -280,6 +280,32 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   ),
 
+  it.live("serializes owner claims with project deletion so no session stays claimed by a removed project", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-owner-claim-race-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Owner claim race", directory: tmp.path })
+      const worker = yield* sessions.create({
+        location: { directory: AbsolutePath.make(tmp.path) },
+        title: "Claim candidate",
+      })
+
+      // The claim either commits before removal and gets cleaned up, or removal wins and
+      // the claim sees ProjectNotFoundError. Neither schedule may leave a dangling owner key.
+      yield* Effect.all(
+        {
+          claim: orchestra.claim(worker.id, project.id).pipe(Effect.either),
+          remove: orchestra.remove(project.id).pipe(Effect.either),
+        },
+        { concurrency: "unbounded" },
+      )
+
+      expect((yield* orchestra.projects()).some((item) => item.id === project.id)).toBe(false)
+      expect(yield* orchestra.owners()).not.toHaveProperty(worker.id)
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("does not resolve a removed project's main session as a live orchestrator", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-forgotten-main-")))
