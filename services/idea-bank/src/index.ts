@@ -182,6 +182,10 @@ async function submitIdea(request: Request, env: Env) {
   const salt = env.RATE_LIMIT_SALT
   const now = Date.now()
   const windowStart = Math.floor(now / (24 * 60 * 60 * 1000))
+  // Drop expired daily buckets so the rate-limit table does not grow forever.
+  await env.DB.prepare("DELETE FROM submission_rate_limits WHERE window_start < ?")
+    .bind(windowStart)
+    .run()
   // Rotate the pseudonymous identifier daily to avoid linking a submitter's activity across days.
   const submitterHash = await hash(`${salt}:${windowStart}:${ip}`)
   // Atomic per-IP daily counter: duplicate signals count too, so they cannot bypass the limit.
