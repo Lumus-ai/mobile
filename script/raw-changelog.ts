@@ -31,15 +31,137 @@ const team = [
     .then((x) => x.filter((x) => x && !x.startsWith("#")))),
   ...bot,
 ]
-const order = ["Core", "TUI", "Desktop", "SDK", "Extensions"] as const
+const order = ["Core", "TUI", "Desktop", "Web", "SDK", "Extensions"] as const
 const sections = {
   core: "Core",
   tui: "TUI",
-  app: "Desktop",
-  tauri: "Desktop",
+  desktop: "Desktop",
+  web: "Web",
   sdk: "SDK",
   plugin: "SDK",
-  "extensions/vscode": "Extensions",
+  extensions: "Extensions",
+  github: "Extensions",
+} as const
+
+function ref(input: string) {
+  if (input === "HEAD") return input
+  if (input.startsWith("v")) return input
+  if (input.match(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/)) return `v${input}`
+  return input
+}
+
+async function latest() {
+  const data = await $`gh api "/repos/${repo}/releases?per_page=100"`.json()
+  const release = (data as Release[]).find((item) => !item.draft)
+  if (!release) throw new Error("No releases found")
+  return release.tag_name.replace(/^v/, "")
+}
+
+async function diff(base: string, head: string) {
+  const list: Diff[] = []
+  for (let page = 1; ; page++) {
+    const text =
+      await $`gh api "/repos/${repo}/compare/${base}...${head}?per_page=100&page=${page}" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
+    const batch = text
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Diff)
+    if (batch.length === 0) break
+    list.push(...batch)
+    if (batch.length < 100) break
+  }
+  return list
+}
+
+function section(areas: Set<string>) {
+  const priority = ["core", "tui", "desktop", "web", "sdk", "plugin", "extensions", "github"]
+  for (const area of priority) {
+    if (areas.has(area)) return sections[area as keyof typeof sections]
+  }
+  return "Core"
+}
+
+function type(message: string) {
+  if (message.match(/fix/i)) return "Bugfixes"
+  return "Improvements"
+}
+
+function reverted(commits: Commit[]) {
+  const seen = new Map<string, Commit>()
+
+  for (const commit of commits) {
+    const match = commit.message.match(/^Revert "(.+)"$/)
+    if (match) {
+      const msg = match[1]!
+      if (seen.has(msg)) seen.delete(msg)
+      else seen.set(commit.message, commit)
+      continue
+    }
+
+    const revert = `Revert "${commit.message}"`
+    if (seen.has(revert)) {
+      seen.delete(revert)
+      continue
+    }
+
+    seen.set(commit.message, commit)
+  }
+
+  return [...seen.values()]
+}
+
+async function commits(from: string, to: string) {
+  const base = ref(from)
+  const head = ref(to)
+
+  const data = new Map<string, { login: string | null; message: string }>()
+  for (const item of await diff(base, head)) {
+    data.set(item.sha, { login: item.login, message: item.message.split("\n")[0] ?? "" })
+  }
+
+  const log =
+    await #!/usr/bin/env bun
+
+import { $ } from "bun"
+import { parseArgs } from "util"
+
+type Release = {
+  tag_name: string
+  draft: boolean
+}
+
+type Commit = {
+  hash: string
+  author: string | null
+  message: string
+  areas: Set<string>
+}
+
+type User = Map<string, Set<string>>
+type Diff = {
+  sha: string
+  login: string | null
+  message: string
+}
+
+const repo = process.env.GH_REPO ?? "anomalyco/opencode"
+const bot = ["actions-user", "github-actions[bot]", "opencode", "opencode-agent[bot]"]
+const team = [
+  ...(await Bun.file(new URL("../.github/TEAM_MEMBERS", import.meta.url))
+    .text()
+    .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
+    .then((x) => x.filter((x) => x && !x.startsWith("#")))),
+  ...bot,
+]
+const order = ["Core", "TUI", "Desktop", "Web", "SDK", "Extensions"] as const
+const sections = {
+  core: "Core",
+  tui: "TUI",
+  desktop: "Desktop",
+  web: "Web",
+  sdk: "SDK",
+  plugin: "SDK",
+  extensions: "Extensions",
   github: "Extensions",
 } as const
 
@@ -119,8 +241,7 @@ async function commits(from: string, to: string) {
     data.set(item.sha, { login: item.login, message: item.message.split("\n")[0] ?? "" })
   }
 
-  const log =
-    await $`git log ${base}..${head} --format=%H -- packages/opencode packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
+git log ${base}..${head} --format=%H -- packages/core packages/server packages/protocol packages/schema packages/util packages/ai packages/simulation packages/tui packages/cli packages/desktop packages/app packages/console packages/ui packages/theme packages/sdk packages/client packages/plugin packages/extensions services/www sdks/vscode github`.text()
 
   const list: Commit[] = []
   for (const hash of log.split("\n").filter(Boolean)) {
@@ -132,12 +253,38 @@ async function commits(from: string, to: string) {
     const areas = new Set<string>()
 
     for (const file of diff.split("\n").filter(Boolean)) {
-      if (file.startsWith("packages/opencode/src/cli/cmd/")) areas.add("tui")
-      else if (file.startsWith("packages/opencode/")) areas.add("core")
-      else if (file.startsWith("packages/desktop/src-tauri/")) areas.add("tauri")
-      else if (file.startsWith("packages/desktop/") || file.startsWith("packages/app/")) areas.add("app")
-      else if (file.startsWith("packages/plugin/")) areas.add("sdk")
-      else if (file.startsWith("sdks/vscode/") || file.startsWith("github/")) areas.add("extensions/vscode")
+      if (file.startsWith("packages/tui/") || file.startsWith("packages/cli/")) areas.add("tui")
+      else if (file.startsWith("packages/desktop/")) areas.add("desktop")
+      else if (
+        file.startsWith("packages/app/") ||
+        file.startsWith("packages/console/") ||
+        file.startsWith("packages/ui/") ||
+        file.startsWith("packages/theme/") ||
+        file.startsWith("services/www/")
+      )
+        areas.add("web")
+      else if (
+        file.startsWith("packages/sdk/") ||
+        file.startsWith("packages/client/") ||
+        file.startsWith("packages/plugin/")
+      )
+        areas.add("sdk")
+      else if (
+        file.startsWith("packages/extensions/") ||
+        file.startsWith("sdks/vscode/") ||
+        file.startsWith("github/")
+      )
+        areas.add("extensions")
+      else if (
+        file.startsWith("packages/core/") ||
+        file.startsWith("packages/server/") ||
+        file.startsWith("packages/protocol/") ||
+        file.startsWith("packages/schema/") ||
+        file.startsWith("packages/util/") ||
+        file.startsWith("packages/ai/") ||
+        file.startsWith("packages/simulation/")
+      )
+        areas.add("core")
     }
 
     if (areas.size === 0) continue
