@@ -133,6 +133,11 @@ async function listIdeas(request: Request, env: Env) {
 }
 
 async function submitIdea(request: Request, env: Env) {
+  const contentLength = Number(request.headers.get("content-length") ?? 0)
+  if (Number.isFinite(contentLength) && contentLength > 16_384)
+    return json({ error: "Idea submission body exceeds 16 KiB" }, 413)
+  if (!env.RATE_LIMIT_SALT)
+    return json({ error: "Idea Bank is not configured: RATE_LIMIT_SALT is missing" }, 503)
   let raw: unknown
   try {
     raw = await request.json()
@@ -167,7 +172,7 @@ async function submitIdea(request: Request, env: Env) {
     return json({ error: "A matching idea already exists", existingId: duplicate.id, status: duplicate.status }, 409)
 
   const ip = request.headers.get("CF-Connecting-IP") ?? "unknown"
-  const salt = env.RATE_LIMIT_SALT ?? "development-only-change-me"
+  const salt = env.RATE_LIMIT_SALT
   const submitterHash = await hash(`${salt}:${ip}`)
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000
   const recent = await env.DB.prepare(
