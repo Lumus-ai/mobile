@@ -21,6 +21,14 @@ import { filesystem, path } from "./effect/app-node-platform.js"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
+// A child can reject stdin and exit before consuming it. Preserve the real process result
+// (exit code and stderr) instead of letting the writer's expected EPIPE mask the diagnosis.
+const isBrokenPipe = (cause: unknown, depth = 0): boolean => {
+  if (depth > 8 || !Predicate.isRecord(cause)) return false
+  if (cause.code === "EPIPE") return true
+  return isBrokenPipe(cause.cause, depth + 1)
+}
+
 const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
   switch (err.code) {
     case "ENOENT":
@@ -236,7 +244,12 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           encoding: cfg.encoding,
         })
       }
-      if (Stream.isStream(cfg.stream)) return Effect.as(Effect.forkScoped(Stream.run(cfg.stream, sink)), sink)
+      if (Stream.isStream(cfg.stream)) {
+        const write = Stream.run(cfg.stream, sink).pipe(
+          Effect.catch((cause) => (isBrokenPipe(cause) ? Effect.void : Effect.fail(cause))),
+        )
+        return Effect.as(Effect.forkScoped(write), sink)
+      }
       return Effect.succeed(sink)
     })
 

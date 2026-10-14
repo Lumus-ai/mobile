@@ -306,9 +306,14 @@ describe("Session-owned handles", () => {
         )
         .run()
         .pipe(Effect.orDie)
-      expect((yield* second.prompt({ ...retry, files: [{ uri: "file:///missing-owned-retry" }] })).payload).toEqual(
-        prompt.payload,
-      )
+      const deliveredRetry = yield* second.prompt({ ...retry, files: [{ uri: "file:///missing-owned-retry" }] })
+      // Once delivered, the inbox-only resumeOnStart flag is no longer part of the projected message.
+      // The retry still resolves to the first user-visible payload and must not prepare new attachments.
+      expect(deliveredRetry.payload).toMatchObject({
+        text: prompt.payload.text,
+        metadata: prompt.payload.metadata,
+      })
+      expect(deliveredRetry.payload.files).toBeUndefined()
       expect((yield* second.synthetic({ ...retry, id: synthetic.id })).payload).toEqual(synthetic.payload)
       expect(yield* other.synthetic({ ...retry, id: synthetic.id }).pipe(Effect.flip)).toMatchObject({
         _tag: "Session.SyntheticConflictError",
