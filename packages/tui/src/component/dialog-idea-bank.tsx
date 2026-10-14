@@ -12,7 +12,7 @@ import { useToast } from "../ui/toast"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useT } from "../util/i18n"
 import { HoverAction } from "./hover-action"
-import { classifyIdeaSignal } from "../util/idea-bank-rules"
+import { classifyIdeaSignal, shouldAttemptGlobalShare } from "../util/idea-bank-rules"
 
 export type IdeaSignal = {
   id: string
@@ -705,9 +705,8 @@ export function IdeaBankCapture() {
           const now = Date.now()
           const lastSharedAt = state.lastSharedSignalAt?.[signal.id] ?? 0
           const lastAttemptAt = state.lastSharedAttemptAt?.[signal.id] ?? 0
-          if (now - lastSharedAt < 24 * 60 * 60 * 1000) continue
           // Do not retry a failed network request on every chat turn.
-          if (now - lastAttemptAt < 5 * 60 * 1000) continue
+          if (!shouldAttemptGlobalShare(now, lastSharedAt, lastAttemptAt)) continue
           await update((draft) => {
             draft.lastSharedAttemptAt ??= {}
             draft.lastSharedAttemptAt[signal.id] = now
