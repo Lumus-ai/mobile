@@ -689,7 +689,10 @@ describe("Orchestra team", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          type: SessionEvent.Execution.Succeeded.type,
+          type: Bus.versionedType(
+            SessionEvent.Execution.Succeeded.type,
+            SessionEvent.Execution.Succeeded.durable.version,
+          ),
           created: Date.now(),
           seq: lastSequence + 1,
           aggregateID: worker.id,
