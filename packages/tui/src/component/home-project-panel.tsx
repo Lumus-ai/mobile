@@ -129,9 +129,11 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
           <box
             id="home-project-panel-show"
             flexShrink={0}
+            minWidth={3}
             paddingLeft={1}
             paddingRight={1}
             backgroundColor={theme.background.raised.base}
+            onMouseDown={(event) => event.stopPropagation()}
             onMouseUp={(event) => {
               event.stopPropagation()
               props.onShow?.()
@@ -173,19 +175,19 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
                   backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : undefined}
                   onMouseOver={() => setCloseHovered(true)}
                   onMouseOut={() => setCloseHovered(false)}
-                  onMouseDown={(event) => {
-                    event.stopPropagation()
-                  }}
+                  onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => {
                     event.stopPropagation()
                     props.onHide?.()
                   }}
                 >
-                  <text fg={
-                    closeHovered()
-                      ? (theme.text.action.primary.hovered ?? theme.increase(theme.text.action.primary.base, 2))
-                      : theme.text.action.primary.base
-                  }>
+                  <text
+                    fg={
+                      closeHovered()
+                        ? (theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action.primary.base, 2))
+                        : theme.text.action.primary.base
+                    }
+                  >
                     ›
                   </text>
                 </box>
