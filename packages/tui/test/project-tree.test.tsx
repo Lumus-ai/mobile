@@ -19,6 +19,8 @@ const session = (id: string, title: string) => ({
 })
 const worker = session("ses_worker", "Worker task")
 const main = session("ses_main", "Demo · Orchestrator")
+const createdProject = { ...project, id: "prj_new", name: "Created", main: "ses_created_main" }
+const createdMain = { ...session("ses_created_main", "Created · Orchestrator"), agent: "orchestrator" }
 
 type Call = { method: string; path: string; body?: unknown }
 
@@ -40,6 +42,7 @@ function render(
   layout: "compact" | "full" = "full",
   options: { width?: number; sidebar?: "auto" | "hide" } = {},
 ) {
+  let projectCreated = false
   return createAppFixture({
     width: options.width ?? 120,
     state,
@@ -75,14 +78,19 @@ function render(
         })
       }
       if (url.pathname === "/api/location") return json(location)
-      if (url.pathname === "/api/orchestra/project" && request.method === "POST")
-        return json({ ...project, id: "prj_new", name: "Created" })
+      if (url.pathname === "/api/orchestra/project" && request.method === "POST") {
+        projectCreated = true
+        return json(createdProject)
+      }
       if (url.pathname === "/api/orchestra/owner") return json({})
-      if (url.pathname === "/api/orchestra/project") return json(projects)
+      if (url.pathname === "/api/orchestra/project") return json(projectCreated ? [...projects, createdProject] : projects)
       if (url.pathname === "/api/orchestra/template") return json([team])
       if (url.pathname === `/api/orchestra/project/${project.id}/session`)
         return json({ data: [listed], access: { [worker.id]: "write" }, category: { [worker.id]: "Build" } })
+      if (url.pathname === `/api/orchestra/project/${createdProject.id}/session`)
+        return json({ data: [], access: {}, category: {} })
       if (url.pathname === `/api/orchestra/project/${project.id}/main`) return json(main)
+      if (url.pathname === `/api/orchestra/project/${createdProject.id}/main`) return json(createdMain)
       if (url.pathname.startsWith("/api/orchestra/access/")) return new Response(null, { status: 204 })
       if (url.pathname.startsWith("/api/orchestra/category/")) return new Response(null, { status: 204 })
       if (url.pathname.startsWith("/api/orchestra/owner/")) return new Response(null, { status: 204 })
@@ -222,7 +230,15 @@ test("a project is created from a name and a path", async () => {
   await setup.mockInput.typeText("Created")
   await setup.mockInput.pressEnter()
   await setup.waitFor(() => calls.some((call) => call.method === "POST" && call.path === "/api/orchestra/project"))
-  expect(calls.find((call) => call.method === "POST")?.body).toEqual({ name: "Created", directory })
+  expect(calls.find((call) => call.method === "POST" && call.path === "/api/orchestra/project")?.body).toEqual({
+    name: "Created",
+    directory,
+  })
+  // Creation opens the new project's permanent orchestrator automatically.
+  await setup.waitFor(() =>
+    calls.some((call) => call.method === "POST" && call.path === `/api/orchestra/project/${createdProject.id}/main`),
+  )
+  await setup.waitForFrame((frame) => frame.includes("Created · Orchestrator"))
 })
 
 test("a new project can start with an AI team from a template", async () => {

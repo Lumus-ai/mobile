@@ -15,8 +15,8 @@ import { builtinName, openTeamEditor } from "./dialog-teams"
 
 // Create a project, or rename it, move it to another directory or forget it.
 // Projects are the operator's own: a name and a directory, nothing discovered.
-// A new project may start with an AI team: the template opens its role
-// sessions next to the Orchestrator; "No team" opens nothing. Teams themselves
+// A new project always starts with an Orchestrator; a selected template also opens
+// its role sessions. Teams themselves
 // are edited in the team editor, which comes back here with the typed fields.
 type Draft = { name: string; directory: string }
 
@@ -25,6 +25,7 @@ export function DialogProject(props: {
   draft?: Draft
   onDone: () => void
   onClose: () => void
+  onCreated?: (project: OrchestraProject) => void
   onEditTeams?: (draft: Draft) => void
 }) {
   const client = useClient()
@@ -69,11 +70,14 @@ export function DialogProject(props: {
     }, 1)
   })
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async <Result,>(action: () => Promise<Result>, onSuccess?: (result: Result) => void) => {
     setBusy(true)
     setError()
     await action()
-      .then(() => props.onDone())
+      .then((result) => {
+        props.onDone()
+        onSuccess?.(result)
+      })
       .catch((cause: unknown) =>
         // The server names the field it rejected; its own text is English.
         setError(
@@ -91,10 +95,15 @@ export function DialogProject(props: {
     const directory = fields.directory?.value.trim() ?? ""
     if (!directory) return setError(t("Enter the project's path"))
     const project = props.project
-    void run(() =>
-      project
-        ? client.api.orchestra.project.update({ projectID: project.id, name, directory })
-        : client.api.orchestra.project.create({ name, directory, template: templates()?.[team() - 1]?.id }),
+    if (project) {
+      void run(() => client.api.orchestra.project.update({ projectID: project.id, name, directory }))
+      return
+    }
+    // The project owns the orchestrator from the moment creation succeeds. Open that
+    // main session immediately so the user lands in the project's control surface.
+    void run(
+      () => client.api.orchestra.project.create({ name, directory, template: templates()?.[team() - 1]?.id }),
+      (created) => props.onCreated?.(created),
     )
   }
 
@@ -296,6 +305,7 @@ export function openProjectDialog(
   onDone: () => void,
   project?: OrchestraProject,
   draft?: Draft,
+  onCreated?: (project: OrchestraProject) => void,
 ) {
   dialog.replace(
     () => (
@@ -303,9 +313,10 @@ export function openProjectDialog(
         project={project}
         draft={draft}
         onEditTeams={(typed) =>
-          openTeamEditor(dialog, { back: () => openProjectDialog(dialog, onDone, undefined, typed) })
+          openTeamEditor(dialog, { back: () => openProjectDialog(dialog, onDone, undefined, typed, onCreated) })
         }
         onClose={() => dialog.clear()}
+        onCreated={onCreated}
         onDone={() => {
           dialog.clear()
           onDone()

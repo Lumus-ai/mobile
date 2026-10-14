@@ -137,19 +137,31 @@ export function ProjectTree(props: { width: number; collapsed?: boolean; onHide?
     void expand(projectID)
   }
 
-  const edit = (project?: OrchestraProject) => openProjectDialog(dialog, projectList.refetch, project)
-
   const openMain = (project: OrchestraProject) =>
     client.api.orchestra.project
       .main({ projectID: project.id })
       .then((session) => {
         data.session.remember(session)
-        projectList.mutate((list) =>
-          list?.map((item) => (item.id === project.id ? { ...item, main: session.id } : item)),
-        )
+        projectList.mutate((list) => {
+          const items = list ?? []
+          if (items.some((item) => item.id === project.id))
+            return items.map((item) => (item.id === project.id ? { ...item, main: session.id } : item))
+          // The create response may beat the projects-list refetch. Keep the freshly created
+          // project visible instead of silently dropping it from an initially empty resource.
+          return [...items, { ...project, main: session.id }]
+        })
         route.navigate({ type: "session", sessionID: session.id })
       })
       .catch((error: unknown) => toast.show({ message: errorMessage(error), variant: "error" }))
+
+  const openCreatedProject = (project: OrchestraProject) => {
+    setExpanded(project.id, true)
+    // Load its roster first so the sidebar immediately shows the sessions that belong to it.
+    void expand(project.id).then(() => openMain(project))
+  }
+
+  const edit = (project?: OrchestraProject) =>
+    openProjectDialog(dialog, projectList.refetch, project, undefined, project ? undefined : openCreatedProject)
 
   const cycle = (sessionID: string) => {
     const now = access[sessionID] ?? Orchestra.defaultAccess
