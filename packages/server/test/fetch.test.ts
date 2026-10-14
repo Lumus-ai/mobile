@@ -56,9 +56,10 @@ it.live("recovers Orchestra tasks even when the session restart sweep fails", ()
       resumeSuspendedSessions: Effect.die(new Error("simulated session restart failure")),
     })
     const orchestra = Orchestra.Service.of({
-      recoverPendingTasks: Effect.sync(() => {
-        recovered = true
-      }),
+      recoverPendingTasks: () =>
+        Effect.sync(() => {
+          recovered = true
+        }),
     } as unknown as Orchestra.Interface)
 
     yield* ServerFetch.make(options, {
