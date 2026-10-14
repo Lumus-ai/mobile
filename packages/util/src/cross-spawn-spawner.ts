@@ -24,9 +24,9 @@ const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err 
 // A child can reject stdin and exit before consuming it. Preserve the real process result
 // (exit code and stderr) instead of letting the writer's expected EPIPE mask the diagnosis.
 const isBrokenPipe = (cause: unknown, depth = 0): boolean => {
-  if (depth > 8 || !Predicate.isRecord(cause)) return false
-  if (cause.code === "EPIPE") return true
-  return isBrokenPipe(cause.cause, depth + 1)
+  if (depth > 8 || typeof cause !== "object" || cause === null) return false
+  if ("code" in cause && cause.code === "EPIPE") return true
+  return "cause" in cause && isBrokenPipe(cause.cause, depth + 1)
 }
 
 const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
