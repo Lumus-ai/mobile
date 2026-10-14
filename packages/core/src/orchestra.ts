@@ -935,7 +935,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         if (!project) return undefined
         // Context hooks also query worker sessions. Only an actual project's main session
         // is a recovery checkpoint, and it only reconciles its own roster and tasks.
-        yield* reconcileTeam(project.id)
+        yield* reconcileTeam(project.id).pipe(
+          Effect.catchTag("Orchestra.ProjectNotFoundError", () => Effect.void),
+        )
         yield* recoverPending(sessionID)
         return project
       }),
