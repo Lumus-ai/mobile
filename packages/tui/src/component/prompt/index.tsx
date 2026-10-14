@@ -1792,6 +1792,7 @@ export function Prompt(props: PromptProps) {
                 input.insertText(prefix + instruction + "\n\n")
                 setTimeout(() => {
                   if (!input || input.isDestroyed) return
+                  input.focus()
                   input.getLayoutNode().markDirty()
                   input.gotoBufferEnd()
                   renderer.requestRender()
