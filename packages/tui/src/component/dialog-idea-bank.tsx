@@ -30,6 +30,8 @@ export type IdeaSignal = {
 type IdeaBankState = {
   autoCapture: boolean
   autoCaptureSince: number
+  autoShareSignals?: boolean
+  lastSharedSignalAt?: Record<string, number>
   lastProcessedBySession: Record<string, { messageID: string; createdAt: number }>
   ideas: IdeaSignal[]
   // Migration from earlier development snapshots; removed after state is next saved.
@@ -40,6 +42,8 @@ const STORE_KEY = "idea-bank"
 const INITIAL: IdeaBankState = {
   autoCapture: false,
   autoCaptureSince: 0,
+  autoShareSignals: false,
+  lastSharedSignalAt: {},
   lastProcessedBySession: {},
   ideas: [],
 }
@@ -159,7 +163,25 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
   const prompt = props.prompt
   // The bundled ideas make the bank useful before any private-session signals are collected.
   // They are inspiration only: no market demand or novelty is claimed to have been verified.
-  const globalBase = () => process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, "")
+  const globalBase = () => {
+    const configured = process.env.OPENCODE_IDEA_BANK_URL?.trim()
+    if (!configured) return undefined
+    try {
+      const url = new URL(configured)
+      if (
+        url.username ||
+        url.password ||
+        (url.protocol !== "https:" &&
+          url.hostname !== "localhost" &&
+          url.hostname !== "127.0.0.1" &&
+          url.hostname !== "[::1]")
+      )
+        return undefined
+      return url.origin
+    } catch {
+      return undefined
+    }
+  }
   const [globalIdeas, setGlobalIdeas] = createSignal<IdeaSignal[]>([])
   const [globalStatus, setGlobalStatus] = createSignal<"loading" | "connected" | "not-configured" | "error">("loading")
   const [globalTotal, setGlobalTotal] = createSignal(0)
@@ -246,6 +268,8 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
       await update((draft) => {
         draft.autoCapture = false
         draft.autoCaptureSince = 0
+        draft.autoShareSignals = false
+        draft.lastSharedSignalAt = {}
         draft.lastProcessedBySession = {}
         draft.ideas = []
         delete draft.processedMessageIDs
@@ -320,7 +344,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
         toast.show({ variant: "error", message })
         return
       }
-      toast.show({ variant: "success", message: t("Idea submitted for moderation; it is not public yet.") })
+      toast.show({ variant: "success", message: t("Idea added to the global bank.") })
     } catch {
       toast.show({ variant: "error", message: t("Could not submit to global Idea Bank") })
     }
@@ -333,10 +357,46 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
       draft.ideas ??= []
       draft.lastProcessedBySession ??= {}
       delete draft.processedMessageIDs
-      // Consent applies only to future messages. Enabling the feature never scans old chats.
+      // Turning local capture off also stops any automatic sharing.
+      if (!enabled) draft.autoShareSignals = false
+      // Consent applies only to future messages. Enabling never scans old chats.
       if (enabled) draft.autoCaptureSince = Date.now()
     }).catch((error) => {
       toast.show({ variant: "error", message: `Idea Bank: ${String(error)}` })
+    })
+  }
+
+  const toggleGlobalSignalSharing = () => {
+    if (state.autoShareSignals) {
+      void update((draft) => {
+        draft.autoShareSignals = false
+      }).then(() => setShareArmed(undefined)).catch(() => {
+        toast.show({ variant: "error", message: t("Could not update global sharing setting") })
+      })
+      return
+    }
+    if (!state.autoCapture) {
+      toast.show({ variant: "info", message: t("Enable local capture before sharing anonymous signals.") })
+      return
+    }
+    if (!globalBase()) {
+      toast.show({ variant: "error", message: t("Global Idea Bank is not connected.") })
+      setGlobalStatus("not-configured")
+      return
+    }
+    if (shareArmed() !== "automatic-signals") {
+      setShareArmed("automatic-signals")
+      toast.show({ variant: "info", message: t("Confirm to share only generic idea categories, never chat text.") })
+      return
+    }
+    setShareArmed(undefined)
+    void update((draft) => {
+      draft.autoShareSignals = true
+      draft.lastSharedSignalAt ??= {}
+    }).then(() => {
+      toast.show({ variant: "success", message: t("Anonymous global signal sharing enabled.") })
+    }).catch(() => {
+      toast.show({ variant: "error", message: t("Could not update global sharing setting") })
     })
   }
 
@@ -374,6 +434,20 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
           {t("Click again to erase all local ideas and stop collection.")}
         </text>
       </Show>
+      <box flexDirection="row" gap={1}>
+        <text fg={state.autoShareSignals ? theme.text.feedback.success.base : theme.text.muted}>
+          {state.autoShareSignals ? t("Automatic global sharing is on") : t("Automatic global sharing is off")}
+        </text>
+        <box flexGrow={1} />
+        <HoverAction id="idea-bank.toggle-global-sharing" onClick={toggleGlobalSignalSharing} paddingLeft={1} paddingRight={1}>
+          <text fg={shareArmed() === "automatic-signals" ? theme.text.feedback.warning.base : theme.text.action.primary.base}>
+            {state.autoShareSignals ? t("Pause sharing") : shareArmed() === "automatic-signals" ? t("Confirm sharing") : t("Enable sharing")}
+          </text>
+        </HoverAction>
+      </box>
+      <text fg={theme.text.muted} wrapMode="word">
+        {t("Sharing sends only predefined generic signal labels and summaries. It never sends original messages, excerpts, file paths, or chat history.")}
+      </text>
       <text fg={theme.text.muted} wrapMode="word">
         {t("Local capture stays on this computer. Global search reads published ideas; chat text is never uploaded automatically.")}
       </text>
@@ -451,7 +525,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
         </scrollbox>
       </Show>
       <text fg={theme.text.muted} wrapMode="word">
-        {t("The global bank shows approved ideas. Shared contributions stay pending until a moderator approves them.")}
+        {t("Accepted ideas are published after automatic privacy, duplicate, and rate-limit checks. You can pause global sharing at any time.")}
       </text>
     </box>
   )
@@ -539,6 +613,45 @@ export function IdeaBankCapture() {
         }
         draft.lastProcessedBySession[sessionID] = nextCursor
       })
+
+      // Only fixed classifier output is eligible for global sharing. Never reuse the
+      // user's message, its excerpt, or any transcript-derived free-form text.
+      if (state.autoCapture && state.autoShareSignals && globalBase()) {
+        const uniqueSignals = new Map<string, NonNullable<(typeof candidates)[number]["signal"]>>()
+        for (const candidate of candidates) {
+          if (candidate.signal) uniqueSignals.set(candidate.signal.id, candidate.signal)
+        }
+        for (const signal of uniqueSignals.values()) {
+          if (!state.autoCapture || !state.autoShareSignals) break
+          const lastSharedAt = state.lastSharedSignalAt?.[signal.id] ?? 0
+          if (Date.now() - lastSharedAt < 24 * 60 * 60 * 1000) continue
+          try {
+            const base = globalBase()
+            if (!base) break
+            const response = await fetch(new URL("/v1/ideas", base), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                consent: true,
+                title: signal.title,
+                summary: signal.description,
+                category: signal.category,
+                tags: [signal.category, signal.kind.toLowerCase()].slice(0, 8),
+                language: "en",
+              }),
+              signal: AbortSignal.timeout(8_000),
+            })
+            if (response.ok) {
+              await update((draft) => {
+                draft.lastSharedSignalAt ??= {}
+                draft.lastSharedSignalAt[signal.id] = Date.now()
+              })
+            }
+          } catch {
+            // Never log classifier input, submitted summaries, or service responses.
+          }
+        }
+      }
     } catch {
       // Do not log message text or prompt-derived data from background collection.
     } finally {
