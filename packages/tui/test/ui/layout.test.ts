@@ -3,6 +3,7 @@ import {
   clampHomeProjectPanelWidth,
   clampNoteChatWidth,
   clampSessionPaneWidth,
+  clampSessionSidebarWidth,
   noteCanvasFlexGrow,
   sessionPaneContentWidth,
   clampSessionTabsWidth,
@@ -152,4 +153,12 @@ test("a visible note keeps the selected note/chat split width", () => {
       rightPaneWidth: 30,
     }),
   ).toBe(76)
+})
+
+test("a docked session sidebar cannot be dragged into an unreadable strip", () => {
+  expect(clampSessionSidebarWidth(10, 110)).toBe(38)
+  expect(clampSessionSidebarWidth(32, 110)).toBe(38)
+  expect(clampSessionSidebarWidth(44, 110)).toBe(44)
+  expect(clampSessionSidebarWidth(90, 110)).toBe(54)
+  expect(clampSessionSidebarWidth(90, 90)).toBe(34)
 })

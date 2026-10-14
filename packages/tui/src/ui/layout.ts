@@ -26,6 +26,7 @@ export function clampSessionTabsWidth(width: number, total: number) {
 
 export const SESSION_PANEL_MIN_WIDTH = 28
 export const SESSION_CHAT_MIN_WIDTH = 56
+export const SESSION_SIDEBAR_MIN_DOCKED_WIDTH = 38
 
 // When a note is open, prefer the intended document-left/chat-right layout at
 // compact terminal widths; normal sessions still stack their auxiliary content sooner.
@@ -69,6 +70,15 @@ export function clampSessionPaneWidth(width: number, total: number) {
   // narrow terminals it shrinks with the available space instead of covering chat.
   const max = Math.max(1, total - SESSION_CHAT_MIN_WIDTH)
   const min = Math.min(SESSION_PANEL_MIN_WIDTH, max)
+  return Math.max(min, Math.min(width, max))
+}
+
+export function clampSessionSidebarWidth(width: number, total: number) {
+  // Docked session sidebars contain names and live statuses, so don't let a drag
+  // shrink them into a clipped unreadable strip. Docking thresholds guarantee
+  // there is normally room for this minimum while preserving the chat width.
+  const max = Math.max(1, total - SESSION_CHAT_MIN_WIDTH)
+  const min = Math.min(SESSION_SIDEBAR_MIN_DOCKED_WIDTH, max)
   return Math.max(min, Math.min(width, max))
 }
 
