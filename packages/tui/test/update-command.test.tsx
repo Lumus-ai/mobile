@@ -69,7 +69,8 @@ test("/update opens the manual update dialog and checks for a newer version", as
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Build · first model"))
   setup.mockInput.typeText("/update")
-  setup.mockInput.pressEscape()
+  // No-argument slash commands run when selected from autocomplete; submitting after
+  // Escape would send the literal text to the model instead of invoking the command.
   setup.mockInput.pressEnter()
 
   await setup.waitForFrame((frame) => frame.includes("Version 9.9.9 is available"))
