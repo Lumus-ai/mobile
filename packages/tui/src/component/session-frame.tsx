@@ -74,8 +74,11 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       defaultPaneWidth(),
     defaultValue: defaultPaneWidth,
     clamp: (width) => clampSessionPaneWidth(width, panels.width()),
-    fromMouse: (event) => frameWidth() - event.x - 1,
-    contains: (event, width) => event.x >= frameWidth() - width - 1 && event.x <= frameWidth() - width,
+    fromMouse: (event) => frameWidth() - (event.x - props.verticalTabsWidth) - 1,
+    contains: (event, width) => {
+      const boundary = props.verticalTabsWidth + frameWidth() - width
+      return event.x >= boundary - 1 && event.x <= boundary
+    },
     onCommit: (width) => {
       void updateLayout((draft) => {
         if (compactLayout.compact()) draft.compactPaneWidth = width
