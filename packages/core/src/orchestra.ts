@@ -423,14 +423,6 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       yield* kv.remove(TEAM_PLAN + project.id)
     })
 
-    const reconcileTeam = (id: ProjectID) =>
-      mainLocks.withLock(id)(
-        Effect.gen(function* () {
-          const project = yield* get(id)
-          yield* reconcileTeamUnlocked(project)
-        }),
-      )
-
     const ensureMain = (id: ProjectID) =>
       mainLocks.withLock(id)(
         Effect.gen(function* () {
@@ -909,11 +901,15 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         )
       }),
       main: Effect.fn("Orchestra.main")(function* (id) {
-        const session = yield* ensureMain(id)
-        // This request is made after the service graph is ready, so recovered reports may safely
-        // wake this project's orchestrator while the project panel is opening.
-        yield* recoverPending(session.id)
-        return session
+        // Keep the project alive for the entire recovery checkpoint. Removal uses the same lock,
+        // so an already-admitted main request cannot continue reporting into a forgotten project.
+        return yield* mainLocks.withLock(id)(
+          Effect.gen(function* () {
+            const session = yield* ensureMainUnlocked(id)
+            yield* recoverPending(session.id)
+            return session
+          }),
+        )
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
         return yield* mainLocks.withLock(id)(
@@ -931,15 +927,19 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         yield* kv.set(OWNER + sessionID, projectID)
       }),
       mainOf: Effect.fn("Orchestra.mainOf")(function* (sessionID) {
-        const project = (yield* projects()).find((item) => item.main === sessionID)
-        if (!project) return undefined
-        // Context hooks also query worker sessions. Only an actual project's main session
-        // is a recovery checkpoint, and it only reconciles its own roster and tasks.
-        yield* reconcileTeam(project.id).pipe(
-          Effect.catchTag("Orchestra.ProjectNotFoundError", () => Effect.void),
+        const candidate = (yield* projects()).find((item) => item.main === sessionID)
+        if (!candidate) return undefined
+        // Re-check under the same lock used by project removal. A stale projects() snapshot must
+        // never expose management tools for a project that was removed while this hook was waiting.
+        return yield* mainLocks.withLock(candidate.id)(
+          Effect.gen(function* () {
+            const current = decodeProject(yield* kv.get(PROJECT + candidate.id))
+            if (Option.isNone(current) || current.value.main !== sessionID) return undefined
+            yield* reconcileTeamUnlocked(current.value)
+            yield* recoverPending(sessionID)
+            return current.value
+          }),
         )
-        yield* recoverPending(sessionID)
-        return project
       }),
       access,
       accessMany: Effect.fn("Orchestra.accessMany")(function* (sessionIDs) {

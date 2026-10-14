@@ -280,6 +280,21 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   ),
 
+  it.live("does not resolve a removed project's main session as a live orchestrator", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-forgotten-main-")))
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "Forgotten", directory: tmp.path })
+      const mainID = project.main!
+      expect(yield* orchestra.mainOf(mainID)).toMatchObject({ id: project.id })
+
+      yield* orchestra.remove(project.id)
+
+      expect(yield* orchestra.mainOf(mainID)).toBeUndefined()
+      expect((yield* orchestra.projects()).some((item) => item.id === project.id)).toBe(false)
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("serializes project deletion with main recovery so a removed project cannot reappear", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-delete-race-")))
