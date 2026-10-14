@@ -251,7 +251,7 @@ describe("Global Idea Bank API", () => {
       total: 1,
       items: [{ id: "idea-123", signalCount: 4, title: "Translate an old game" }],
     })
-    const search = mock.queries.find((item) => item.sql.includes("instr(search_text, ?)"))
+    const search = mock.queries.find((item) => item.sql.includes("SELECT id, title") && item.sql.includes("instr(search_text, ?)"))
     expect(search?.bindings.slice(0, 3)).toEqual(["translate", "old", "game"])
     expect(search?.sql).toContain("DESC, signal_count DESC, updated_at DESC")
   })
