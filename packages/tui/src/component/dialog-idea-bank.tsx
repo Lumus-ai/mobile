@@ -244,8 +244,15 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
   const ideas = createMemo(() => {
     const query = globalQuery().normalize("NFKC").toLocaleLowerCase().trim()
     const terms = query.split(/\s+/u).filter(Boolean)
+    const seen = new Set<string>()
     return [...globalIdeas(), ...(state.ideas ?? []), ...STARTER_IDEAS]
       .filter((idea) => {
+        const key = [idea.title, idea.category]
+          .map((value) => value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim())
+          .join("|")
+        // Prefer the shared copy when a local signal or starter overlaps it.
+        if (seen.has(key)) return false
+        seen.add(key)
         if (terms.length === 0) return true
         const searchable = [idea.title, idea.category, idea.kind, idea.description]
           .join(" ")
