@@ -1,7 +1,8 @@
 export const SESSION_SIDEBAR_WIDTH = 42
 export const SESSION_TABS_COMPACT_WIDTH = 5
 export const SESSION_TABS_COMPACT_BREAKPOINT = 12
-export const SESSION_SIDEBAR_MAX_WIDTH = 72
+export const SESSION_SIDEBAR_MIN_WIDTH = 34
+export const SESSION_SIDEBAR_MAX_WIDTH = 56
 const SESSION_CONTENT_MIN_WIDTH = 44
 const SESSION_CONTENT_PREFERRED_WIDTH = 64
 
@@ -10,10 +11,17 @@ export function sessionTabsFitVertically(total: number, width = SESSION_SIDEBAR_
 }
 
 export function clampSessionTabsWidth(width: number, total: number) {
-  return Math.max(
+  const max = Math.max(
     SESSION_TABS_COMPACT_WIDTH,
-    Math.min(width, SESSION_SIDEBAR_MAX_WIDTH, total - SESSION_CONTENT_MIN_WIDTH),
+    Math.min(SESSION_SIDEBAR_MAX_WIDTH, total - SESSION_CONTENT_MIN_WIDTH),
   )
+  // On a normally sized terminal, keep the project tree wide enough for actual names.
+  // Collapse to the compact rail only when a wider sidebar would starve the main content.
+  const min =
+    total >= SESSION_SIDEBAR_MIN_WIDTH + SESSION_CONTENT_MIN_WIDTH
+      ? SESSION_SIDEBAR_MIN_WIDTH
+      : SESSION_TABS_COMPACT_WIDTH
+  return Math.max(Math.min(min, max), Math.min(width, max))
 }
 
 export function clampSessionPaneWidth(width: number, total: number) {

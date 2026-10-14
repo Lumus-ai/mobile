@@ -4,6 +4,7 @@ import {
   sessionSidebarDocks,
   sessionTabsFitVertically,
   SESSION_SIDEBAR_MAX_WIDTH,
+  SESSION_SIDEBAR_MIN_WIDTH,
   SESSION_SIDEBAR_WIDTH,
   SESSION_TABS_COMPACT_WIDTH,
 } from "../../src/ui/layout"
@@ -19,13 +20,19 @@ test("vertical tabs account for a resized width", () => {
   expect(sessionTabsFitVertically(123, 60)).toBe(false)
 })
 
-test("vertical tab width preserves minimum rail and content widths", () => {
-  expect(clampSessionTabsWidth(0, 120)).toBe(SESSION_TABS_COMPACT_WIDTH)
-  expect(clampSessionTabsWidth(11, 120)).toBe(11)
-  expect(clampSessionTabsWidth(12, 120)).toBe(12)
-  expect(clampSessionTabsWidth(50, 120)).toBe(50)
+test("project tree width is bounded and stays readable on a normal terminal", () => {
+  expect(SESSION_SIDEBAR_MIN_WIDTH).toBe(34)
+  expect(SESSION_SIDEBAR_MAX_WIDTH).toBe(56)
+  expect(clampSessionTabsWidth(0, 120)).toBe(SESSION_SIDEBAR_MIN_WIDTH)
+  expect(clampSessionTabsWidth(11, 120)).toBe(SESSION_SIDEBAR_MIN_WIDTH)
+  expect(clampSessionTabsWidth(42, 120)).toBe(42)
   expect(clampSessionTabsWidth(100, 120)).toBe(SESSION_SIDEBAR_MAX_WIDTH)
-  expect(clampSessionTabsWidth(100, 100)).toBe(56)
+  expect(clampSessionTabsWidth(100, 100)).toBe(SESSION_SIDEBAR_MAX_WIDTH)
+})
+
+test("a compact rail is allowed only when the terminal cannot fit both readable panes", () => {
+  expect(clampSessionTabsWidth(0, 77)).toBe(SESSION_TABS_COMPACT_WIDTH)
+  expect(clampSessionTabsWidth(12, 77)).toBe(12)
   expect(clampSessionTabsWidth(42, 54)).toBe(10)
   expect(sessionTabsFitVertically(69, SESSION_TABS_COMPACT_WIDTH)).toBe(true)
   expect(sessionTabsFitVertically(68, SESSION_TABS_COMPACT_WIDTH)).toBe(false)
