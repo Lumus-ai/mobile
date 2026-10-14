@@ -1,5 +1,6 @@
 import { TextAttributes, type InputRenderable } from "@opentui/core"
 import { createSignal, For, onMount, Show } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { OrchestraProject, OrchestraTemplate } from "@opencode/client/promise"
 import { useConfig } from "../config"
 import { useClient } from "../context/client"
@@ -33,6 +34,7 @@ export function DialogProject(props: {
   const theme = useTheme().surface("dialog")
   const config = useConfig().data
   const t = useT()
+  const dimensions = useTerminalDimensions()
   const [error, setError] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
   const [armed, setArmed] = createSignal(false)
@@ -58,8 +60,24 @@ export function DialogProject(props: {
     setTeamFocused(false)
     field?.focus()
   }
+  const teamOptions = () => [
+    { name: t("No team"), detail: t("only the Orchestrator") },
+    ...(templates() ?? []).map((template) => ({
+      name: builtinName(t, template) ?? template.id,
+      detail:
+        template.description ||
+        template.members.map((member) => (template.origin === "builtin" ? t(member.title) : member.title)).join(", "),
+    })),
+  ]
+  const teamCount = () => teamOptions().length
+  // Keep the picker compact on short terminals and show the selected option in the visible window.
+  const visibleTeamCount = () => Math.max(2, Math.min(5, Math.floor((dimensions().height - 16) / 2)))
+  const visibleTeamStart = () =>
+    Math.max(0, Math.min(team() - Math.floor(visibleTeamCount() / 2), teamCount() - visibleTeamCount()))
+  const visibleTeamEnd = () => Math.min(teamCount(), visibleTeamStart() + visibleTeamCount())
+  const visibleTeamOptions = () => teamOptions().slice(visibleTeamStart(), visibleTeamEnd())
   const moveTeam = (direction: 1 | -1) => {
-    const count = (templates()?.length ?? 0) + 1
+    const count = teamCount()
     setTeam((team() + direction + count) % count)
   }
 
@@ -199,28 +217,16 @@ export function DialogProject(props: {
           <box width={9} onMouseUp={focusTeam}>
             <text fg={teamFocused() ? theme.text.formfield.focused : theme.text.muted}>{t("Team")}</text>
           </box>
-          <box flexGrow={1}>
-            <TeamOption
-              selected={team() === 0}
-              focused={teamFocused()}
-              name={t("No team")}
-              detail={t("only the Orchestrator")}
-              onClick={() => {
-                setTeam(0)
-                focusTeam()
-              }}
-            />
-            <For each={templates()}>
-              {(template, index) => (
+          <box flexGrow={1} minWidth={0}>
+            <For each={visibleTeamOptions()}>
+              {(option, index) => (
                 <TeamOption
-                  selected={team() === index() + 1}
+                  selected={team() === visibleTeamStart() + index()}
                   focused={teamFocused()}
-                  name={builtinName(t, template) ?? template.id}
-                  detail={template.members
-                    .map((member) => (template.origin === "builtin" ? t(member.title) : member.title))
-                    .join(", ")}
+                  name={option.name}
+                  detail={option.detail}
                   onClick={() => {
-                    setTeam(index() + 1)
+                    setTeam(visibleTeamStart() + index())
                     focusTeam()
                   }}
                 />
@@ -239,9 +245,19 @@ export function DialogProject(props: {
                 </text>
               </box>
             </Show>
-            <Show when={props.onEditTeams}>
-              <box paddingLeft={2} onMouseUp={editTeams}>
-                <text fg={theme.text.action.primary.base}>{t("Edit teams and roles…")}</text>
+            <Show when={props.onEditTeams || teamCount() > visibleTeamOptions().length}>
+              <box paddingLeft={2} flexDirection="row" gap={1}>
+                <Show when={teamCount() > visibleTeamOptions().length}>
+                  <text fg={theme.text.muted}>
+                    {visibleTeamStart() + 1}–{visibleTeamEnd()} / {teamCount()} · ↑↓
+                  </text>
+                </Show>
+                <box flexGrow={1} />
+                <Show when={props.onEditTeams}>
+                  <box onMouseUp={editTeams}>
+                    <text fg={theme.text.action.primary.base}>{t("Edit teams and roles…")}</text>
+                  </box>
+                </Show>
               </box>
             </Show>
           </box>
@@ -293,7 +309,12 @@ function TeamOption(props: { selected: boolean; focused: boolean; name: string; 
       onMouseUp={props.onClick}
     >
       <text fg={props.selected ? theme.text.formfield.focused : theme.text.muted}>{props.selected ? "●" : "○"}</text>
-      <text fg={props.selected ? theme.text.formfield.focused : theme.text.formfield.base} wrapMode="none">
+      <text
+        flexShrink={1}
+        wrapMode="none"
+        truncate
+        fg={props.selected ? theme.text.formfield.focused : theme.text.formfield.base}
+      >
         {props.name}
       </text>
       <box flexGrow={1} minWidth={0}>
