@@ -70,7 +70,7 @@ export function sessionPaneBoxWidth(input: {
   hasCanvas: boolean
   stacked: boolean
   noteChatWidth: number
-}): number | string {
+}): number | `${number}%` {
   if (input.fullscreen) return Math.max(0, input.fullscreenWidth)
   if (input.hasCanvas && !input.stacked) return Math.max(0, input.noteChatWidth)
   // Never transition from a numeric width to undefined: OpenTUI may keep the old
