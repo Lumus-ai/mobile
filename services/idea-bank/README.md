@@ -5,10 +5,10 @@ This is the shared service for community ideas. It runs separately from each Ope
 ## Safety rules
 
 - Public search returns only ideas with status `published`.
-- New entries require explicit `consent: true`, enter moderation, and are not public until approved.
+- New ideas require explicit `consent: true`. After validation, sensitive-content checks, deduplication, and a per-IP daily quota, they become searchable immediately. Repeated matching submissions increment the existing idea's signal count.
 - The database stores the submitted title, summary, category, tags, language, timestamps, a salted hash used for rate limiting, and a duplicate-detection hash. It does not store the source chat or raw IP address.
 - Credentials, emails, URLs, IP addresses, and common home-directory paths are rejected. This filter helps catch accidental disclosure but is not a guarantee that arbitrary text is anonymous.
-- The built-in AI tool can search, get a single idea, and submit an idea. It must not submit unless the user directly asks to share it. The server still places every community submission in the moderation queue.
+- The built-in AI tool can search, get a single idea, and submit an idea. It must not submit unless the user explicitly asks to share it. A separate TUI toggle enables automatic contribution of fixed, predefined idea categories inferred by local rules; it is off by default and never sends the source message or transcript. Global sharing can be paused at any time.
 - A seed catalogue is included so new deployments are useful immediately.
 
 ## Deploy your shared instance
@@ -46,7 +46,7 @@ Restart OpenCode++ after changing the environment variable. If it is not set, th
 - `GET /v1/health` — service health.
 - `GET /v1/ideas?q=translation&limit=20` — search published ideas; also supports `category`, `language`, and `offset`.
 - `GET /v1/ideas/:id` — retrieve one published idea.
-- `POST /v1/ideas` — share an idea with `consent: true`; returns `202` and status `pending`.
+- `POST /v1/ideas` — share an idea with `consent: true`; returns `201` and status `published`. Duplicate content returns the existing id and increments `signalCount`.
 - `GET /v1/admin/submissions` — list pending entries; requires `Authorization: Bearer <IDEA_BANK_ADMIN_TOKEN>`.
 - `POST /v1/admin/submissions/:id/review` with `{"status":"published"}` or `{"status":"rejected"}` — moderate an entry.
 
