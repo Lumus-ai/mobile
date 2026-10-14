@@ -72,6 +72,7 @@ import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
+import { PromptMiniSkills } from "./mini-skills"
 import { Mascot, type MascotState } from "../mascot"
 import { MASCOT_WIDTH } from "../../ui/mascot-sprite"
 import { useT } from "../../util/i18n"
@@ -1782,6 +1783,21 @@ export function Prompt(props: PromptProps) {
                 </Show>
               </box>
             </Show>
+            <PromptMiniSkills
+              mode={() => store.mode}
+              onInsert={(instruction) => {
+                if (!input || input.isDestroyed || disabled()) return
+                input.gotoBufferEnd()
+                const prefix = input.plainText.trim() ? "\n\n" : ""
+                input.insertText(prefix + instruction + "\n\n")
+                setTimeout(() => {
+                  if (!input || input.isDestroyed) return
+                  input.getLayoutNode().markDirty()
+                  input.gotoBufferEnd()
+                  renderer.requestRender()
+                }, 0)
+              }}
+            />
             <textarea
               width="100%"
               placeholder={placeholderText()}
