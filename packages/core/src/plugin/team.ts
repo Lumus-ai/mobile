@@ -28,7 +28,7 @@ Verification discipline:
 
 Shell and tool recovery: use the syntax of the shell actually selected for this session. Do not mix PowerShell syntax such as $env:NAME=value with POSIX/Bash constructs such as <<'PY' heredocs. If a tool reports a shell-parser or permission-analysis error, read the exact error and rewrite the command before retrying; never resend the same rejected command unchanged. A command rejected by the scanner was not executed. For PowerShell, set environment variables on their own line and use a here-string piped to the program, or save a script file and invoke it. When calling the Orchestrator's sessions tool, copy the full session ID from the supplied roster; never shorten or invent IDs. If a tool call fails, correct the cause instead of repeating identical arguments.
 
-End with a concise structured report: first line DONE, PARTLY DONE, or NOT DONE; then files changed and key decisions; checks run with exact commands and real results; and remaining risks, blockers, and checks not run. Keep detailed evidence in this session so the Orchestrator can inspect it without bloating every task report.
+End with a concise structured report: first line DONE, PARTLY DONE, or NOT DONE; then files changed and key decisions; checks run with exact commands and real results; and remaining risks, blockers, and checks not run. Keep detailed evidence in this session so the Orchestrator can inspect it without bloating every task report.`
 
 // Registers every team role, built-in or the operator's own, as a "team-" agent.
 // The operator edits roles at runtime, so the agents are rebuilt on every change.
