@@ -1447,6 +1447,17 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                         const current = decodeTask(yield* kv.get(item.key))
                         if (Option.isNone(current)) return
                         if (current.value.projectID !== id && current.value.main !== project.main) return
+                        // A task that is still waiting in the worker's Inbox must not execute later
+                        // under a different project's ownership. Already-promoted work stays in
+                        // the session history and is left alone.
+                        if (current.value.messageID) {
+                          yield* sessions
+                            .cancelInbox({ sessionID: item.sessionID, inboxID: current.value.messageID })
+                            .pipe(
+                              Effect.catchTag("Session.InboxConflictError", () => Effect.void),
+                              Effect.catchTag("Session.NotFoundError", () => Effect.void),
+                            )
+                        }
                         yield* kv.remove(item.key)
                       }),
                     ),
