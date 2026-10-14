@@ -728,6 +728,31 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       if (!(yield* projects()).some((item) => item.id === project.id)) yield* kv.remove(key)
     })
 
+    // Read forward from the dispatched user message in bounded pages. A worker can produce
+    // more than twenty assistant/tool messages before its final answer; never truncate the
+    // recovery transcript at an arbitrary limit and accidentally report an intermediate step.
+    const messagesAfterTask = Effect.fnUntraced(function* (sessionID: SessionID, messageID: SessionMessage.ID) {
+      const pageSize = 50
+      let cursorID = messageID
+      let messages: SessionMessage.Info[] = []
+      while (true) {
+        const page = yield* sessions
+          .messages({
+            sessionID,
+            cursor: { id: cursorID, direction: "previous" },
+            order: "desc",
+            limit: pageSize,
+          })
+          .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+        if (page.length === 0) return messages
+        // Each page is newest-first. Later pages are prepended so the combined transcript stays
+        // newest-first, while the earliest post-task user message remains discoverable.
+        messages = [...page, ...messages]
+        if (page.some((message) => message.type === "user") || page.length < pageSize) return messages
+        cursorID = page[0].id
+      }
+    })
+
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped" | "recovered", detail?: string): Effect.Effect<void> =>
       dispatchLocks.withLock(sessionID)(
         Effect.gen(function* () {
@@ -828,16 +853,11 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
 
           const recent = workerRemoved
             ? []
-            : yield* sessions
-                .messages({
-                  sessionID,
-                  limit: 20,
-                  order: "desc",
-                  ...(task.value.messageID
-                    ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
-                    : {}),
-                })
-                .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+            : task.value.messageID
+              ? yield* messagesAfterTask(sessionID, task.value.messageID)
+              : yield* sessions
+                  .messages({ sessionID, limit: 20, order: "desc" })
+                  .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
           // The query is ordered newest-first and starts after the dispatched user message.
           // If the operator sent later user prompts, use the OLDEST such prompt as the boundary:
           // every assistant answer newer than it belongs to unrelated work, not this assigned task.
@@ -1091,20 +1111,14 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                 if (result !== "delivered") return
               }
             }
-            const recent = yield* sessions
-              .messages({
-                sessionID,
-                limit: 20,
-                order: "desc",
-                ...(task.value.messageID
-                  ? { cursor: { id: task.value.messageID, direction: "previous" as const } }
-                  : {}),
-              })
-              .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
-            // A legacy task without a message ID has no safe delivery proof. For current tasks,
-            // the projected user message plus an idle, non-suspended session proves the work stopped;
-            // even a run with no text answer must produce a report instead of leaking the task marker.
-            if (!task.value.messageID && !recent.some((message) => finalText(message).length > 0)) return
+            // Legacy markers have no task message ID and cannot be safely correlated with a
+            // specific answer. Only recover them when there is at least some durable assistant text.
+            if (!task.value.messageID) {
+              const recent = yield* sessions
+                .messages({ sessionID, limit: 20, order: "desc" })
+                .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+              if (!recent.some((message) => finalText(message).length > 0)) return
+            }
             const terminal = task.value.messageID
               ? yield* terminalAfterDelivery(sessionID, task.value.messageID)
               : undefined

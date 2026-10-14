@@ -41,6 +41,8 @@ const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 }
 const deferTaskDelivery = new Set<Session.ID>()
 // Simulates losing a terminal event while the worker answer remains durable.
 const suppressTerminalEvent = new Set<Session.ID>()
+// Adds a tool-heavy assistant turn to exercise report extraction beyond one message page.
+const longTurnMessages = new Map<Session.ID, number>()
 const deliverRegularInput = new Set<Session.ID>()
 
 // Stands in for the runner: a woken team session answers with its title and ends
@@ -95,6 +97,34 @@ const executionNode = makeGlobalNode({
           cost: Money.USD.zero,
           tokens,
         })
+        const extraMessages = longTurnMessages.get(sessionID) ?? 0
+        for (let index = 0; index < extraMessages; index++) {
+          const extraID = SessionMessage.ID.create()
+          yield* bus.publish(SessionEvent.Step.Started, {
+            sessionID,
+            assistantMessageID: extraID,
+            agent: session.agent ?? Agent.ID.make("build"),
+            model,
+            started: index + 1,
+          })
+          yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID: extraID, ordinal: 0 })
+          yield* bus.publish(SessionEvent.Text.Ended, {
+            sessionID,
+            assistantMessageID: extraID,
+            ordinal: 0,
+            text:
+              index === extraMessages - 1
+                ? `${session.title}: final long-turn answer`
+                : `${session.title}: intermediate continuation ${index + 1}`,
+          })
+          yield* bus.publish(SessionEvent.Step.Ended, {
+            sessionID,
+            assistantMessageID: extraID,
+            finish: "stop",
+            cost: Money.USD.zero,
+            tokens,
+          })
+        }
         if (suppressTerminalEvent.has(sessionID)) return
         if (session.title?.includes("fails"))
           return yield* bus.publish(SessionEvent.Execution.Failed, {
@@ -756,6 +786,39 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   ),
 
+  it.live("recovers the final answer after a long tool-heavy worker turn", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-long-turn-")))
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "Long turn", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      const extraMessages = 65
+      yield* Effect.acquireRelease(
+        Effect.sync(() => suppressTerminalEvent.add(worker.id)),
+        () => Effect.sync(() => suppressTerminalEvent.delete(worker.id)),
+      )
+      yield* Effect.acquireRelease(
+        Effect.sync(() => longTurnMessages.set(worker.id, extraMessages)),
+        () => Effect.sync(() => longTurnMessages.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      expect(yield* reports(project.main!)).toHaveLength(0)
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+
+      // The final answer is more than one 50-message page after the dispatched user message.
+      yield* orchestra.recoverPendingTasks()
+      const [report] = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(report).toContain('state="recovered"')
+      expect(report).toContain("Developer: final long-turn answer")
+      expect(report).not.toContain("intermediate continuation")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
   it.live("does not report a later user prompt as the assigned worker task's answer", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-answer-boundary-")))
