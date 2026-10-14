@@ -72,7 +72,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       (compactLayout.compact() ? layout.compactPaneWidth : (layout.paneWidth ?? layout.terminalWidth)) ??
       defaultPaneWidth(),
     defaultValue: defaultPaneWidth,
-    clamp: (width) => clampSessionSidebarWidth(width, panels.width()),
+    clamp: (width) => clampSessionPaneWidth(width, panels.width()),
     fromMouse: (event) => dimensions().width - event.x - 1,
     contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
     onCommit: (width) => {
@@ -88,7 +88,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const sidebarResize = createPaneResize({
     value: () => layout.sidebarWidth ?? defaultSidebarWidth(),
     defaultValue: defaultSidebarWidth,
-    clamp: (width) => clampSessionPaneWidth(width, panels.width()),
+    clamp: (width) => clampSessionSidebarWidth(width, panels.width()),
     fromMouse: (event) => dimensions().width - event.x - 1,
     contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
     onCommit: (width) => {
