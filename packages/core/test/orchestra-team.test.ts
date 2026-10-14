@@ -349,8 +349,9 @@ describe("Orchestra team", () => {
       }
       expect((yield* sessions.get(nested.id)).location.directory).toBe(AbsolutePath.make(destinationNested))
       const currentMembers = yield* orchestra.sessions(project.id)
+      // The nested worker may already be in originalMembers; compare the expected roster as a set.
       expect(currentMembers.map((session) => session.id).toSorted()).toEqual(
-        [...originalMembers.map((session) => session.id), nested.id].toSorted(),
+        [...new Set([...originalMembers.map((session) => session.id), nested.id])].toSorted(),
       )
     }).pipe(Effect.scoped),
   ),

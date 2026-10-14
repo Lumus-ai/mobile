@@ -906,6 +906,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         return yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
             const session = yield* ensureMainUnlocked(id)
+            // Project open also resumes any roster plan left behind by an interrupted create.
+            const project = yield* get(id)
+            yield* reconcileTeamUnlocked(project)
             yield* recoverPending(session.id)
             return session
           }),
