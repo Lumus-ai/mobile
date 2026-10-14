@@ -154,12 +154,14 @@ export function ProjectTree(props: { width: number; collapsed?: boolean; onHide?
       })
       .catch((error: unknown) => toast.show({ message: errorMessage(error), variant: "error" }))
 
-  const openCreatedProject = (project: OrchestraProject) => {
+  const openCreatedProject = async (project: OrchestraProject) => {
     setExpanded(project.id, true)
     // Refresh the roster in the background; opening the project's main session must not
     // depend on a second endpoint responding first.
     void expand(project.id)
-    openMain(project)
+    // Return the promise so DialogProject keeps its completion lifecycle in the right order:
+    // finish opening the orchestrator, then close the dialog and refresh the project list.
+    await openMain(project)
   }
 
   const edit = (project?: OrchestraProject) =>

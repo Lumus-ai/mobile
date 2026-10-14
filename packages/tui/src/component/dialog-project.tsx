@@ -25,7 +25,7 @@ export function DialogProject(props: {
   draft?: Draft
   onDone: () => void
   onClose: () => void
-  onCreated?: (project: OrchestraProject) => void
+  onCreated?: (project: OrchestraProject) => void | Promise<void>
   onEditTeams?: (draft: Draft) => void
 }) {
   const client = useClient()
@@ -70,15 +70,17 @@ export function DialogProject(props: {
     }, 1)
   })
 
-  const run = async <Result,>(action: () => Promise<Result>, onSuccess?: (result: Result) => void) => {
+  const run = async <Result,>(
+    action: () => Promise<Result>,
+    onSuccess?: (result: Result) => void | Promise<void>,
+  ) => {
     setBusy(true)
     setError()
     await action()
-      .then((result) => {
-        // Let a create flow open the new project's main orchestrator before closing this
-        // dialog and refreshing the sidebar. The main-session handoff must not depend on
-        // the project list or worker roster finishing their own asynchronous refresh.
-        onSuccess?.(result)
+      .then(async (result) => {
+        // Finish the main-session handoff before closing the dialog. The callback may return
+        // a promise, but it must not wait for the project roster or project-list refresh.
+        await onSuccess?.(result)
         props.onDone()
       })
       .catch((cause: unknown) =>
@@ -308,7 +310,7 @@ export function openProjectDialog(
   onDone: () => void,
   project?: OrchestraProject,
   draft?: Draft,
-  onCreated?: (project: OrchestraProject) => void,
+  onCreated?: (project: OrchestraProject) => void | Promise<void>,
 ) {
   dialog.replace(
     () => (
