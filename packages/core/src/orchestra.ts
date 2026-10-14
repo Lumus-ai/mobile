@@ -965,27 +965,41 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                 message: `The main orchestrator session for project "${project.name}" is missing or invalid. Reopen the project to repair it.`,
               })
 
-            // Finish any interrupted template roster before adding a manual member.
+            // Finish any interrupted roster before creating a second plan for this project.
             yield* reconcileTeamUnlocked(project)
-            const id = SessionID.create()
-            yield* kv.set(OWNER + id, project.id)
-            const created = yield* sessions
-              .create({
-                id,
-                location: { directory: AbsolutePath.make(project.directory) },
-                title: input.title?.trim() || undefined,
-                agent: input.agent,
-                model: input.model,
+            const role = (yield* roles()).find((item) => item.agent === input.agent)
+            if (!role)
+              return yield* new DispatchError({
+                message: `No configured project role owns agent "${input.agent}". Choose a role from the current roster.`,
               })
-              .pipe(
-                Effect.tapError(() => kv.remove(OWNER + id)),
-                Effect.mapError((error) => new DispatchError({ message: `Could not create worker session: ${String(error)}` })),
-              )
-            const category = input.category?.trim()
-            yield* Effect.all([
-              kv.set(ACCESS + created.id, "full"),
-              category ? kv.set(CATEGORY + created.id, category) : Effect.void,
-            ])
+
+            // Persist the exact worker identity and policy before creating the Session. If the
+            // process dies at any later point, main()/sessions() will resume this same roster plan.
+            const member = {
+              id: SessionID.create(),
+              agent: input.agent,
+              title: input.title?.trim() || role.name,
+              category: input.category?.trim() || role.category || "Team",
+              model: input.model,
+            }
+            yield* kv.set(
+              TEAM_PLAN + project.id,
+              Schema.encodeSync(TeamPlan)({ created: Date.now(), members: [member] }),
+            )
+            yield* reconcileTeamUnlocked(project).pipe(
+              Effect.catchDefect((defect) =>
+                Effect.fail(
+                  new DispatchError({
+                    message: `Worker creation was interrupted after its recovery plan was saved. Reopen project "${project.name}" to resume it: ${String(defect)}`,
+                  }),
+                ),
+              ),
+            )
+            const created = yield* sessions.get(member.id).pipe(Effect.orElseSucceed(() => undefined))
+            if (!created)
+              return yield* new DispatchError({
+                message: `Worker recovery plan was saved for project "${project.name}" but no session was created yet. Reopen the project to retry.`,
+              })
             return created
           }),
         )

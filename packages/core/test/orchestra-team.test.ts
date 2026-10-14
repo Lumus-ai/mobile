@@ -727,10 +727,11 @@ describe("Orchestra team", () => {
       expect(yield* orchestra.pending(worker.id)).toBeUndefined()
     }).pipe(Effect.scoped),
   ),
-  it.live("creates manual members under the project lock and rejects stale or removed owners", () =>
+  it.live("creates manual members through a recoverable roster plan and rejects stale or removed owners", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-member-lifecycle-")))
       const orchestra = yield* Orchestra.Service
+      const kv = yield* KV.Service
       const project = yield* orchestra.create({ name: "Member lifecycle", directory: tmp.path })
 
       const member = yield* orchestra.createMember({
@@ -744,6 +745,30 @@ describe("Orchestra team", () => {
       expect(yield* orchestra.access(member.id)).toBe("full")
       expect(yield* orchestra.categories([member.id])).toEqual({ [member.id]: "Build" })
       expect((yield* orchestra.sessions(project.id)).map((item) => item.id)).toContain(member.id)
+      expect(yield* kv.get(`orchestra/team-plan/${project.id}`)).toBeUndefined()
+
+      // Simulate a process crash after the write-ahead plan is stored but before the worker
+      // Session exists. Opening the owning orchestrator resumes that exact ID and policy.
+      const recoveredID = Session.ID.create()
+      const planKey = `orchestra/team-plan/${project.id}`
+      yield* kv.set(planKey, {
+        created: Date.now(),
+        members: [
+          {
+            id: recoveredID,
+            agent: Orchestra.role("tester"),
+            title: "Recovered manual worker",
+            category: "Quality",
+          },
+        ],
+      })
+      yield* orchestra.mainOf(project.main!)
+      const recovered = (yield* orchestra.sessions(project.id)).find((item) => item.id === recoveredID)
+      expect(recovered).toMatchObject({ title: "Recovered manual worker", agent: Orchestra.role("tester") })
+      expect((yield* orchestra.owners())[recoveredID]).toBe(project.id)
+      expect(yield* orchestra.access(recoveredID)).toBe("full")
+      expect(yield* orchestra.categories([recoveredID])).toEqual({ [recoveredID]: "Quality" })
+      expect(yield* kv.get(planKey)).toBeUndefined()
 
       const stale = { ...project, main: undefined }
       const staleError = yield* orchestra
