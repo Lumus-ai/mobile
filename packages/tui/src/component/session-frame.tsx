@@ -21,7 +21,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { Session } from "../routes/session"
 import { Sidebar } from "../routes/session/sidebar"
-import { clampSessionPaneWidth, defaultSessionPaneWidth, sessionPanesStacked, sessionSidebarDocks } from "../ui/layout"
+import { clampNoteChatWidth, clampSessionPaneWidth, defaultSessionPaneWidth, sessionPanesStacked, sessionSidebarDocks } from "../ui/layout"
 import { useCompactLayout } from "../ui/compact-layout"
 import { createPaneResize } from "../ui/pane-resize"
 import { PaneResizeHandle } from "../ui/pane-resize-handle"
@@ -88,6 +88,25 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       }).catch((error) => console.error("Failed to persist sidebar width", error))
     },
   })
+  const defaultNoteChatWidth = () =>
+    defaultSessionPaneWidth(canvasHostWidth(), compactLayout.compact())
+  const noteChatResize = createPaneResize({
+    value: () => layout.noteChatWidth ?? defaultNoteChatWidth(),
+    defaultValue: defaultNoteChatWidth,
+    clamp: (width) => clampNoteChatWidth(width, canvasHostWidth()),
+    // Mouse coordinates are terminal-global; subtract the note/chat divider position
+    // from the right edge of the actual split container, not the entire terminal.
+    fromMouse: (event) => props.verticalTabsWidth + canvasHostWidth() - event.x - 1,
+    contains: (event, width) => {
+      const boundary = props.verticalTabsWidth + canvasHostWidth() - width
+      return event.x >= boundary - 1 && event.x <= boundary
+    },
+    onCommit: (width) => {
+      void updateLayout((draft) => {
+        draft.noteChatWidth = width
+      }).catch((error) => console.error("Failed to persist note/chat width", error))
+    },
+  })
   const rightPaneResize = () => (rightPane() === "sidebar" ? sidebarResize : paneResize)
   let resizeRelease = false
   const finishPaneResize = (event: MouseEvent) => {
@@ -133,25 +152,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   // Keep a bound note in the center with its chat on the right on narrow terminals;
   // only stack them when there is not enough room for two usable columns.
   const stacked = () => sessionPanesStacked(availableWidth(), canvas() !== undefined)
-  const defaultNoteChatWidth = () =>
-    defaultSessionPaneWidth(canvasHostWidth(), compactLayout.compact())
-  const noteChatResize = createPaneResize({
-    value: () => layout.noteChatWidth ?? defaultNoteChatWidth(),
-    defaultValue: defaultNoteChatWidth,
-    clamp: (width) => clampNoteChatWidth(width, canvasHostWidth()),
-    // Mouse coordinates are terminal-global; subtract the note/chat divider position
-    // from the right edge of the actual split container, not the entire terminal.
-    fromMouse: (event) => props.verticalTabsWidth + canvasHostWidth() - event.x - 1,
-    contains: (event, width) => {
-      const boundary = props.verticalTabsWidth + canvasHostWidth() - width
-      return event.x >= boundary - 1 && event.x <= boundary
-    },
-    onCommit: (width) => {
-      void updateLayout((draft) => {
-        draft.noteChatWidth = width
-      }).catch((error) => console.error("Failed to persist note/chat width", error))
-    },
-  })
   createEffect(
     on([activePanel, () => selectedTerminal()?.id], ([panel, terminal], previous) => {
       if (panel && panel !== previous?.[0]) {
