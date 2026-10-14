@@ -588,16 +588,21 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             workerRemoved
               ? `Worker session ${sessionID} was removed before it could report the assigned task.`
               : detail
+          // "recovered" is provisional until admitted. If a real terminal event arrives after
+          // recovery prepared but failed to admit its report, the terminal event must replace it.
+          const preservePreparedTerminalPayload = wasPrepared && task.value.reportState !== "recovered"
           const preparedTask = {
             ...task.value,
             reportID,
             reportPrepared: true,
-            reportState: wasPrepared ? task.value.reportState ?? stateForReport : stateForReport,
-            reportDetail: wasPrepared ? task.value.reportDetail : detailForReport,
-            reportText: wasPrepared ? task.value.reportText ?? body : body,
-            reportOutcome: wasPrepared ? task.value.reportOutcome ?? outcome : outcome,
-            reportTitle: wasPrepared ? task.value.reportTitle ?? title : title,
-            reportRole: wasPrepared ? task.value.reportRole ?? (session?.agent ?? "unknown") : session?.agent ?? "unknown",
+            reportState: preservePreparedTerminalPayload ? task.value.reportState ?? stateForReport : stateForReport,
+            reportDetail: preservePreparedTerminalPayload ? task.value.reportDetail : detailForReport,
+            reportText: preservePreparedTerminalPayload ? task.value.reportText ?? body : body,
+            reportOutcome: preservePreparedTerminalPayload ? task.value.reportOutcome ?? outcome : outcome,
+            reportTitle: preservePreparedTerminalPayload ? task.value.reportTitle ?? title : title,
+            reportRole: preservePreparedTerminalPayload
+              ? task.value.reportRole ?? (session?.agent ?? "unknown")
+              : session?.agent ?? "unknown",
           }
           // Persist the complete intended payload before admission. A retry after a crash uses
           // the same ID and byte-for-byte equivalent content instead of inventing a "recovered" report.

@@ -566,6 +566,56 @@ describe("Orchestra team", () => {
       expect(yield* reports(project.main!)).toHaveLength(1)
     }).pipe(Effect.scoped),
   ),
+  it.live("replaces provisional recovery content when the real terminal event arrives", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-provisional-report-")))
+      const orchestra = yield* Orchestra.Service
+      const kv = yield* KV.Service
+      const bus = yield* Bus.Service
+      const project = yield* orchestra.create({ name: "Provisional report", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      yield* Effect.acquireRelease(
+        Effect.sync(() => suppressTerminalEvent.add(worker.id)),
+        () => Effect.sync(() => suppressTerminalEvent.delete(worker.id)),
+      )
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      yield* Effect.sleep("50 millis")
+      expect(yield* reports(project.main!)).toHaveLength(0)
+
+      const taskKey = `orchestra/task/${worker.id}`
+      const value = yield* kv.get(taskKey)
+      expect(value).toBeDefined()
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Missing task marker")
+      const original = value as Record<string, unknown>
+      expect(original.reportID).toBeDefined()
+      // A crash may leave a recovery draft durable without having admitted it to the inbox.
+      yield* kv.set(taskKey, {
+        ...original,
+        reportPrepared: true,
+        reportState: "recovered",
+        reportDetail: "Provisional recovery notice",
+        reportText: "Provisional recovery answer",
+        reportOutcome: "unknown",
+        reportTitle: "Developer",
+        reportRole: Orchestra.role("developer"),
+      })
+
+      suppressTerminalEvent.delete(worker.id)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: worker.id })
+      const [report] = yield* reports(project.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(report).toContain('state="done"')
+      expect(report).toContain("Developer: task answer")
+      expect(report).not.toContain("Provisional recovery notice")
+      expect(report).not.toContain("Provisional recovery answer")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("clears an orphaned task reservation when its prompt was never admitted", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-orphaned-task-")))
