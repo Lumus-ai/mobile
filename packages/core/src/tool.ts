@@ -251,7 +251,6 @@ const layer = Layer.effect(
               const tool = data.tools.get(name)
               return tool ? [definition(tool)] : []
             })
-          const codeModeDefinitions = Array.from(codeModeTools.values()).map(definition)
           const namespaces = data.namespaces
           const codeModeInventory = { tools: codeModeTools, namespaces }
           const codeModeEnabled = !whollyDisabled("execute", rules)
@@ -262,6 +261,9 @@ const layer = Layer.effect(
                 ),
               )
             : undefined
+          // Never make native CodeMode tools directly callable when the permission set disabled
+          // the execute wrapper. For enabled CodeMode, Zen may need their schemas in the request.
+          const codeModeDefinitions = codeModeTool ? Array.from(codeModeTools.values()).map(definition) : []
           const names = Array.from(codeModeTools.keys()).join("\0")
           // Discovery is immutable for a registry revision and visible tool set. Keep request
           // definitions/executors fresh, but share the much larger rendered catalog across steps.
