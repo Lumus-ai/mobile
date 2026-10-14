@@ -465,10 +465,6 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
 export function IdeaBankCapture() {
   const data = useData()
   const events = useEvent()
-  const dialog = useDialog()
-  const theme = useTheme()
-  const t = useT()
-  const dimensions = useTerminalDimensions()
   const [state, update] = useStorage().store<IdeaBankState>(STORE_KEY, { initial: INITIAL, key: "id" })
   const busy = new Set<string>()
 

@@ -139,7 +139,10 @@ export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (h
           yield* sessions.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           yield* orchestra
             .claim(ctx.params.sessionID, ctx.payload.projectID)
-            .pipe(Effect.catchTag("Orchestra.ProjectNotFoundError", missingProject))
+            .pipe(
+              Effect.catchTag("Orchestra.ProjectNotFoundError", missingProject),
+              Effect.catchTag("Orchestra.ProjectMoveError", badProjectMove),
+            )
           return HttpApiSchema.NoContent.make()
         }),
       )

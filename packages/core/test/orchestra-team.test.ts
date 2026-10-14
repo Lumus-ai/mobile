@@ -412,6 +412,7 @@ describe("Orchestra team", () => {
 
       const moveKey = "orchestra/move-plan/" + project.id
       // Simulate a crash after one session moved, while the project record still points at source.
+      // Management lookups must not block while the move waits for the active main session.
       yield* kv.set(moveKey, {
         from: source,
         to: firstDestination,
@@ -421,6 +422,8 @@ describe("Orchestra team", () => {
           { id: project.main!, relative: "", targetRelative: "", main: true },
         ],
       })
+      expect(yield* orchestra.mainOf(project.main!)).toBeUndefined()
+      expect(yield* orchestra.sessions(project.id)).toHaveLength(0)
       const alreadyMoved = members[0]
       yield* sessions.move({
         sessionID: alreadyMoved.id,

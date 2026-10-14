@@ -95,7 +95,7 @@ export interface Interface {
   // Which project opened each session that a project opened, by session ID.
   readonly owners: () => Effect.Effect<Record<string, ProjectID>>
   // Records that the project opened this session, so it stays with it in a shared directory.
-  readonly claim: (sessionID: SessionID, projectID: ProjectID) => Effect.Effect<void, ProjectNotFoundError>
+  readonly claim: (sessionID: SessionID, projectID: ProjectID) => Effect.Effect<void, ProjectNotFoundError | ProjectMoveError>
   // Atomically claims and creates a worker while holding the project lifecycle lock. This prevents
   // a project removal from interleaving between session ownership, Session creation and access setup.
   readonly createMember: (input: {
@@ -226,6 +226,9 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
     const dispatchLocks = KeyedMutex.makeUnsafe<SessionID>()
     // Concurrent UI/API opens must converge on one durable main session per project.
     const mainLocks = KeyedMutex.makeUnsafe<ProjectID>()
+    // Physical moves wait for sessions to settle; never hold mainLocks during that wait.
+    const moveLocks = KeyedMutex.makeUnsafe<ProjectID>()
+    const movingProjects = new Set<ProjectID>()
 
     const projects = Effect.fn("Orchestra.projects")(function* () {
       const result = yield* kv.scan({ prefix: PROJECT, limit: 1000 })
@@ -550,22 +553,40 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       }
 
       yield* kv.set(key, Schema.encodeSync(ProjectMovePlanSchema)(plan))
-      yield* applyProjectMove(project, plan)
-      // Keep the plan until update() commits Project.directory; a crash in that gap is recoverable.
+      // The caller releases mainLocks before applying this plan so the active orchestrator can finish its turn.
       return plan
     })
 
-    // Finish a persisted migration when the project is opened after interruption.
-    const reconcileProjectMoveUnlocked = Effect.fnUntraced(function* (project: Project) {
-      const key = MOVE_PLAN + project.id
-      const plan = Option.getOrUndefined(decodeProjectMovePlan(yield* kv.get(key)))
-      if (!plan) return project
-      yield* applyProjectMove(project, plan)
-      yield* initializeDod(plan.to)
-      const updated = yield* save({ ...project, directory: plan.to })
-      yield* kv.remove(key)
-      return updated
-    })
+    // Complete moves under moveLocks only; mainLocks protects just the final project-record commit.
+    const finishProjectMove = (id: ProjectID) =>
+      moveLocks.withLock(id)(
+        Effect.gen(function* () {
+          movingProjects.add(id)
+          return yield* Effect.gen(function* () {
+            while (true) {
+              const project = yield* get(id)
+              const key = MOVE_PLAN + id
+              const stored = decodeProjectMovePlan(yield* kv.get(key))
+              if (Option.isNone(stored)) return project
+              const plan = stored.value
+              yield* applyProjectMove(project, plan)
+              yield* initializeDod(plan.to)
+              const committed = yield* mainLocks.withLock(id)(
+                Effect.gen(function* () {
+                  const current = yield* get(id)
+                  const latest = decodeProjectMovePlan(yield* kv.get(key))
+                  if (Option.isNone(latest)) return { type: "done" as const, project: current }
+                  if (latest.value.to !== plan.to) return { type: "retry" as const }
+                  const updated = yield* save({ ...current, directory: plan.to })
+                  yield* kv.remove(key)
+                  return { type: "done" as const, project: updated }
+                }),
+              )
+              if (committed.type === "done") return committed.project
+            }
+          }).pipe(Effect.ensuring(Effect.sync(() => movingProjects.delete(id))))
+        }),
+      )
 
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped" | "recovered", detail?: string): Effect.Effect<void> =>
       dispatchLocks.withLock(sessionID)(
@@ -933,88 +954,89 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         )
       }),
       update: Effect.fn("Orchestra.update")(function* (id, input) {
-        // Older project records may not yet have a main pointer. Repair them before entering
-        // the update lock so a directory change cannot strand an orphaned main at the old root.
         if (input.directory !== undefined) yield* ensureMain(id)
-        return yield* mainLocks.withLock(id)(
+        const prepared = yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
-            let project = yield* get(id)
-            const nextDirectory = input.directory === undefined ? project.directory : yield* directory(input.directory)
-            const pendingMove = decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + id))
-            let updated: Project
-            if (input.directory === undefined && Option.isSome(pendingMove)) {
-              // A rename must finish an interrupted move, not leave part of the team behind.
-              project = yield* reconcileProjectMoveUnlocked(project)
-              updated = yield* save({
-                ...project,
-                name: input.name?.trim() || project.name,
+            const project = yield* get(id)
+            if (movingProjects.has(id)) {
+              const pending = decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + id))
+              return yield* new ProjectMoveError({
+                projectID: id,
+                sessionID: project.main ?? "",
+                directory: input.directory ?? Option.getOrUndefined(Option.map(pending, (item) => item.to)) ?? project.directory,
+                message: `Project "${project.name}" is already moving its sessions. Wait for it to finish, then retry.`,
               })
-            } else {
-              const plan =
-                nextDirectory !== project.directory || Option.isSome(pendingMove)
-                  ? yield* moveProjectSessions(project, nextDirectory)
-                  : undefined
-              // If either operation fails, the saved move plan remains for a future retry.
-              if (plan) yield* initializeDod(plan.to)
-              updated = yield* save({
-                ...project,
-                name: input.name?.trim() || project.name,
-                directory: nextDirectory,
-              })
-              if (plan) yield* kv.remove(MOVE_PLAN + id)
             }
-            // The main session is the project's long-lived identity. Keep its visible title in sync;
-            // ensureMain repairs it too if a crash interrupts the rename.
+            const nextDirectory = input.directory === undefined ? project.directory : yield* directory(input.directory)
+            const pending = decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + id))
+            if (input.directory === undefined && Option.isSome(pending)) return { kind: "move" as const }
+            if (nextDirectory !== project.directory || Option.isSome(pending)) {
+              const plan = yield* moveProjectSessions(project, nextDirectory)
+              if (plan) return { kind: "move" as const }
+            }
+            const updated = yield* save({ ...project, name: input.name?.trim() || project.name })
             if (updated.main && updated.name !== project.name) {
               const main = yield* sessions.get(updated.main).pipe(Effect.orElseSucceed(() => undefined))
-              if (main && main.title !== updated.name + " · Orchestrator")
-                yield* sessions.rename({ sessionID: main.id, title: updated.name + " · Orchestrator" }).pipe(Effect.orDie)
+              if (main && main.title !== `${updated.name} · Orchestrator`)
+                yield* sessions.rename({ sessionID: main.id, title: `${updated.name} · Orchestrator` }).pipe(Effect.orDie)
+            }
+            return { kind: "done" as const, project: updated }
+          }),
+        )
+        if (prepared.kind === "done") return prepared.project
+        yield* finishProjectMove(id)
+        return yield* mainLocks.withLock(id)(
+          Effect.gen(function* () {
+            const project = yield* get(id)
+            const updated = yield* save({ ...project, name: input.name?.trim() || project.name })
+            if (updated.main && updated.name !== project.name) {
+              const main = yield* sessions.get(updated.main).pipe(Effect.orElseSucceed(() => undefined))
+              if (main && main.title !== `${updated.name} · Orchestrator`)
+                yield* sessions.rename({ sessionID: main.id, title: `${updated.name} · Orchestrator` }).pipe(Effect.orDie)
             }
             return updated
           }),
         )
       }),
       remove: Effect.fn("Orchestra.remove")(function* (id) {
-        // Do not delete the project while mainSession is saving its reservation or pointer;
-        // doing so could let a stale initialization resurrect a forgotten project.
-        yield* mainLocks.withLock(id)(
+        yield* moveLocks.withLock(id)(
           Effect.gen(function* () {
-            yield* get(id)
-            yield* kv.remove(MAIN_INITIALIZING + id)
-            yield* kv.remove(PROJECT + id)
-            // A leftover plan after a crash is harmless once the project record is gone.
-            yield* kv.remove(TEAM_PLAN + id)
-            yield* kv.remove(MOVE_PLAN + id)
-            // Its sessions go back to whichever project contains their directory.
-            const claims = yield* owners()
-            yield* Effect.forEach(
-              Object.keys(claims).filter((sessionID) => claims[sessionID] === id),
-              (sessionID) => kv.remove(OWNER + sessionID),
-              { discard: true },
+            yield* mainLocks.withLock(id)(
+              Effect.gen(function* () {
+                yield* get(id)
+                yield* kv.remove(MAIN_INITIALIZING + id)
+                yield* kv.remove(PROJECT + id)
+                yield* kv.remove(TEAM_PLAN + id)
+                yield* kv.remove(MOVE_PLAN + id)
+                const claims = yield* owners()
+                yield* Effect.forEach(
+                  Object.keys(claims).filter((sessionID) => claims[sessionID] === id),
+                  (sessionID) => kv.remove(OWNER + sessionID),
+                  { discard: true },
+                )
+              }),
             )
           }),
         )
       }),
       main: Effect.fn("Orchestra.main")(function* (id) {
-        // Keep the project alive for the entire recovery checkpoint. Removal uses the same lock,
-        // so an already-admitted main request cannot continue reporting into a forgotten project.
+        const main = yield* mainLocks.withLock(id)(ensureMainUnlocked(id))
+        yield* finishProjectMove(id)
         return yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
-            const session = yield* ensureMainUnlocked(id)
-            // Resume a partially completed workspace move before rebuilding the team at its target root.
-            let project = yield* get(id)
-            project = yield* reconcileProjectMoveUnlocked(project)
+            const project = yield* get(id)
             yield* reconcileTeamUnlocked(project)
-            yield* recoverPending(session.id)
-            return yield* sessions.get(session.id).pipe(Effect.orElseSucceed(() => session))
+            yield* recoverPending(main.id)
+            return yield* sessions.get(main.id).pipe(Effect.orElseSucceed(() => main))
           }),
         )
       }),
       sessions: Effect.fn("Orchestra.sessions")(function* (id) {
+        if (Option.isSome(decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + id)))) return []
         return yield* mainLocks.withLock(id)(
           Effect.gen(function* () {
-            let project = yield* get(id)
-            project = yield* reconcileProjectMoveUnlocked(project)
+            const project = yield* get(id)
+            if (Option.isSome(decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + id)))) return []
             yield* reconcileTeamUnlocked(project)
             return yield* projectSessions(project)
           }),
@@ -1023,11 +1045,17 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       owns,
       owners,
       claim: Effect.fn("Orchestra.claim")(function* (sessionID, projectID) {
-        // Owner assignment and project removal share the same lock. Otherwise a claim can
-        // pass get(projectID), lose a race to remove(), and write an orphan owner afterward.
         yield* mainLocks.withLock(projectID)(
           Effect.gen(function* () {
-            yield* get(projectID)
+            const project = yield* get(projectID)
+            const move = decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + projectID))
+            if (Option.isSome(move))
+              return yield* new ProjectMoveError({
+                projectID,
+                sessionID,
+                directory: move.value.to,
+                message: `Project "${project.name}" is moving to "${move.value.to}". Reopen it after the move before claiming sessions.`,
+              })
             yield* kv.set(OWNER + sessionID, projectID)
           }),
         )
@@ -1043,6 +1071,11 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                   }),
               ),
             )
+            const move = decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + project.id))
+            if (Option.isSome(move))
+              return yield* new DispatchError({
+                message: `Project "${project.name}" is moving to "${move.value.to}". Reopen it after the move before creating workers.`,
+              })
             const mainID = project.main
             if (!mainID || input.project.main !== mainID)
               return yield* new DispatchError({
@@ -1096,16 +1129,15 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       mainOf: Effect.fn("Orchestra.mainOf")(function* (sessionID) {
         const candidate = (yield* projects()).find((item) => item.main === sessionID)
         if (!candidate) return undefined
-        // Re-check under the same lock used by project removal. A stale projects() snapshot must
-        // never expose management tools for a project that was removed while this hook was waiting.
         return yield* mainLocks.withLock(candidate.id)(
           Effect.gen(function* () {
             const current = decodeProject(yield* kv.get(PROJECT + candidate.id))
             if (Option.isNone(current) || current.value.main !== sessionID) return undefined
-            const project = yield* reconcileProjectMoveUnlocked(current.value).pipe(Effect.orDie)
-            yield* reconcileTeamUnlocked(project)
+            // Hide management while a move is pending; never wait for the active main turn from its own context hook.
+            if (Option.isSome(decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + candidate.id)))) return undefined
+            yield* reconcileTeamUnlocked(current.value)
             yield* recoverPending(sessionID)
-            return project
+            return current.value
           }),
         )
       }),
@@ -1139,6 +1171,11 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                   new DispatchError({ message: `Project ${error.projectID} no longer exists. Reopen the project before dispatching work.` }),
               ),
             )
+            const move = decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + project.id))
+            if (Option.isSome(move))
+              return yield* new DispatchError({
+                message: `Project "${project.name}" is moving to "${move.value.to}". Reopen it after the move before dispatching tasks.`,
+              })
             const main = project.main
             if (!main)
               return yield* new DispatchError({
