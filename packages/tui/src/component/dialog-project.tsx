@@ -71,7 +71,7 @@ export function DialogProject(props: {
   ]
   const teamCount = () => teamOptions().length
   // Keep the picker compact on short terminals and show the selected option in the visible window.
-  const visibleTeamCount = () => Math.max(2, Math.min(5, Math.floor((dimensions().height - 16) / 2)))
+  const visibleTeamCount = () => Math.max(1, Math.min(5, Math.floor((dimensions().height - 16) / 3)))
   const visibleTeamStart = () =>
     Math.max(0, Math.min(team() - Math.floor(visibleTeamCount() / 2), teamCount() - visibleTeamCount()))
   const visibleTeamEnd = () => Math.min(teamCount(), visibleTeamStart() + visibleTeamCount())
@@ -295,8 +295,10 @@ function TeamOption(props: { selected: boolean; focused: boolean; name: string; 
   const [hovered, setHovered] = createSignal(false)
   return (
     <box
-      flexDirection="row"
-      gap={1}
+      flexDirection="column"
+      gap={0}
+      flexGrow={1}
+      minWidth={0}
       backgroundColor={
         props.selected && props.focused
           ? theme.background.formfield.focused
@@ -308,18 +310,22 @@ function TeamOption(props: { selected: boolean; focused: boolean; name: string; 
       onMouseOut={() => setHovered(false)}
       onMouseUp={props.onClick}
     >
-      <text fg={props.selected ? theme.text.formfield.focused : theme.text.muted}>{props.selected ? "●" : "○"}</text>
-      <text
-        flexShrink={1}
-        wrapMode="none"
-        truncate
-        fg={props.selected ? theme.text.formfield.focused : theme.text.formfield.base}
-      >
-        {props.name}
-      </text>
-      <box flexGrow={1} minWidth={0}>
-        <text fg={theme.text.muted} wrapMode="none" truncate>
-          {`· ${props.detail}`}
+      <box flexDirection="row" gap={1} minWidth={0}>
+        <text flexShrink={0} fg={props.selected ? theme.text.formfield.focused : theme.text.muted}>
+          {props.selected ? "●" : "○"}
+        </text>
+        <text
+          flexShrink={1}
+          wrapMode="none"
+          truncate
+          fg={props.selected ? theme.text.formfield.focused : theme.text.formfield.base}
+        >
+          {props.name}
+        </text>
+      </box>
+      <box paddingLeft={2} minWidth={0}>
+        <text fg={theme.text.muted} wrapMode="word">
+          {props.detail}
         </text>
       </box>
     </box>
