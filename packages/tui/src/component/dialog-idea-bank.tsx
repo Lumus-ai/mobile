@@ -217,7 +217,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
           category: item.category,
           kind: "Community idea",
           description: item.summary,
-          signalCount: 0,
+          signalCount: typeof item.signalCount === "number" ? Math.max(0, item.signalCount) : 1,
           createdAt: typeof item.createdAt === "number" ? item.createdAt : 0,
           updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : 0,
           global: true,
