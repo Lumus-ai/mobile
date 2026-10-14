@@ -87,6 +87,7 @@ import { ShellTool } from "../tool/plugin/shell.js"
 import { NoteTool } from "../tool/plugin/note.js"
 import { NoteStore } from "../note.js"
 import { SkillTool } from "../tool/plugin/skill.js"
+import { SkillCatalogTool } from "../tool/plugin/skill-catalog.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -264,6 +265,7 @@ const pre = [
   PlotTool.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
+  SkillCatalogTool.Plugin,
   NoteTool.Plugin,
   SubagentTool.Plugin,
   WebFetchTool.Plugin,

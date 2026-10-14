@@ -40,10 +40,29 @@ Three runtime variants: `sqlite.bun.ts`, `sqlite.node.ts`,
 fork/revert, compaction, inbox.
 
 **Tools** — `packages/core/src/tool.ts` (332 lines) and the
-`packages/core/src/tool/` directory (20 files): `bash`, `edit`, `read`,
+`packages/core/src/tool/` directory (28 files): `bash`, `edit`, `read`,
 `write`, `grep`, `glob`, `patch`, `task`, `todowrite`, `webfetch`, `lsp`,
-`skill`, `session`, `snapshot`, `formatter`, `filesystem`, `instruction`,
-`credential`, `job`, `kv`, `codemode`, `effect`.
+`skill`, `skill-catalog`, `session`, `snapshot`, `formatter`,
+`filesystem`, `instruction`, `credential`, `job`, `kv`, `codemode`,
+`effect`.
+
+**Skill catalog** — `packages/core/src/tool/plugin/skill-catalog.ts`
+registers the `skill_catalog` tool, the one native path to the SkillsMP
+marketplace. It has two actions: `search` (a few words in `query`,
+optionally narrowed by `category`, `language`, `sort`, `limit` capped at 10) and `get` (one skill by the bare name a search row prints).
+Internally both are proxied calls to the `skillsmp` MCP server — its
+`search_skills` and `get_skill` tools — so the server must be configured
+in `opencode.json`; when it is not, the model gets "MCP server
+`skillsmp` is not configured" instead of a hang, and a call that gets no
+answer within 20 seconds is refused the same way. Each call asks for
+permission twice: first under the canonical MCP tool name
+(`skillsmp_search_skills`, the name an existing deny rule for that server
+already uses), then under `skill_catalog`, each narrowed to the single
+proxied tool rather than to `*`. The server answers in markdown; the
+parser turns each row into a name, a star count, a clipped description
+and the GitHub URL, and hands the raw text on unchanged when a future
+version prints something it does not recognise. The header count is how
+many rows came back on the page, never a catalog total.
 
 **Core plugins** — the `packages/core/src/plugin/` directory (67 files):
 `host.ts`, `internal.ts` (the graphs), plus tool and registration hosts.
