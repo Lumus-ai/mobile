@@ -50,6 +50,11 @@ export interface NormalizedResult extends Tool.Result {
 
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
+  /**
+   * Tool schemas hidden by a deny rule but needed by OpenCode Zen's free-tier request validator.
+   * These schemas may be advertised for compatibility; execute() still resolves only active tools.
+   */
+  readonly compatibilityDefinitions?: ReadonlyArray<ToolDefinition>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
@@ -227,6 +232,12 @@ const layer = Layer.effect(
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
+          const compatibilityDefinitions = Array.from(data.tools)
+            .filter(
+              ([name, tool]) =>
+                (name === "read" || name === "bash") && whollyDisabled(tool.options?.permission ?? name, rules),
+            )
+            .map(([, tool]) => definition(tool))
           for (const [name, tool] of data.tools) {
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
@@ -253,6 +264,7 @@ const layer = Layer.effect(
               : CodeModeTool.catalog(codeModeInventory)
           if (codeModeCatalog) catalog = { data, names, value: codeModeCatalog }
           return {
+            ...(compatibilityDefinitions.length ? { compatibilityDefinitions } : {}),
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
               ...Array.from(direct)
