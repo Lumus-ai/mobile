@@ -104,6 +104,7 @@ function moveSkill(items: MiniSkill[], id: string, delta: number) {
 
 export function PromptMiniSkills(props: {
   mode: () => "normal" | "shell"
+  visible?: boolean
   onInsert: (instruction: string) => void
 }) {
   const paths = useTuiPaths()
@@ -162,34 +163,13 @@ export function PromptMiniSkills(props: {
     toast.show({ message: `Inserted mini skill: ${skill.label}`, variant: "info", duration: 1800 })
   }
 
-  function edit(skill?: MiniSkill) {
-    dialog.replace(() => (
-      <MiniSkillEditor
-        skill={skill}
-        onCancel={() => dialog.replace(() => <MiniSkillManager skills={skills} save={save} insert={insert} />)}
-        onSave={async (updated) => {
-          const current = skills()
-          const next = skill
-            ? current.map((item) => (item.id === skill.id ? updated : item))
-            : [...current, updated]
-          try {
-            await save(next)
-            dialog.replace(() => <MiniSkillManager skills={skills} save={save} insert={insert} />)
-          } catch {
-            // Keep the editor open so the user can retry.
-          }
-        }}
-      />
-    ))
-  }
-
   const visibleSkills = createMemo(() => {
     const max = dimensions().width < 64 ? 3 : dimensions().width < 84 ? 4 : skills().length
     return skills().slice(0, max)
   })
 
   return (
-    <Show when={loaded() && props.mode() === "normal"}>
+    <Show when={loaded() && props.visible !== false && props.mode() === "normal"}>
       <box
         flexDirection="row"
         flexShrink={0}
