@@ -71,6 +71,7 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { ProjectTree } from "./component/project-tree"
+import { HomeProjectPanel } from "./component/home-project-panel"
 import { RoomChat } from "./component/room-chat"
 import { basicSymbolsNeeded, replaceMissingGlyphs } from "./ui/console-glyphs"
 import { DialogConnect, DialogHost } from "./component/dialog-rooms"
@@ -82,6 +83,7 @@ import { NotesProvider } from "./context/notes"
 import { NotesCommands } from "./component/notes-commands"
 import {
   clampSessionTabsWidth,
+  homeProjectPanelWidth,
   sessionTabsFitVertically,
   SESSION_SIDEBAR_WIDTH,
   SESSION_TABS_COMPACT_LAYOUT_WIDTH,
@@ -617,6 +619,13 @@ function App() {
     panels.presentation() === "fullscreen"
   const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+  // Home gets the same right-hand project DoD panel as a session, but only when
+  // the terminal can fit it without squeezing the prompt below a readable width.
+  const homePanelWidth = createMemo(() =>
+    route.data.type === "home"
+      ? homeProjectPanelWidth(dimensions().width, verticalTabsVisible() ? tabsResize.size() : 0)
+      : 0,
+  )
 
   // Measure the prospective split layout, even while full-screen hides the tabs.
   createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
@@ -1497,7 +1506,14 @@ function App() {
             <box flexGrow={1} minHeight={0} flexDirection="column">
               <Switch>
                 <Match when={route.data.type === "home"}>
-                  <Home />
+                  <box flexDirection="row" flexGrow={1} minWidth={0} minHeight={0}>
+                    <box flexDirection="column" flexGrow={1} minWidth={0} minHeight={0}>
+                      <Home />
+                    </box>
+                    <Show when={homePanelWidth() > 0}>
+                      <HomeProjectPanel width={homePanelWidth()} />
+                    </Show>
+                  </box>
                 </Match>
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>

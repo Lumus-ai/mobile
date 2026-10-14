@@ -52,6 +52,18 @@ export function sessionSidebarDocks(available: number, compact: boolean) {
   return available >= SESSION_SIDEBAR_WIDTH + SESSION_CONTENT_MIN_WIDTH + SESSION_SIDEBAR_DOCK_GUTTER
 }
 
+// Home's right project dashboard is optional at narrow widths: reserve enough space
+// for the centered prompt and cap the panel so it cannot swallow the main content.
+export const HOME_PROJECT_PANEL_MIN_WIDTH = 30
+export const HOME_PROJECT_PANEL_WIDTH = 42
+const HOME_CONTENT_MIN_WIDTH = 64
+
+export function homeProjectPanelWidth(total: number, leftPanelWidth: number) {
+  const available = total - leftPanelWidth - HOME_CONTENT_MIN_WIDTH
+  if (available < HOME_PROJECT_PANEL_MIN_WIDTH) return 0
+  return Math.min(HOME_PROJECT_PANEL_WIDTH, available)
+}
+
 // A terminal or plugin panel opens at half the room in the full layout and at
 // two fifths in the compact one, so the chat beside it stays readable.
 export function defaultSessionPaneWidth(total: number, compact: boolean) {

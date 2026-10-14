@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   clampSessionTabsWidth,
+  homeProjectPanelWidth,
   sessionSidebarDocks,
   sessionTabsFitVertically,
   SESSION_SIDEBAR_MAX_WIDTH,
@@ -46,4 +47,12 @@ test("the session sidebar docks beside a readable chat at laptop widths", () => 
   expect(sessionSidebarDocks(98, false)).toBe(true)
   expect(sessionSidebarDocks(96, true)).toBe(true)
   expect(sessionSidebarDocks(95, true)).toBe(false)
+})
+
+test("home project panel respects width bounds and preserves usable prompt space", () => {
+  expect(homeProjectPanelWidth(160, 42)).toBe(42)
+  expect(homeProjectPanelWidth(130, 34)).toBe(32)
+  expect(homeProjectPanelWidth(128, 34)).toBe(30)
+  expect(homeProjectPanelWidth(127, 34)).toBe(0)
+  expect(homeProjectPanelWidth(90, 0)).toBe(0)
 })
