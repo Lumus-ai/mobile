@@ -1,5 +1,6 @@
 import { Schema } from "effect"
-import { createMemo, createStore, For, Show, type ParentProps } from "solid-js"
+import { createMemo, For, Show, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { Skill } from "@opencode/schema/skill"
@@ -90,7 +91,7 @@ export function ComposerMiniSkills(props: ParentProps<{ model: ComposerModel }>)
   const data = useData()
   const location = useWorkspaceLocation()
   const availableSkills = createMemo(() => data.location.skill.list({ directory: location().directory }) ?? [])
-  const [settings, setSettings, , ready] = persisted(
+  const [settings, setSettings, , ready] = persisted<typeof MiniSkillsSettingsSchema>(
     Persist.global("composer.mini-skills.v2"),
     MiniSkillsSettingsSchema,
     INITIAL_SETTINGS,
@@ -108,32 +109,21 @@ export function ComposerMiniSkills(props: ParentProps<{ model: ComposerModel }>)
   const draftValid = createMemo(() => !!ui.draftLabel.trim() && !!ui.draftInstruction.trim())
 
   function addAvailableSkill(skill: { id: string; name: string; description?: string }) {
-    props.model.dispatch({
-      type: "mention.add",
-      item: {
-        id: "skill:" + skill.id,
-        kind: "skill",
-        label: "@" + skill.id,
-        description: skill.description,
-        mention: {
-          type: "skill",
-          id: Skill.ID.make(skill.id),
-          name: Skill.Name.make(skill.name),
-          content: "@" + skill.id,
-          start: 0,
-          end: 0,
-        },
-      },
+    props.model.addMention({
+      type: "skill",
+      id: Skill.ID.make(skill.id),
+      name: Skill.Name.make(skill.name),
+      content: "@" + skill.id,
+      start: 0,
+      end: 0,
     })
-    props.model.dispatch({ type: "focus.editor" })
   }
 
   function useItem(item: MiniSkillDefinition) {
     const content = [item.instruction.trim(), ui.additionalText.trim()].filter(Boolean).join("\n\n")
     if (!content) return
     const separator = props.model.value().trim() ? "\n\n" : ""
-    props.model.dispatch({ type: "draft.addText", value: separator + content + "\n" })
-    props.model.dispatch({ type: "focus.editor" })
+    props.model.addText(separator + content + "\n")
     setUI({ selectedID: undefined, additionalText: "" })
   }
 
