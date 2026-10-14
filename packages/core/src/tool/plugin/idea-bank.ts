@@ -45,17 +45,6 @@ export const Plugin = {
         output: Output,
         execute: (input, context) =>
           Effect.gen(function* () {
-            if (input.action === "submit") {
-              yield* permission.assert({
-                action: name,
-                resources: ["submit"],
-                save: [],
-                metadata: { action: "submit" },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
-              })
-            }
             const configured = process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, "")
             if (!configured) {
               return {
@@ -81,6 +70,22 @@ export const Plugin = {
               return yield* failure("The global Idea Bank URL must use HTTPS (HTTP is allowed only for localhost development)")
             }
 
+            if (input.action === "submit") {
+              if (input.consent !== true)
+                return yield* failure("Nothing was shared. First get the user's explicit permission to submit this idea publicly, then call again with consent=true.")
+              if (!input.title?.trim() || !input.summary?.trim() || !input.category?.trim())
+                return yield* failure("A shared submission needs a title, a public summary, and a category.")
+              yield* permission.assert({
+                action: name,
+                resources: ["submit"],
+                save: [],
+                metadata: { action: "submit" },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
+            }
+
             let url: URL
             let method: "GET" | "POST" = "GET"
             let body: Record<string, unknown> | undefined
@@ -96,10 +101,6 @@ export const Plugin = {
               if (!input.id?.trim()) return yield* failure("Pass the exact idea id with action=get")
               url = new URL("/v1/ideas/" + encodeURIComponent(input.id.trim()), base)
             } else {
-              if (input.consent !== true)
-                return yield* failure("Nothing was shared. First get the user's explicit permission to submit this idea publicly, then call again with consent=true.")
-              if (!input.title?.trim() || !input.summary?.trim() || !input.category?.trim())
-                return yield* failure("A shared submission needs a title, a public summary, and a category.")
               method = "POST"
               url = new URL("/v1/ideas", base)
               body = {
