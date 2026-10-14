@@ -27,7 +27,6 @@ import {
   clampSessionSidebarWidth,
   defaultSessionPaneWidth,
   noteCanvasFlexGrow,
-  resolveSessionPaneWidth,
   sessionPaneBoxWidth,
   sessionPanesStacked,
   sessionTranscriptWidth,
@@ -227,16 +226,10 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       fullscreen: fullscreen(),
     })
 
-  // The center frame shrinks/grows when the right panel is docked or when a note
-  // canvas is closed. Its real allocation is authoritative; saved widths are only
-  // a fallback before OpenTUI emits the first size event.
-  const [measuredSessionPane, setMeasuredSessionPane] = createSignal<
-    { width: number; hasCanvas: boolean } | undefined
-  >()
-  // Tag measurements with their layout mode. The same session survives Notes ↔ Projects
-  // navigation, so a plain cached number can accidentally pin Projects to the old split.
-  const transcriptWidth = () =>
-    resolveSessionPaneWidth(measuredSessionPane(), initialSessionTranscriptWidth(), canvas() !== undefined)
+  // Derive the transcript width from the current layout every time. The measured
+  // parent host remains mounted across tabs; caching the inner pane can preserve a
+  // Notes width after Projects returns.
+  const transcriptWidth = () => initialSessionTranscriptWidth()
 
   const toggleSidebar = () => {
     batch(() => {
@@ -454,9 +447,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         <box
           id="session-pane"
           ref={(value: BoxRenderable) => (sessionNode = value)}
-          onSizeChange={function () {
-            setMeasuredSessionPane({ width: this.width, hasCanvas: canvas() !== undefined })
-          }}
           flexGrow={canvas() && !stacked() ? 0 : canvas() ? 2 : 1}
           flexBasis={canvas() && !stacked() ? undefined : 0}
           minWidth={0}

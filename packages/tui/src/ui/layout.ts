@@ -97,15 +97,10 @@ export function sessionTranscriptWidth(input: {
   fullscreen: boolean
 }) {
   if (input.fullscreen) return Math.max(0, input.fullscreenContentWidth)
-  if (input.hasCanvas) return Math.max(0, input.stacked ? input.canvasHostWidth : input.noteChatWidth)
-  const occupied = input.rightPaneVisible
-    ? input.rightPaneWidth
-    : input.revealRailVisible
-      ? input.revealRailWidth
-      : 0
-  // Only the active right sibling is subtracted. Note/chat widths are ignored
-  // after returning to Projects so a stale note split cannot leave a blank gap.
-  return Math.max(0, input.availableWidth - occupied)
+  if (input.hasCanvas && !input.stacked) return Math.max(0, input.noteChatWidth)
+  // canvasHostWidth is the measured center column after OpenTUI has allocated
+  // space to the right-hand sibling. Do not subtract the panel a second time.
+  return Math.max(0, input.canvasHostWidth)
 }
 
 export function clampSessionSidebarWidth(width: number, total: number) {

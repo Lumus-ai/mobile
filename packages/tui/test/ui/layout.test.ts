@@ -143,10 +143,10 @@ test("the transcript width is recalculated from current layout rather than a sta
     fullscreen: false,
   })
   expect(withNote).toBe(42)
-  expect(withoutNote).toBe(72)
+  expect(withoutNote).toBe(100)
   expect(withoutNote).toBeGreaterThan(withNote)
   // A note split of 42 columns must not remain active when canvas is removed.
-  expect(withoutNote).toBe(72)
+  expect(withoutNote).toBe(100)
 })
 
 test("the transcript fills the center column after switching from Notes to Projects", () => {
@@ -164,7 +164,7 @@ test("the transcript fills the center column after switching from Notes to Proje
       fullscreenContentWidth: 0,
       fullscreen: false,
     }),
-  ).toBe(72)
+  ).toBe(70)
 })
 
 test("the initial transcript width is superseded by the measured session-pane width", () => {
@@ -184,7 +184,7 @@ test("the initial transcript width is superseded by the measured session-pane wi
       fullscreenContentWidth: 0,
       fullscreen: false,
     }),
-  ).toBe(72)
+  ).toBe(70)
 })
 
 test("transcript width follows the active note split and visible side rail", () => {
@@ -210,7 +210,7 @@ test("transcript width follows the active note split and visible side rail", () 
       rightPaneVisible: false,
       revealRailVisible: true,
     }),
-  ).toBe(107)
+  ).toBe(100)
 })
 
 test("measured transcript width is only reused in the layout mode it belongs to", () => {
@@ -264,4 +264,20 @@ test("switching from Notes to Projects explicitly expands the session pane", () 
       noteChatWidth: 42,
     }),
   ).toBe(80)
+})
+
+test("Projects transcript width is the actual center host, without subtracting sidebar twice", () => {
+  expect(sessionTranscriptWidth({
+    availableWidth: 120,
+    hasCanvas: false,
+    stacked: false,
+    canvasHostWidth: 72,
+    noteChatWidth: 40,
+    rightPaneVisible: true,
+    rightPaneWidth: 40,
+    revealRailVisible: false,
+    revealRailWidth: 3,
+    fullscreenContentWidth: 0,
+    fullscreen: false,
+  })).toBe(72)
 })
