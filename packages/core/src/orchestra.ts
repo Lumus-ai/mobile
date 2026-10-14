@@ -147,6 +147,7 @@ const PROJECT = "orchestra/project/"
 const ACCESS = "orchestra/access/"
 const CATEGORY = "orchestra/category/"
 const TASK = "orchestra/task/"
+const REPORT = "orchestra/report/"
 const ROLE = "orchestra/role/"
 const TEMPLATE = "orchestra/template/"
 // A project-owned write-ahead roster. Each Session ID is persisted before the worker is created.
@@ -168,6 +169,8 @@ const decodeSessionID = Schema.decodeUnknownOption(SessionID)
 // A task that is waiting for its report: which main session to deliver it to and when it was sent.
 const Task = Schema.Struct({
   main: SessionID,
+  // Project identity survives deletion/replacement of the main Session.
+  projectID: ProjectID.pipe(Schema.optional),
   sent: Schema.Number,
   // Optional for compatibility with tasks written by earlier versions.
   messageID: SessionMessage.ID.pipe(Schema.optional),
@@ -182,6 +185,28 @@ const Task = Schema.Struct({
   reportRole: Schema.String.pipe(Schema.optional),
 })
 const decodeTask = Schema.decodeUnknownOption(Task)
+type TaskInfo = typeof Task.Type
+
+// A report stays project-owned after the worker reservation is cleared. Session history is only
+// a delivery surface; deleting or replacing that Session must not delete the result itself.
+const TaskReport = Schema.Struct({
+  projectID: ProjectID,
+  workerID: SessionID,
+  taskID: SessionMessage.ID.pipe(Schema.optional),
+  state: Schema.Literals(["done", "failed", "stopped", "recovered"]),
+  outcome: Schema.Literals(["complete", "partial", "incomplete", "unknown", "failed", "stopped"]),
+  text: Schema.String,
+  description: Schema.String,
+  created: Schema.Number,
+  deliveredTo: SessionID,
+  deliveryID: SessionMessage.ID,
+  acknowledged: Schema.Boolean,
+})
+type TaskReportInfo = typeof TaskReport.Type
+const decodeTaskReport = Schema.decodeUnknownOption(TaskReport)
+const reportPrefix = (projectID: ProjectID) => `${REPORT}${projectID}/`
+const reportKey = (projectID: ProjectID, reportID: SessionMessage.ID) => reportPrefix(projectID) + reportID
+
 // Saved roles and templates keep when they were first created, so custom ones list in creation order.
 const StoredRole = Schema.Struct({ ...Orchestra.RoleSpec.fields, created: Schema.Number })
 const StoredTemplate = Schema.Struct({ ...Orchestra.TemplateSpec.fields, created: Schema.Number })
@@ -231,6 +256,18 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
     // Physical moves wait for sessions to settle; never hold mainLocks during that wait.
     const moveLocks = KeyedMutex.makeUnsafe<ProjectID>()
     const movingProjects = new Set<ProjectID>()
+
+    const scanAll = (prefix: string): Effect.Effect<KV.Entry[]> => {
+      const read = (after?: string): Effect.Effect<KV.Entry[]> =>
+        kv.scan({ prefix, after, limit: 1000 }).pipe(
+          Effect.flatMap((result) =>
+            result.next
+              ? read(result.next).pipe(Effect.map((rest) => [...result.entries, ...rest]))
+              : Effect.succeed([...result.entries]),
+          ),
+        )
+      return read()
+    }
 
     const projects = Effect.fn("Orchestra.projects")(function* () {
       const result = yield* kv.scan({ prefix: PROJECT, limit: 1000 })
@@ -619,6 +656,78 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         }),
       )
 
+    const projectForTask = Effect.fnUntraced(function* (task: TaskInfo) {
+      const all = yield* projects()
+      if (task.projectID) return all.find((project) => project.id === task.projectID)
+      return all.find((project) => project.main === task.main)
+    })
+
+    const renderTaskReport = (input: {
+      workerID: SessionID
+      taskID?: SessionMessage.ID
+      title: string
+      role: string
+      state: TaskReportInfo["state"]
+      outcome: TaskReportInfo["outcome"]
+      detail?: string
+      body: string
+    }) =>
+      [
+        `<team-report session="${input.workerID}" task="${input.taskID ?? "legacy"}" title="${input.title}" role="${input.role}" state="${input.state}" outcome="${input.outcome}">`,
+        ...(input.detail ? [input.detail] : []),
+        input.body,
+        "</team-report>",
+      ].join("\n")
+
+    const persistTaskReport = Effect.fnUntraced(function* (input: {
+      task: TaskInfo
+      workerID: SessionID
+      state: TaskReportInfo["state"]
+      outcome: TaskReportInfo["outcome"]
+      text: string
+      description: string
+      deliveredTo: SessionID
+      deliveryID: SessionMessage.ID
+    }) {
+      if (!input.task.reportID) return
+      const project = yield* projectForTask(input.task)
+      if (!project) return
+      const key = reportKey(project.id, input.task.reportID)
+      const existing = decodeTaskReport(yield* kv.get(key))
+      if (Option.isSome(existing)) {
+        // An interrupted provisional recovery may later observe the real terminal outcome.
+        if (!existing.value.acknowledged && existing.value.state === "recovered" && input.state !== "recovered") {
+          yield* kv.set(
+            key,
+            Schema.encodeSync(TaskReport)({
+              ...existing.value,
+              state: input.state,
+              outcome: input.outcome,
+              text: input.text,
+              description: input.description,
+            }),
+          )
+        }
+        return
+      }
+      const record = TaskReport.make({
+        projectID: project.id,
+        workerID: input.workerID,
+        taskID: input.task.messageID,
+        state: input.state,
+        outcome: input.outcome,
+        text: input.text,
+        description: input.description,
+        created: input.task.sent,
+        deliveredTo: input.deliveredTo,
+        deliveryID: input.deliveryID,
+        acknowledged: false,
+      })
+      yield* kv.set(key, Schema.encodeSync(TaskReport)(record))
+      // A project may have been forgotten while the terminal event was being handled.
+      if (!(yield* projects()).some((item) => item.id === project.id)) yield* kv.remove(key)
+    })
+
     const report = (sessionID: SessionID, state: "done" | "failed" | "stopped" | "recovered", detail?: string): Effect.Effect<void> =>
       dispatchLocks.withLock(sessionID)(
         Effect.gen(function* () {
@@ -628,13 +737,61 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           // Find that durable report first; otherwise retrying with state="recovered" would
           // reuse the ID with a different payload and conflict forever.
           if (task.value.reportID) {
+            const project = yield* projectForTask(task.value)
+            const ledger = project
+              ? decodeTaskReport(yield* kv.get(reportKey(project.id, task.value.reportID)))
+              : Option.none<TaskReportInfo>()
+            const target = Option.getOrElse(ledger, () => ({
+              deliveredTo: task.value.main,
+              deliveryID: task.value.reportID!,
+            }))
             const recorded = yield* sessions
-              .message({ sessionID: task.value.main, messageID: task.value.reportID })
+              .message({ sessionID: target.deliveredTo, messageID: target.deliveryID })
               .pipe(Effect.orElseSucceed(() => undefined))
             const pending = yield* sessions
-              .inbox(task.value.main)
+              .inbox(target.deliveredTo)
               .pipe(Effect.orElseSucceed((): SessionInbox.Info[] => []))
-            if (recorded || pending.some((item) => item.id === task.value.reportID)) {
+            const pendingReport = pending.find((item) => item.id === target.deliveryID && item.type === "synthetic")
+            if (recorded || pendingReport) {
+              if (Option.isNone(ledger)) {
+                const session = yield* sessions.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
+                const reportState = task.value.reportState ?? "recovered"
+                const reportOutcome = task.value.reportOutcome ?? "unknown"
+                const reportTitle = task.value.reportTitle ?? session?.title ?? `Deleted worker ${sessionID}`
+                const reportRole = task.value.reportRole ?? session?.agent ?? "unknown"
+                const body = task.value.reportText ?? "(no text answer)"
+                const text =
+                  recorded?.type === "synthetic"
+                    ? recorded.text
+                    : pendingReport?.type === "synthetic"
+                      ? pendingReport.payload.text
+                      : renderTaskReport({
+                          workerID: sessionID,
+                          taskID: task.value.messageID,
+                          title: reportTitle,
+                          role: reportRole,
+                          state: reportState,
+                          outcome: reportOutcome,
+                          detail: task.value.reportDetail,
+                          body,
+                        })
+                const description =
+                  recorded?.type === "synthetic"
+                    ? recorded.description
+                    : pendingReport?.type === "synthetic"
+                      ? pendingReport.payload.description
+                      : `${reportTitle}: ${reportState}`
+                yield* persistTaskReport({
+                  task: task.value,
+                  workerID: sessionID,
+                  state: reportState,
+                  outcome: reportOutcome,
+                  text,
+                  description,
+                  deliveredTo: target.deliveredTo,
+                  deliveryID: target.deliveryID,
+                })
+              }
               yield* kv.remove(TASK + sessionID)
               return
             }
@@ -743,17 +900,35 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           const reportOutcome = preparedTask.reportOutcome ?? outcome
           const reportTitle = preparedTask.reportTitle ?? title
           const reportRole = preparedTask.reportRole ?? (session?.agent ?? "unknown")
+          const description = `${reportTitle}: ${reportState}`
+          const text = renderTaskReport({
+            workerID: sessionID,
+            taskID: task.value.messageID,
+            title: reportTitle,
+            role: reportRole,
+            state: reportState,
+            outcome: reportOutcome,
+            detail: reportDetail,
+            body: reportBody,
+          })
+          // Persist the outcome independently of the target Session before admission can wake it.
+          // A replacement main can then receive this exact report even if the old history vanishes.
+          yield* persistTaskReport({
+            task: preparedTask,
+            workerID: sessionID,
+            state: reportState,
+            outcome: reportOutcome,
+            text,
+            description,
+            deliveredTo: task.value.main,
+            deliveryID: reportID,
+          })
           const admitted = yield* sessions
             .synthetic({
               id: reportID,
               sessionID: task.value.main,
-              description: `${reportTitle}: ${reportState}`,
-              text: [
-                `<team-report session="${sessionID}" task="${task.value.messageID ?? "legacy"}" title="${reportTitle}" role="${reportRole}" state="${reportState}" outcome="${reportOutcome}">`,
-                ...(reportDetail ? [reportDetail] : []),
-                reportBody,
-                "</team-report>",
-              ].join("\n"),
+              description,
+              text,
               metadata: {
                 source: "team",
                 sessionID,
@@ -949,12 +1124,152 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       )
     })
 
+    const completedAssistantAfter = Effect.fnUntraced(function* (
+      sessionID: SessionID,
+      messageID: SessionMessage.ID,
+    ) {
+      const messages = yield* sessions
+        .messages({
+          sessionID,
+          cursor: { id: messageID, direction: "previous" },
+          order: "desc",
+          limit: 200,
+        })
+        .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
+      return messages.some(
+        (message) =>
+          message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+      )
+    })
+
+    const acknowledgeReports = Effect.fn("Orchestra.acknowledgeReports")(function* (mainID: SessionID) {
+      const project = (yield* projects()).find((item) => item.main === mainID)
+      if (!project) return
+      for (const entry of yield* scanAll(reportPrefix(project.id))) {
+        const decoded = decodeTaskReport(entry.value)
+        if (Option.isNone(decoded) || decoded.value.acknowledged || decoded.value.deliveredTo !== mainID) continue
+        if (!(yield* completedAssistantAfter(mainID, decoded.value.deliveryID))) continue
+        yield* kv.set(
+          entry.key,
+          Schema.encodeSync(TaskReport)({ ...decoded.value, acknowledged: true }),
+        )
+      }
+    })
+
+    const reconcileReports = Effect.fn("Orchestra.reconcileReports")(function* (project: Project) {
+      const mainID = project.main
+      if (!mainID) return
+      const active = yield* sessions.active
+      const suspended = new Set(yield* sessionStore.listSuspended())
+      const currentInbox = yield* sessions.inbox(mainID).pipe(Effect.orElseSucceed((): SessionInbox.Info[] => []))
+      const pendingIDs = new Set(currentInbox.map((item) => item.id))
+
+      for (const entry of yield* scanAll(reportPrefix(project.id))) {
+        const decoded = decodeTaskReport(entry.value)
+        if (Option.isNone(decoded) || decoded.value.acknowledged) continue
+        let record = decoded.value
+
+        if (record.deliveredTo !== mainID) {
+          const oldMain = yield* sessions.get(record.deliveredTo).pipe(Effect.orElseSucceed(() => undefined))
+          const oldMessage = oldMain
+            ? yield* sessions
+                .message({ sessionID: record.deliveredTo, messageID: record.deliveryID })
+                .pipe(Effect.orElseSucceed(() => undefined))
+            : undefined
+          if (
+            oldMessage &&
+            !active.has(record.deliveredTo) &&
+            !suspended.has(record.deliveredTo) &&
+            (yield* completedAssistantAfter(record.deliveredTo, record.deliveryID))
+          ) {
+            yield* kv.set(
+              entry.key,
+              Schema.encodeSync(TaskReport)({ ...record, acknowledged: true }),
+            )
+            continue
+          }
+          record = TaskReport.make({
+            ...record,
+            deliveredTo: mainID,
+            deliveryID: SessionMessage.ID.create(),
+          })
+          // Save the new destination and id before admission. A crash retries with the same ID.
+          yield* kv.set(entry.key, Schema.encodeSync(TaskReport)(record))
+        }
+
+        // If the worker marker survived a crash after admission, point it at this ledger
+        // destination. report() will then see the exact queued item and clear that marker.
+        const workerKey = TASK + record.workerID
+        const task = decodeTask(yield* kv.get(workerKey))
+        const stableReportID = SessionMessage.ID.make(entry.key.slice(reportPrefix(project.id).length))
+        if (
+          Option.isSome(task) &&
+          task.value.reportID === stableReportID &&
+          (!task.value.projectID || task.value.projectID === project.id) &&
+          task.value.main !== mainID
+        ) {
+          yield* dispatchLocks.withLock(record.workerID)(
+            Effect.gen(function* () {
+              const current = decodeTask(yield* kv.get(workerKey))
+              if (
+                Option.isSome(current) &&
+                current.value.reportID === stableReportID &&
+                (!current.value.projectID || current.value.projectID === project.id)
+              ) {
+                yield* kv.set(
+                  workerKey,
+                  Schema.encodeSync(Task)({ ...current.value, main: mainID, projectID: project.id }),
+                )
+              }
+            }),
+          )
+        }
+
+        const recorded = yield* sessions
+          .message({ sessionID: mainID, messageID: record.deliveryID })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        if (recorded) {
+          if (
+            !active.has(mainID) &&
+            !suspended.has(mainID) &&
+            (yield* completedAssistantAfter(mainID, record.deliveryID))
+          ) {
+            yield* kv.set(
+              entry.key,
+              Schema.encodeSync(TaskReport)({ ...record, acknowledged: true }),
+            )
+          }
+          continue
+        }
+        if (pendingIDs.has(record.deliveryID)) continue
+        yield* sessions
+          .synthetic({
+            id: record.deliveryID,
+            sessionID: mainID,
+            description: record.description,
+            text: record.text,
+            metadata: {
+              source: "team",
+              sessionID: record.workerID,
+              state: record.state,
+              outcome: record.outcome,
+              ...(record.taskID ? { taskID: record.taskID } : {}),
+            },
+          })
+          .pipe(Effect.asVoid, Effect.orElseSucceed(() => undefined))
+      }
+    })
+
     // A shutdown interruption is resumed after restart, so its report waits for the real end.
     yield* bus
       .subscribe([SessionEvent.Execution.Succeeded, SessionEvent.Execution.Failed, SessionEvent.Execution.Interrupted])
       .pipe(
         Stream.runForEach((event) => {
-          if (event.type === SessionEvent.Execution.Succeeded.type) return report(event.data.sessionID, "done")
+          if (event.type === SessionEvent.Execution.Succeeded.type)
+            return Effect.gen(function* () {
+              yield* report(event.data.sessionID, "done")
+              yield* acknowledgeReports(event.data.sessionID)
+            })
           if (event.type === SessionEvent.Execution.Failed.type)
             return report(event.data.sessionID, "failed", `Run failed: ${event.data.error.message}`)
           if (event.data.reason === "shutdown") return Effect.void
@@ -1105,6 +1420,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                 yield* kv.remove(PROJECT + id)
                 yield* kv.remove(TEAM_PLAN + id)
                 yield* kv.remove(MOVE_PLAN + id)
+                const reports = yield* scanAll(reportPrefix(id))
+                yield* Effect.forEach(reports, (entry) => kv.remove(entry.key), { discard: true })
                 const claims = yield* owners()
                 yield* Effect.forEach(
                   Object.keys(claims).filter((sessionID) => claims[sessionID] === id),
@@ -1123,6 +1440,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           Effect.gen(function* () {
             const project = yield* get(id)
             yield* reconcileTeamUnlocked(project)
+            yield* reconcileReports(project)
             yield* recoverPending(main.id)
             return yield* sessions.get(main.id).pipe(Effect.orElseSucceed(() => main))
           }),
@@ -1233,6 +1551,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
             // Hide management while a move is pending; never wait for the active main turn from its own context hook.
             if (Option.isSome(decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + candidate.id)))) return undefined
             yield* reconcileTeamUnlocked(current.value)
+            yield* reconcileReports(current.value)
             yield* recoverPending(sessionID)
             return current.value
           }),
@@ -1316,7 +1635,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
                 // Queue work instead of interrupting whatever the worker is doing right now.
                 yield* kv.set(
                   key,
-                  Schema.encodeSync(Task)({ main, sent: Date.now(), messageID, reportID }),
+                  Schema.encodeSync(Task)({ main, projectID: project.id, sent: Date.now(), messageID, reportID }),
                 )
                 yield* sessions
                   .prompt({
@@ -1338,7 +1657,43 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       pending: Effect.fn("Orchestra.pending")(function* (sessionID) {
         return Option.getOrUndefined(Option.map(decodeTask(yield* kv.get(TASK + sessionID)), (task) => task.sent))
       }),
-      recoverPendingTasks: () => recoverPending(),
+      recoverPendingTasks: Effect.fn("Orchestra.recoverPendingTasks")(function* () {
+        const allProjects = yield* projects()
+        const byID = new Map(allProjects.map((project) => [project.id, project]))
+        const affected = new Set<ProjectID>()
+        for (const entry of yield* scanAll(TASK)) {
+          const task = decodeTask(entry.value)
+          if (Option.isNone(task)) continue
+          const project =
+            (task.value.projectID ? byID.get(task.value.projectID) : undefined) ??
+            allProjects.find((item) => item.main === task.value.main)
+          if (project) affected.add(project.id)
+        }
+        for (const entry of yield* scanAll(REPORT)) {
+          const record = decodeTaskReport(entry.value)
+          if (Option.isSome(record) && byID.has(record.value.projectID)) affected.add(record.value.projectID)
+        }
+        yield* Effect.forEach(
+          [...affected],
+          Effect.fnUntraced(function* (projectID) {
+            if (Option.isSome(decodeProjectMovePlan(yield* kv.get(MOVE_PLAN + projectID)))) return
+            const project = byID.get(projectID)
+            if (!project) return
+            const main = project.main
+              ? yield* sessions.get(project.main).pipe(Effect.orElseSucceed(() => undefined))
+              : undefined
+            if (!main) yield* ensureMain(projectID).pipe(Effect.ignore)
+            yield* mainLocks.withLock(projectID)(
+              Effect.gen(function* () {
+                const current = yield* get(projectID).pipe(Effect.option)
+                if (Option.isSome(current)) yield* reconcileReports(current.value)
+              }),
+            )
+          }),
+          { concurrency: 4, discard: true },
+        )
+        yield* recoverPending()
+      }),
       roles,
       saveRole: Effect.fn("Orchestra.saveRole")(function* (id, input) {
         const spec = yield* requireRole(input)

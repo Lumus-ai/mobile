@@ -629,6 +629,44 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   )
 
+  it.live("restores a delivered task report when the project's main session is deleted", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-report-ledger-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Report ledger", directory: tmp.path, template: "bugfix" })
+      const oldMain = project.main!
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      const [original] = yield* reports(oldMain).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(original).toContain("Developer: task answer")
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+
+      // The worker reservation is gone, but the unacknowledged report is still project-owned.
+      yield* sessions.remove(oldMain)
+      yield* orchestra.recoverPendingTasks()
+      const repaired = (yield* orchestra.projects()).find((item) => item.id === project.id)!
+      expect(repaired.main).toBeDefined()
+      expect(repaired.main).not.toBe(oldMain)
+      const restored = yield* reports(repaired.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(restored).toHaveLength(1)
+      expect(restored[0]).toContain("Developer: task answer")
+
+      // Re-running startup reconciliation does not duplicate a report already in the Inbox.
+      yield* orchestra.recoverPendingTasks()
+      expect(yield* reports(repaired.main!)).toHaveLength(1)
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("reattaches outstanding task reports when a deleted main session is recreated", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-main-recovery-")))
