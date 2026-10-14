@@ -232,12 +232,14 @@ const layer = Layer.effect(
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
-          const compatibilityDefinitions = Array.from(data.tools)
-            .filter(
-              ([name, tool]) =>
-                (name === "read" || name === "bash") && whollyDisabled(tool.options?.permission ?? name, rules),
-            )
-            .map(([, tool]) => definition(tool))
+          // OpenCode Zen's free-tier gate currently validates the shape of the standard tool
+          // list rather than the caller's actual permissions. Preserve schemas hidden by a local
+          // deny rule for the request only; the active executor below still contains allowed tools.
+          const compatibilityDefinitions = compatibilityToolNames(data.tools, rules)
+            .flatMap((name) => {
+              const tool = data.tools.get(name)
+              return tool ? [definition(tool)] : []
+            })
           for (const [name, tool] of data.tools) {
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
@@ -304,6 +306,20 @@ const layer = Layer.effect(
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
   return rule?.resource === "*" && rule.effect === "deny"
+}
+
+/**
+ * Names omitted from a tool snapshot solely because a blanket deny rule disables them.
+ * The OpenCode Zen free-tier compatibility layer may advertise these schemas, but the executor
+ * must continue to resolve calls only from its active tool maps.
+ */
+export function compatibilityToolNames(
+  tools: Iterable<readonly [string, { readonly options?: { readonly permission?: string } }]>,
+  rules: Permission.Ruleset,
+) {
+  return Array.from(tools)
+    .filter(([name, tool]) => whollyDisabled(tool.options?.permission ?? name, rules))
+    .map(([name]) => name)
 }
 
 const formatSchemaIssue = SchemaIssue.makeFormatterDefault()
