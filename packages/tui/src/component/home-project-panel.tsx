@@ -216,11 +216,18 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
 
         <Show when={board().type === "ready"}>
           <box flexDirection="column" gap={1} flexShrink={0}>
-            <box flexDirection="row" justifyContent="space-between" gap={1}>
-              <text fg={theme.text.base}>{t("Progress")}</text>
-              <text fg={theme.text.feedback.success.base} wrapMode="none">
-                {summary().finished}/{summary().total} · {summary().percent}%
-              </text>
+            <box flexDirection="row" alignItems="center" gap={1}>
+              <text fg={theme.text.base} flexShrink={0}>{t("Progress")}</text>
+              <box flexGrow={1} minWidth={0} />
+              <box
+                flexShrink={0}
+                minWidth={10}
+                backgroundColor={theme.background.raised.base}
+              >
+                <text fg={theme.text.feedback.success.base} wrapMode="none">
+                  {`${summary().finished}/${summary().total} · ${summary().percent}%`}
+                </text>
+              </box>
             </box>
             <text wrapMode="none">
               <span style={{ fg: theme.text.feedback.success.base }}>{"█".repeat(filled())}</span>
