@@ -140,7 +140,13 @@ export const Plugin = {
               return yield* failure(`Global Idea Bank returned HTTP ${response.status}: ${message}`)
             }
             return { output: JSON.stringify(result, null, 2) }
-          }),
+          }).pipe(
+            Effect.mapError((error) =>
+              error instanceof ToolFailure
+                ? error
+                : new ToolFailure({ message: "Global Idea Bank action failed", error }),
+            ),
+          ),
       }),
     )
   }),
