@@ -94,7 +94,7 @@ function render(
       if (url.pathname.startsWith("/api/orchestra/access/")) return new Response(null, { status: 204 })
       if (url.pathname.startsWith("/api/orchestra/category/")) return new Response(null, { status: 204 })
       if (url.pathname.startsWith("/api/orchestra/owner/")) return new Response(null, { status: 204 })
-      if (url.pathname === "/api/session") return json({ data: [listed], cursor: {} })
+      if (url.pathname === "/api/session") return json({ data: projectCreated ? [createdMain, listed] : [listed], cursor: {} })
       if (url.pathname === `/api/session/${worker.id}` && request.method === "DELETE") {
         calls.push({ method: "DELETE", path: url.pathname })
         return new Response(null, { status: 204 })
