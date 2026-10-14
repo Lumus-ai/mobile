@@ -22,22 +22,22 @@ none in `dependencies`), the foundation is `effect`.
 Who uses it (number of files in `packages/*/src` where there is an
 `@opencode/schema` import):
 
-| Package | Files |
-| --- | --- |
-| `packages/core/src` | 132 |
-| `packages/plugin/src` | 34 |
-| `packages/protocol/src` | 30 |
-| `packages/tui/src` | 16 |
-| `packages/app/src` | 14 |
-| `packages/cli/src` | 11 |
-| `packages/ai/src` | 9 |
-| `packages/client/src` | 7 |
-| `packages/sdk/src` | 6 |
-| `packages/plugin-browser/src` | 4 |
-| `packages/server/src` | 3 |
-| `packages/gui-extensions/src` | 2 |
-| `packages/desktop/src` | 1 |
-| `packages/enterprise/src` | 1 |
+| Package                       | Files |
+| ----------------------------- | ----- |
+| `packages/core/src`           | 132   |
+| `packages/plugin/src`         | 34    |
+| `packages/protocol/src`       | 30    |
+| `packages/tui/src`            | 16    |
+| `packages/app/src`            | 14    |
+| `packages/cli/src`            | 11    |
+| `packages/ai/src`             | 9     |
+| `packages/client/src`         | 7     |
+| `packages/sdk/src`            | 6     |
+| `packages/plugin-browser/src` | 4     |
+| `packages/server/src`         | 3     |
+| `packages/gui-extensions/src` | 2     |
+| `packages/desktop/src`        | 1     |
+| `packages/enterprise/src`     | 1     |
 
 A change here changes the contract of all 14 packages.
 
@@ -77,6 +77,27 @@ A change here changes the contract of all 14 packages.
 **Identifiers and the rest** — `identifier.ts`, `rpc.ts`, `schema.ts`,
 `prompt.ts`, `prompt-input.ts`, `websearch.ts`, `form.ts`,
 `session-stats.ts`.
+
+**External catalogs** — `skill-marketplace.ts` declares the response of the
+third-party SkillsMP catalog (`https://skillsmp.com/api/v1/skills/search`) so
+the core can call the catalog directly instead of through the Python MCP proxy.
+Three points a reader must not lose:
+
+- It is a **union**, not a shape: `Listing` and `ErrorBody` are told apart by
+  `success`, and the catalog sends refusals with a successful HTTP status.
+  `isError` is the discriminator; a refusal must never be reported as an empty
+  result set. `parse(body)` returns a `Result` and fails loudly rather than
+  decoding an unreadable answer into zero skills.
+- Pagination decodes the catalog's `total` and `totalPages` into
+  `provenRowCount` and `provenPageCount` (`Schema.decodeTo` + `SchemaGetter`,
+  because this Effect version has no `rename`). The catalog reuses `total` for
+  a count that is a proven lower bound unless `totalIsExact` is set, so the wire
+  name is deliberately not carried into the public name.
+- Unmodelled upstream fields (`countScope`, `nextCursor`, `isCapped`,
+  `maxResults`, the hybrid `search` and `usage` blocks) are dropped on decode
+  rather than rejected, so a hybrid response does not break an old client. The
+  contract tests in `packages/schema/test/skill-marketplace.test.ts` decode real
+  responses captured from the retired proxy's `cache.db`.
 
 ## Entry Points
 
