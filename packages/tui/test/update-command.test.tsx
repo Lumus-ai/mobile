@@ -57,7 +57,10 @@ test("/update opens the manual update dialog and checks for a newer version", as
         })
       if (url.pathname === "/api/command") return json({ location, data: [] })
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
-      if (/^\\/api\\/session\\/[^/]+\\/(message|inbox|permission)$/.test(url.pathname))
+      if (
+        url.pathname.startsWith(`/api/session/${session.id}/`) &&
+        ["/message", "/inbox", "/permission"].some((suffix) => url.pathname.endsWith(suffix))
+      )
         return json({ data: [], cursor: {} })
       return undefined
     },
