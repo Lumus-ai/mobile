@@ -1,14 +1,15 @@
 import { MouseEvent, TextareaRenderable } from "@opentui/core"
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { readFile, mkdir, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { Keymap } from "../context/keymap"
-import { useTuiPaths } from "../context/runtime"
-import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
-import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
-import { useToast } from "../ui/toast"
+import { Keymap } from "../../context/keymap"
+import { useTuiPaths } from "../../context/runtime"
+import { useTheme } from "../../context/theme"
+import { useDialog } from "../../ui/dialog"
+import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
+import { useToast } from "../../ui/toast"
+import { useConfig } from "../../config"
 
 export type MiniSkill = {
   id: string
@@ -341,7 +342,7 @@ function MiniSkillEditor(props: {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const toast = useToast()
-  const config = useConfigData()
+  const config = useConfig().data
   const [target, setTarget] = createSignal<TextareaRenderable>()
   let labelInput: TextareaRenderable
   let instructionInput: TextareaRenderable
@@ -457,7 +458,3 @@ function MiniSkillEditor(props: {
   )
 }
 
-function useConfigData() {
-  const config = useConfig()
-  return config.data
-}
