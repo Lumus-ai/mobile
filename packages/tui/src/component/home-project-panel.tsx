@@ -73,7 +73,7 @@ export function HomeProjectPanel(props: { width: number }) {
     }
   }
 
-  createEffect(() => void refresh(directory())
+  createEffect(() => void refresh(directory()))
   onMount(() => {
     const timer = setInterval(() => void refresh(directory()), 5_000)
     onCleanup(() => {
