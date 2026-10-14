@@ -269,7 +269,8 @@ export default {
 
       if (pathname === "/v1/admin/submissions" && request.method === "GET") return adminQueue(request, env)
       const review = /^\/v1\/admin\/submissions\/([a-zA-Z0-9_-]{1,80})\/review$/.exec(pathname)
-      if (review && request.method === "POST") return reviewIdea(request, env, review[1])
+      const reviewID = review?.[1]
+      if (reviewID && request.method === "POST") return reviewIdea(request, env, reviewID)
 
       if (request.method !== "GET" && request.method !== "POST") return json({ error: "Method not allowed" }, 405)
       return json({ error: "Not found" }, 404)
