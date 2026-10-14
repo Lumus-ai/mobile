@@ -78,6 +78,8 @@ export function sessionTranscriptWidth(input: {
     : input.revealRailVisible
       ? input.revealRailWidth
       : 0
+  // Only the active right sibling is subtracted. Note/chat widths are ignored
+  // after returning to Projects so a stale note split cannot leave a blank gap.
   return Math.max(0, input.availableWidth - occupied)
 }
 

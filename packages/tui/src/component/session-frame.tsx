@@ -223,7 +223,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       fullscreenContentWidth: Math.max(0, panels.width() - paneResize.size()),
       fullscreen: fullscreen(),
     })
-  const [sessionPaneMeasuredWidth, setSessionPaneMeasuredWidth] = createSignal<number>()
 
   const toggleSidebar = () => {
     batch(() => {
@@ -448,9 +447,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           flexBasis={canvas() && !stacked() ? undefined : 0}
           minWidth={0}
           minHeight={0}
-          onSizeChange={function () {
-            setSessionPaneMeasuredWidth(this.width)
-          }}
           position={fullscreen() ? "absolute" : "relative"}
           visible={!fullscreen()}
           width={
@@ -474,7 +470,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={sessionPaneMeasuredWidth() ?? initialSessionTranscriptWidth()}
+              width={initialSessionTranscriptWidth()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>

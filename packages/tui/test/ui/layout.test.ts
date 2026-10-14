@@ -143,6 +143,8 @@ test("the transcript width is recalculated from current layout rather than a sta
   expect(withNote).toBe(42)
   expect(withoutNote).toBe(72)
   expect(withoutNote).toBeGreaterThan(withNote)
+  // A note split of 42 columns must not remain active when canvas is removed.
+  expect(withoutNote).toBe(72)
 })
 
 test("the transcript fills the center column after switching from Notes to Projects", () => {
