@@ -113,10 +113,10 @@ test("a docked session sidebar cannot be dragged into an unreadable strip", () =
   expect(clampSessionSidebarWidth(90, 90)).toBe(34)
 })
 
-test("the transcript fills the gap after switching from Notes to Projects", () => {
+test("the transcript uses the actual center column width after switching from Notes to Projects", () => {
   expect(
     sessionTranscriptWidth({
-      availableWidth: 110,
+      availableWidth: 72,
       hasCanvas: false,
       stacked: false,
       canvasHostWidth: 70,

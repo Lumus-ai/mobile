@@ -53,7 +53,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const dialog = useDialog()
   const notes = useNotes()
   const theme = useTheme()
-  const availableWidth = () => Math.max(0, dimensions().width - props.verticalTabsWidth)
+  const [frameWidth, setFrameWidth] = createSignal(Math.max(0, dimensions().width - props.verticalTabsWidth))
+  const availableWidth = () => frameWidth()
   const [canvasHostWidth, setCanvasHostWidth] = createSignal(availableWidth())
   const compactLayout = useCompactLayout()
   const defaultPaneWidth = () => defaultSessionPaneWidth(panels.width(), compactLayout.compact())
@@ -73,8 +74,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       defaultPaneWidth(),
     defaultValue: defaultPaneWidth,
     clamp: (width) => clampSessionPaneWidth(width, panels.width()),
-    fromMouse: (event) => dimensions().width - event.x - 1,
-    contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
+    fromMouse: (event) => frameWidth() - event.x - 1,
+    contains: (event, width) => event.x >= frameWidth() - width - 1 && event.x <= frameWidth() - width,
     onCommit: (width) => {
       void updateLayout((draft) => {
         if (compactLayout.compact()) draft.compactPaneWidth = width
@@ -105,7 +106,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     clamp: (width) => clampNoteChatWidth(width, canvasHostWidth()),
     // Mouse coordinates are terminal-global; subtract the note/chat divider position
     // from the right edge of the actual split container, not the entire terminal.
-    fromMouse: (event) => props.verticalTabsWidth + canvasHostWidth() - event.x - 1,
+    fromMouse: (event) => canvasHostWidth() - (event.x - props.verticalTabsWidth) - 1,
     contains: (event, width) => {
       const boundary = props.verticalTabsWidth + canvasHostWidth() - width
       return event.x >= boundary - 1 && event.x <= boundary
@@ -379,6 +380,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       minHeight={0}
       flexDirection="row"
       position="relative"
+      onSizeChange={function () {
+        setFrameWidth(this.width)
+      }}
       onMouseDrag={(event) => {
         paneResize.onMouseDrag(event)
         sidebarResize.onMouseDrag(event)
@@ -607,7 +611,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       >
         <PaneResizeHandle
           resize={rightPaneResize()}
-          left={availableWidth() - rightPaneResize().size() - 1}
+          left={frameWidth() - rightPaneResize().size() - 1}
           highlight="right"
         />
       </Show>
