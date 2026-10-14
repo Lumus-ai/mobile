@@ -152,10 +152,13 @@ test("a new session started from a project carries its project owner metadata", 
   // run that frame before waiting for Home's asynchronously loaded prompt.
   await setup.renderOnce()
   await setup.waitForFrame(
-    (frame) =>
-      ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"].some((text) =>
-        frame.includes(text),
-      ),
+    (frame) => {
+      // Home prompt suggestions can wrap across rows at narrow transcript widths.
+      const visible = frame.replace(/\\s+/g, " ")
+      return ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"].some((text) =>
+        visible.includes(text),
+      )
+    },
     { maxPasses: 100 },
   )
 
