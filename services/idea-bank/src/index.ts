@@ -1,4 +1,4 @@
-import { clean, hasSensitiveContent, normalizeSearchText, validLanguage } from "./policy"
+import { clean, hasSensitiveContent, normalizeSearchTerms, normalizeSearchText, validLanguage } from "./policy"
 
 interface Env {
   DB: D1Database
@@ -85,14 +85,15 @@ async function listIdeas(request: Request, env: Env) {
   const offset = Number.isSafeInteger(rawOffset) ? Math.min(100_000, Math.max(0, rawOffset)) : 0
   const clauses = ["status = 'published'"]
   const bindings: (string | number)[] = []
-  // Search individual terms rather than requiring the exact phrase. This behaves
-  // better with natural-language queries issued by the chat agent, while retaining
-  // bounded work and parameterized SQL.
-  const terms = normalizeSearchText(query).split(/\s+/).filter((term) => term.length > 1).slice(0, 8)
-  for (const term of terms) {
-    clauses.push("instr(search_text, ?) > 0")
-    bindings.push(term)
+  // Match any meaningful query term for better recall, then rank by the
+  // number of terms present so close matches appear first.
+  const terms = normalizeSearchTerms(query)
+  if (terms.length > 0) {
+    clauses.push("(" + terms.map(() => "instr(search_text, ?) > 0").join(" OR ") + ")")
+    bindings.push(...terms)
   }
+  const scoreOrder =
+    terms.length > 0 ? terms.map(() => "(instr(search_text, ?) > 0)").join(" + ") + " DESC, " : ""
   if (category) {
     clauses.push("lower(category) = lower(?)")
     bindings.push(category)
@@ -107,9 +108,9 @@ async function listIdeas(request: Request, env: Env) {
     .first<{ total: number }>()
   const result = await env.DB.prepare(
     `SELECT id, title, summary, category, tags, language, status, submitter_hash, content_hash, created_at, updated_at, signal_count, reviewed_at
-     FROM ideas WHERE ${where} ORDER BY updated_at DESC, title COLLATE NOCASE LIMIT ? OFFSET ?`,
+     FROM ideas WHERE ${where} ORDER BY ${scoreOrder}updated_at DESC, title COLLATE NOCASE LIMIT ? OFFSET ?`,
   )
-    .bind(...bindings, limit, offset)
+    .bind(...bindings, ...terms, limit, offset)
     .all<IdeaRow>()
   return json({ items: result.results.map(decodeIdea), total: total?.total ?? 0, limit, offset })
 }
