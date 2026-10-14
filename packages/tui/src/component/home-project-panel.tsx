@@ -128,10 +128,11 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
         >
           <box
             id="home-project-panel-show"
+            width={3}
+            height={1}
             flexShrink={0}
-            minWidth={3}
-            paddingLeft={1}
-            paddingRight={1}
+            alignItems="center"
+            justifyContent="center"
             backgroundColor={theme.background.raised.base}
             onMouseDown={(event) => event.stopPropagation()}
             onMouseUp={(event) => {
@@ -147,6 +148,7 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
       <box
         width={props.width}
         height="100%"
+        position="relative"
         flexShrink={0}
         minWidth={0}
         minHeight={0}
@@ -157,50 +159,15 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
         border={["left"]}
         borderColor={theme.border.base}
       >
-        <box flexDirection="row" alignItems="center" flexShrink={0} gap={1}>
-          <box flexDirection="column" flexGrow={1} minWidth={0} gap={1}>
-            <box flexDirection="row" alignItems="center" gap={1} minWidth={0}>
-              <box flexGrow={1} minWidth={0}>
-                <text fg={theme.text.base} wrapMode="none" truncate>
-                  <b>{t("Project DoD")}</b>
-                </text>
-              </box>
-            </box>
-            <text fg={theme.text.muted} wrapMode="none" truncate>
-              {project()?.name ?? t("Current directory")}
-            </text>
-            <Show when={boardRoot()}>
-              {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
-            </Show>
-          </box>
-          <Show when={props.onHide}>
-            <box
-              id="home-project-panel-hide"
-              flexShrink={0}
-              width={5}
-              minWidth={5}
-              paddingLeft={1}
-              paddingRight={1}
-              backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : theme.background.raised.base}
-              onMouseOver={() => setCloseHovered(true)}
-              onMouseOut={() => setCloseHovered(false)}
-              onMouseDown={(event) => event.stopPropagation()}
-              onMouseUp={(event) => {
-                event.stopPropagation()
-                props.onHide?.()
-              }}
-            >
-              <text
-                fg={
-                  closeHovered()
-                    ? (theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action.primary.base, 2))
-                    : theme.text.action.primary.base
-                }
-                wrapMode="none"
-              >
-                ›
-              </text>
-            </box>
+        <box flexDirection="column" flexShrink={0} gap={1} paddingRight={5}>
+          <text fg={theme.text.base} wrapMode="none" truncate>
+            <b>{t("Project DoD")}</b>
+          </text>
+          <text fg={theme.text.muted} wrapMode="none" truncate>
+            {project()?.name ?? t("Current directory")}
+          </text>
+          <Show when={boardRoot()}>
+            {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
           </Show>
         </box>
 
@@ -272,6 +239,39 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
                 </For>
               </box>
             </scrollbox>
+          </box>
+        </Show>
+        {/* Keep the collapse control above all panel content and outside normal flex layout. */}
+        <Show when={props.onHide}>
+          <box
+            id="home-project-panel-hide"
+            position="absolute"
+            top={1}
+            right={1}
+            width={5}
+            height={1}
+            flexShrink={0}
+            alignItems="center"
+            justifyContent="center"
+            backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : theme.background.raised.base}
+            onMouseOver={() => setCloseHovered(true)}
+            onMouseOut={() => setCloseHovered(false)}
+            onMouseDown={(event) => event.stopPropagation()}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              props.onHide?.()
+            }}
+          >
+            <text
+              fg={
+                closeHovered()
+                  ? (theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action.primary.base, 2))
+                  : theme.text.action.primary.base
+              }
+              wrapMode="none"
+            >
+              ›
+            </text>
           </box>
         </Show>
       </box>
