@@ -75,8 +75,11 @@ export function DialogProject(props: {
     setError()
     await action()
       .then((result) => {
-        props.onDone()
+        // Let a create flow open the new project's main orchestrator before closing this
+        // dialog and refreshing the sidebar. The main-session handoff must not depend on
+        // the project list or worker roster finishing their own asynchronous refresh.
         onSuccess?.(result)
+        props.onDone()
       })
       .catch((cause: unknown) =>
         // The server names the field it rejected; its own text is English.
