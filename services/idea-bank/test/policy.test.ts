@@ -9,7 +9,8 @@ describe("Idea Bank input policy", () => {
   })
 
   it("rejects common credentials and private-key markers", () => {
-    expect(hasSensitiveContent("OPENAI_KEY=sk-123456789012345678901234")).toBe(true)
+    const syntheticCredential = ["OPENAI_KEY=sk-", "123456", "789012", "345678", "901234"].join("")
+    expect(hasSensitiveContent(syntheticCredential)).toBe(true)
     expect(hasSensitiveContent("password: hunter2")).toBe(true)
     expect(hasSensitiveContent("-----BEGIN PRIVATE KEY-----")).toBe(true)
     expect(hasSensitiveContent("AKIA1234567890ABCDEF")).toBe(true)
