@@ -711,6 +711,8 @@ export function IdeaBankCapture() {
             draft.lastSharedAttemptAt ??= {}
             draft.lastSharedAttemptAt[signal.id] = now
           })
+          // The user may have paused sharing while the local state write was pending.
+          if (!state.autoCapture || !state.autoShareSignals) break
           try {
             const base = globalBase()
             if (!base) break
