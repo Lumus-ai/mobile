@@ -403,13 +403,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           flexShrink={0}
           height="100%"
           flexDirection="column"
-          width={
-            fullscreen()
-              ? availableWidth()
-              : rightPane() === "sidebar"
-                ? compactLayout.sidebarWidth()
-                : paneResize.size()
-          }
+          width={fullscreen() ? availableWidth() : paneResize.size()}
           minWidth={0}
           minHeight={0}
         >
@@ -505,8 +499,21 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           </HoverAction>
         </box>
       </Show>
-      <Show when={!fullscreen() && !rightPaneHidden() && (rightPane() === "terminal" || rightPane() === "panel") && availableWidth() >= 3}>
-        <PaneResizeHandle resize={paneResize} left={availableWidth() - paneResize.size() - 1} highlight="right" />
+      <Show
+        when={
+          !fullscreen() &&
+          !rightPaneHidden() &&
+          (rightPane() === "terminal" ||
+            rightPane() === "panel" ||
+            (rightPane() === "sidebar" && wide())) &&
+          availableWidth() >= 3
+        }
+      >
+        <PaneResizeHandle
+          resize={paneResize}
+          left={availableWidth() - paneResize.size() - 1}
+          highlight="right"
+        />
       </Show>
       <Show when={!rightPaneHidden() && rightPane() === "sidebar" && !wide()}>
         <box
