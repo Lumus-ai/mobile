@@ -430,6 +430,18 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("does not expose CodeMode tools directly when execute is denied", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() })
+      const denied: Permission.Ruleset = [{ action: "execute", resource: "*", effect: "deny" }]
+      const snapshot = yield* service.snapshot(denied)
+      expect(snapshot.definitions).toEqual([])
+      expect(snapshot.codeModeDefinitions).toEqual([])
+      expect(snapshot.codeModeCatalog).toBeUndefined()
+    }),
+  )
+
   it.effect("advertises denied tool schemas only as compatibility and never executes them", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
