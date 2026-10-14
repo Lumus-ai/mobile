@@ -213,15 +213,18 @@ test("transcript width follows the active note split and visible side rail", () 
   ).toBe(107)
 })
 
-test("measured transcript width is ignored after leaving Notes mode", () => {
-  // A stale 42-column Notes measurement must not pin the Projects chat to 42
-  // columns when its newly allocated width is 72.
-  expect(resolveSessionPaneWidth(0, 72, false)).toBe(72)
-  expect(resolveSessionPaneWidth(38, 72, false)).toBe(72)
-  expect(resolveSessionPaneWidth(42, 72, false)).toBe(72)
-  // Notes mode still honours the measured right-hand chat column.
-  expect(resolveSessionPaneWidth(42, 72, true)).toBe(42)
-  expect(resolveSessionPaneWidth(74, 72, true)).toBe(74)
+test("measured transcript width is only reused in the layout mode it belongs to", () => {
+  const notesMeasurement = { width: 42, hasCanvas: true }
+  const projectsMeasurement = { width: 72, hasCanvas: false }
+
+  // The last Notes measurement is discarded while Projects performs its first layout.
+  expect(resolveSessionPaneWidth(notesMeasurement, 72, false)).toBe(72)
+  // The new Projects measurement is then reused rather than recalculating a stale split.
+  expect(resolveSessionPaneWidth(projectsMeasurement, 108, false)).toBe(72)
+  // The same rule works in the other direction when Notes is opened again.
+  expect(resolveSessionPaneWidth(projectsMeasurement, 42, true)).toBe(42)
+  expect(resolveSessionPaneWidth(notesMeasurement, 72, true)).toBe(42)
+  expect(resolveSessionPaneWidth(undefined, 72, false)).toBe(72)
 })
 
 test("switching from Notes to Projects explicitly expands the session pane", () => {

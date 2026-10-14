@@ -58,10 +58,15 @@ export function clampSessionPaneWidth(width: number, total: number) {
   return Math.max(min, Math.min(width, max))
 }
 
-export function resolveSessionPaneWidth(measured: number, initial: number, preferMeasured = true) {
-  // Once the note canvas is closed, the measured session width may still refer to
-  // the old note/chat split. Ignore it and recalculate from the current frame.
-  return preferMeasured && measured > 0 ? measured : initial
+export function resolveSessionPaneWidth(
+  measured: { width: number; hasCanvas: boolean } | undefined,
+  initial: number,
+  hasCanvas: boolean,
+) {
+  // A measurement belongs to the layout mode it was taken in. Never apply a narrow
+  // Notes measurement to Projects; use the current allocation when OpenTUI relayouts.
+  if (!measured || measured.width <= 0 || measured.hasCanvas !== hasCanvas) return initial
+  return measured.width
 }
 
 export function sessionPaneBoxWidth(input: {
