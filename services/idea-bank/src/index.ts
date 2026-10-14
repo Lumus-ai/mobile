@@ -107,9 +107,14 @@ async function listIdeas(request: Request, env: Env) {
   const offset = Number.isSafeInteger(rawOffset) ? Math.min(100_000, Math.max(0, rawOffset)) : 0
   const clauses = ["status = 'published'"]
   const bindings: (string | number)[] = []
-  if (query) {
-    clauses.push("instr(lower(title || ' ' || summary || ' ' || category || ' ' || tags), lower(?)) > 0")
-    bindings.push(query)
+  // Search individual terms rather than requiring the exact phrase. This behaves
+  // better with natural-language queries issued by the chat agent, while retaining
+  // bounded work and parameterized SQL.
+  const terms = query.split(/\\s+/).filter((term) => term.length > 1).slice(0, 8)
+  const searchable = "lower(title || ' ' || summary || ' ' || category || ' ' || tags)"
+  for (const term of terms) {
+    clauses.push(`instr(${searchable}, lower(?)) > 0`)
+    bindings.push(term)
   }
   if (category) {
     clauses.push("lower(category) = lower(?)")
