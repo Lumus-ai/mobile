@@ -59,7 +59,7 @@ it.live("recovers Orchestra tasks even when the session restart sweep fails", ()
       recoverPendingTasks: Effect.sync(() => {
         recovered = true
       }),
-    } as Orchestra.Interface)
+    } as unknown as Orchestra.Interface)
 
     yield* ServerFetch.make(options, {
       overrides: [
