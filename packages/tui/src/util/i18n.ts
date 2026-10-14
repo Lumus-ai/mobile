@@ -46,6 +46,18 @@ const ru: Record<string, string> = {
   "Turn token usage (verbose)": "Токены за ход (подробно)",
   // Side panels, prompt and footer
   // Idea Bank
+  "Automatic global sharing is on": "Автоматическая отправка в общий банк включена",
+  "Automatic global sharing is off": "Автоматическая отправка в общий банк выключена",
+  "Enable sharing": "Включить отправку",
+  "Pause sharing": "Приостановить отправку",
+  "Confirm sharing": "Подтвердить отправку",
+  "Enable local capture before sharing anonymous signals.": "Сначала включи локальный сбор, чтобы отправлять обобщённые сигналы.",
+  "Confirm to share only generic idea categories, never chat text.": "Подтверди отправку только общих категорий идей; переписка не отправляется.",
+  "Anonymous global signal sharing enabled.": "Автоматическая отправка обобщённых сигналов включена.",
+  "Could not update global sharing setting": "Не удалось изменить настройку общей отправки",
+  "Sharing sends only predefined generic signal labels and summaries. It never sends original messages, excerpts, file paths, or chat history.": "Отправляются только заранее определённые общие метки и описания сигналов. Исходные сообщения, цитаты, пути к файлам и история чатов не отправляются.",
+  "Idea added to the global bank.": "Идея добавлена в общий банк.",
+  "Accepted ideas are published after automatic privacy, duplicate, and rate-limit checks. You can pause global sharing at any time.": "Идеи публикуются после автоматической проверки приватности, дубликатов и лимитов. Общую отправку можно в любой момент приостановить.",
   "Connecting to global bank…": "Подключение к глобальному банку…",
   "Global bank connected": "Глобальный банк подключён",
   "Global bank not configured. Set OPENCODE_IDEA_BANK_URL to use the shared catalogue.": "Глобальный банк не настроен. Укажи OPENCODE_IDEA_BANK_URL, чтобы подключить общий каталог.",
