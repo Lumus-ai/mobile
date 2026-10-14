@@ -452,7 +452,6 @@ const ru: Record<string, string> = {
   "Reliability Engineer": "Инженер надёжности",
   "Dependency Auditor": "Аудитор зависимостей",
   "OpenCode++ Core": "Ядро OpenCode++",
-  Integration: "Интеграция",
   Platform: "Платформа",
   Data: "Данные",
   Reliability: "Надёжность",
