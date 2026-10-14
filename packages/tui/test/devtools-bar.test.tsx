@@ -67,19 +67,29 @@ test("home side panels collapse and restore from their own edge controls", async
     await setup.mockMouse.click(x, lineIndex)
   }
 
+  const glyphAtEdge = (glyph: string, edge: "left" | "right") => {
+    const lines = setup.captureCharFrame().split("\n")
+    let found: { x: number; y: number } | undefined
+    for (let y = 0; y < lines.length; y++) {
+      let x = lines[y]!.indexOf(glyph)
+      while (x >= 0) {
+        if (!found || (edge === "left" ? x < found.x : x > found.x)) found = { x, y }
+        x = lines[y]!.indexOf(glyph, x + glyph.length)
+      }
+    }
+    if (!found) throw new Error(`no ${glyph} rail on the ${edge}`)
+    return found
+  }
+
   await clickGlyphOnLine("Projects", "‹", true)
   await setup.waitForFrame((frame) => !frame.includes("Multiplayer") && frame.includes("Project DoD"))
-  const leftRail = setup.captureCharFrame().split("\n").findIndex((line) => line.includes("›"))
-  expect(leftRail).toBeGreaterThanOrEqual(0)
-  const leftRailLine = setup.captureCharFrame().split("\n")[leftRail]!
-  await setup.mockMouse.click(leftRailLine.indexOf("›"), leftRail)
+  const leftRail = glyphAtEdge("›", "left")
+  await setup.mockMouse.click(leftRail.x, leftRail.y)
   await setup.waitForFrame((frame) => frame.includes("Multiplayer") && frame.includes("Project DoD"))
 
   await clickGlyphOnLine("Project DoD", "›", true)
   await setup.waitForFrame((frame) => !frame.includes("Project DoD"))
-  const lines = setup.captureCharFrame().split("\n")
-  const rightRail = lines.findIndex((line) => line.trimEnd().endsWith("‹"))
-  expect(rightRail).toBeGreaterThanOrEqual(0)
-  await setup.mockMouse.click(lines[rightRail]!.lastIndexOf("‹"), rightRail)
+  const rightRail = glyphAtEdge("‹", "right")
+  await setup.mockMouse.click(rightRail.x, rightRail.y)
   await setup.waitForFrame((frame) => frame.includes("Project DoD"))
 })

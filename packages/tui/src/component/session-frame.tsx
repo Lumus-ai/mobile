@@ -84,6 +84,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [sessionWidth, setSessionWidth] = createSignal<number>()
   const [activePane, setActivePane] = createSignal<"session" | "right">("session")
+  const [rightPaneHidden, setRightPaneHidden] = createSignal(false)
   const [restoreTerminalFocus, setRestoreTerminalFocus] = createSignal(false)
   let focusTerminal: (() => void) | undefined
   let showTerminals: (() => void) | undefined
@@ -113,11 +114,13 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   createEffect(
     on([activePanel, () => selectedTerminal()?.id], ([panel, terminal], previous) => {
       if (panel && panel !== previous?.[0]) {
+        setRightPaneHidden(false)
         setSidebarOpen(false)
         if (terminal) void sessions.selectTerminal(props.sessionID, null).catch(toast.error)
         return
       }
       if (terminal && terminal !== previous?.[1]) {
+        setRightPaneHidden(false)
         setSidebarOpen(false)
         if (panel) panels.close()
       }
@@ -164,6 +167,21 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       return
     }
     focusTerminal?.()
+  }
+  const hideRightPane = () => {
+    // A hidden full-screen panel must not continue covering the chat.
+    if (fullscreen()) panels.toggleFullscreen()
+    setRightPaneHidden(true)
+    setActivePane("session")
+    prompt.current?.focus()
+  }
+  const showRightPane = () => {
+    if (!rightPaneHidden()) {
+      toggleSidebar()
+      return
+    }
+    setRightPaneHidden(false)
+    if (activePanel() || selectedTerminal()) queueMicrotask(focusRightPane)
   }
   const onFocused = () => {
     const current = renderer.currentFocusedRenderable
@@ -379,10 +397,12 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           </Show>
         </box>
       </box>
-      <Show when={rightPane() === "terminal" || rightPane() === "panel" || (rightPane() === "sidebar" && wide())}>
+      <Show when={!rightPaneHidden() && (rightPane() === "terminal" || rightPane() === "panel" || (rightPane() === "sidebar" && wide()))}>
         <box
           ref={(value: BoxRenderable) => (rightNode = value)}
           flexShrink={0}
+          height="100%"
+          flexDirection="column"
           width={
             fullscreen()
               ? availableWidth()
@@ -393,9 +413,23 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           minWidth={0}
           minHeight={0}
         >
-          <Show
-            when={rightPane() === "sidebar"}
-            fallback={
+          <Show when={rightPane() !== "sidebar"}>
+            <box
+              height={1}
+              flexShrink={0}
+              flexDirection="row"
+              justifyContent="flex-end"
+              backgroundColor={theme.background.raised.base}
+            >
+              <HoverAction id="right-pane.hide" onClick={hideRightPane} paddingLeft={1} paddingRight={1}>
+                <text fg={theme.text.action.primary.base}>›</text>
+              </HoverAction>
+            </box>
+          </Show>
+          <box flexGrow={1} minWidth={0} minHeight={0}>
+            <Show
+              when={rightPane() === "sidebar"}
+              fallback={
               <Show
                 keyed
                 when={activePanel()}
@@ -436,18 +470,20 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               </Show>
             }
           >
-            <Sidebar sessionID={props.sessionID} onHide={toggleSidebar} />
-          </Show>
+            <Sidebar sessionID={props.sessionID} onHide={hideRightPane} />
+            </Show>
+          </box>
         </box>
       </Show>
       <Show
         when={
           !fullscreen() &&
-          rightPane() === undefined &&
-          !canvas() &&
-          !activePanel() &&
-          !selectedTerminal() &&
-          !data.session.get(props.sessionID)?.parentID
+          (rightPaneHidden() ||
+            (rightPane() === undefined &&
+              !canvas() &&
+              !activePanel() &&
+              !selectedTerminal() &&
+              !data.session.get(props.sessionID)?.parentID))
         }
       >
         <box
@@ -461,7 +497,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         >
           <HoverAction
             id="session.sidebar.show"
-            onClick={() => toggleSidebar()}
+            onClick={showRightPane}
             paddingLeft={1}
             paddingRight={1}
           >
@@ -469,10 +505,15 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           </HoverAction>
         </box>
       </Show>
-      <Show when={!fullscreen() && (rightPane() === "terminal" || rightPane() === "panel") && availableWidth() >= 3}>
+      <Show
+        when={
+          !fullscreen() &&
+          !rightPaneHidden() &&
+          rightPane() === undefined &&
+      <Show when={!fullscreen() && !rightPaneHidden() && (rightPane() === "terminal" || rightPane() === "panel") && availableWidth() >= 3}>
         <PaneResizeHandle resize={paneResize} left={availableWidth() - paneResize.size() - 1} highlight="right" />
       </Show>
-      <Show when={rightPane() === "sidebar" && !wide()}>
+      <Show when={!rightPaneHidden() && rightPane() === "sidebar" && !wide()}>
         <box
           position="absolute"
           top={0}
