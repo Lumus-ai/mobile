@@ -173,7 +173,11 @@ async function submitIdea(request: Request, env: Env) {
   if (hasSensitiveContent([title, summary, category, ...tags].join("\n")))
     return json({ error: "The idea appears to contain private or sensitive data; remove it before sharing" }, 400)
 
-  const contentHash = await hash(`${title.toLocaleLowerCase()}\n${summary.toLocaleLowerCase()}\n${category.toLocaleLowerCase()}`)
+  // Normalize Unicode before deduplication so full-width and composed text does not
+  // create separate entries for the same idea.
+  const contentHash = await hash(
+    [title, summary, category].map((part) => normalizeSearchText(part)).join("\n"),
+  )
   const duplicate = await env.DB.prepare("SELECT id, status FROM ideas WHERE content_hash = ? LIMIT 1")
     .bind(contentHash)
     .first<{ id: string; status: string }>()
@@ -277,7 +281,7 @@ async function reviewIdea(request: Request, env: Env, id: string) {
   )
     .bind(status, now, now, id)
     .run()
-  if (result.meta.changes === 0) return json({ error: "Pending idea not found or already reviewed" }, 404)
+  if (result.meta.changes === 0) return json({ error: "Idea not found or already rejected" }, 404)
   return json({ id, status })
 }
 
