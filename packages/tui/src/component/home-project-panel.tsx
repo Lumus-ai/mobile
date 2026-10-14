@@ -7,7 +7,6 @@ import { useProjects } from "../context/projects"
 import { useRoute } from "../context/route"
 import { useTheme } from "../context/theme"
 import { useT } from "../util/i18n"
-import { HoverAction } from "./hover-action"
 import { parseDodBoard, resolveDodRoot, summarizeDodBoard, type DodTask } from "../feature-plugins/sidebar/dod"
 
 const MARK: Record<string, string> = {
@@ -34,6 +33,7 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
   const projects = useProjects()
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
   const [boardRoot, setBoardRoot] = createSignal<string>()
+  const [closeHovered, setCloseHovered] = createSignal(false)
   let revision = 0
 
   const currentDirectory = () =>
@@ -126,9 +126,19 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
           borderColor={theme.border.base}
           paddingTop={1}
         >
-          <HoverAction id="home-project-panel.show" onClick={() => props.onShow?.()} paddingLeft={1} paddingRight={1}>
+          <box
+            id="home-project-panel-show"
+            flexShrink={0}
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={theme.background.raised.base}
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              props.onShow?.()
+            }}
+          >
             <text fg={theme.text.action.primary.base}>‹</text>
-          </HoverAction>
+          </box>
         </box>
       }
     >
@@ -154,9 +164,31 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
                 </text>
               </box>
               <Show when={props.onHide}>
-                <HoverAction id="home-project-panel.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
-                  <text fg={theme.text.action.primary.base}>›</text>
-                </HoverAction>
+                <box
+                  id="home-project-panel-hide"
+                  flexShrink={0}
+                  minWidth={3}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={closeHovered() ? theme.increase(theme.background.base, 4) : undefined}
+                  onMouseOver={() => setCloseHovered(true)}
+                  onMouseOut={() => setCloseHovered(false)}
+                  onMouseDown={(event) => {
+                    event.stopPropagation()
+                  }}
+                  onMouseUp={(event) => {
+                    event.stopPropagation()
+                    props.onHide?.()
+                  }}
+                >
+                  <text fg={
+                    closeHovered()
+                      ? (theme.text.action.primary.hovered ?? theme.increase(theme.text.action.primary.base, 2))
+                      : theme.text.action.primary.base
+                  }>
+                    ›
+                  </text>
+                </box>
               </Show>
             </box>
             <text fg={theme.text.muted} wrapMode="none" truncate>
