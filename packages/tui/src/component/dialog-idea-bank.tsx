@@ -33,6 +33,7 @@ type IdeaBankState = {
   autoCaptureSince: number
   autoShareSignals?: boolean
   lastSharedSignalAt?: Record<string, number>
+  lastSharedAttemptAt?: Record<string, number>
   lastProcessedBySession: Record<string, { messageID: string; createdAt: number }>
   ideas: IdeaSignal[]
   // Migration from earlier development snapshots; removed after state is next saved.
@@ -45,6 +46,7 @@ const INITIAL: IdeaBankState = {
   autoCaptureSince: 0,
   autoShareSignals: false,
   lastSharedSignalAt: {},
+  lastSharedAttemptAt: {},
   lastProcessedBySession: {},
   ideas: [],
 }
@@ -316,6 +318,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
         draft.autoCaptureSince = 0
         draft.autoShareSignals = false
         draft.lastSharedSignalAt = {}
+        draft.lastSharedAttemptAt = {}
         draft.lastProcessedBySession = {}
         draft.ideas = []
         delete draft.processedMessageIDs
@@ -441,6 +444,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
     void update((draft) => {
       draft.autoShareSignals = true
       draft.lastSharedSignalAt ??= {}
+      draft.lastSharedAttemptAt ??= {}
     }).then(() => {
       toast.show({ variant: "success", message: t("Generic global signal sharing enabled.") })
     }).catch(() => {
@@ -694,8 +698,16 @@ export function IdeaBankCapture() {
         }
         for (const signal of uniqueSignals.values()) {
           if (!state.autoCapture || !state.autoShareSignals) break
+          const now = Date.now()
           const lastSharedAt = state.lastSharedSignalAt?.[signal.id] ?? 0
-          if (Date.now() - lastSharedAt < 24 * 60 * 60 * 1000) continue
+          const lastAttemptAt = state.lastSharedAttemptAt?.[signal.id] ?? 0
+          if (now - lastSharedAt < 24 * 60 * 60 * 1000) continue
+          // Do not retry a failed network request on every chat turn.
+          if (now - lastAttemptAt < 5 * 60 * 1000) continue
+          await update((draft) => {
+            draft.lastSharedAttemptAt ??= {}
+            draft.lastSharedAttemptAt[signal.id] = now
+          })
           try {
             const base = globalBase()
             if (!base) break
