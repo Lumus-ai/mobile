@@ -67,11 +67,11 @@ const VERSION = await (async () => {
     semver.gte(candidate, MINIMUM_ANNOUNCED_VERSION)
       ? candidate
       : FALLBACK_VERSION
-  const commit = await $gitCommit()
+  const commit = await gitCommit()
   return commit ? `${base}+${commit}` : base
 })()
 
-async function $gitCommit() {
+async function gitCommit() {
   return await import { $ } from "bun"
 import semver from "semver"
 import path from "path"
