@@ -72,58 +72,15 @@ const VERSION = await (async () => {
 })()
 
 async function gitCommit() {
-  return await import { $ } from "bun"
-import semver from "semver"
-import path from "path"
-
-const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
-const rootPkg = await Bun.file(rootPkgPath).json()
-const expectedBunVersion = rootPkg.packageManager?.split("@")[1]
-
-if (!expectedBunVersion) {
-  throw new Error("packageManager field not found in root package.json")
-}
-
-// relax version requirement
-const expectedBunVersionRange = `^${expectedBunVersion}`
-
-if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
-  throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`)
-}
-
-const env = {
-  OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],
-  OPENCODE_BUMP: process.env["OPENCODE_BUMP"],
-  OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
-  OPENCODE_RELEASE: process.env["OPENCODE_RELEASE"],
-}
-const CHANNEL = await (async () => {
-  if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
-  if (env.OPENCODE_BUMP) return "latest"
-  if (env.OPENCODE_VERSION && !env.OPENCODE_VERSION.startsWith("0.0.0-")) return "latest"
-  const branch = await $`git branch --show-current`.text().then((x) => x.trim())
-  if (!branch) return "detached"
-  const channel = branch.replace(/[^a-zA-Z0-9._-]/g, "-")
-  if (/^[a-zA-Z0-9]/.test(channel)) return channel
-  return `branch-${channel}`
-})()
-const IS_PREVIEW = CHANNEL !== "latest"
-git rev-parse --short=9 HEAD`
+  return await $`git rev-parse --short=9 HEAD`
     .quiet()
     .text()
     .then((value) => value.trim() || undefined)
     .catch(() => undefined)
 }
 
-function previewBuildNumber() {
-  const runNumber = process.env["GITHUB_RUN_NUMBER"]
-  if (!runNumber) return new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")
-  const runAttempt = process.env["GITHUB_RUN_ATTEMPT"]
-  if (runAttempt && runAttempt !== "1") return `${runNumber}.${runAttempt}`
-  return runNumber
-}
+// Tags below the supported version floor and untagged checkouts use the fallback release version.
 
-// Untagged checkouts, and tags below the floor, fall back to the preview build number.
 async function releaseTagVersion() {
   const tag = await $`git describe --tags --abbrev=0`
     .text()
