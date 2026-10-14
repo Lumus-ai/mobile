@@ -244,6 +244,8 @@ test("a project is created from a name and a path", async () => {
     releaseMain = resolve
   })
   await using setup = await render(state.path, calls, [], worker, "full", { createdRosterGate, createdMainGate })
+  // The initial frame can still be scheduled while setup returns, particularly on Windows.
+  await setup.ready
 
   // without projects the tree still shows, for Multiplayer; the bottom bar offers to create the first project
   const frame = await setup.waitForFrame((frame) => frame.includes("+ Project"))
