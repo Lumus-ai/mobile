@@ -56,6 +56,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const [frameWidth, setFrameWidth] = createSignal(Math.max(0, dimensions().width - props.verticalTabsWidth))
   const availableWidth = () => frameWidth()
   const [canvasHostWidth, setCanvasHostWidth] = createSignal(availableWidth())
+  const [sessionPaneWidth, setSessionPaneWidth] = createSignal<number>()
   const compactLayout = useCompactLayout()
   const defaultPaneWidth = () => defaultSessionPaneWidth(panels.width(), compactLayout.compact())
   const [layout, updateLayout] = useStorage().store<{
@@ -441,6 +442,10 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         <box
           id="session-pane"
           ref={(value: BoxRenderable) => (sessionNode = value)}
+          onSizeChange={function () {
+            // Track the actual flex allocation when Notes mode closes its canvas.
+            setSessionPaneWidth(this.width)
+          }}
           flexGrow={canvas() && !stacked() ? 0 : canvas() ? 2 : 1}
           flexBasis={canvas() && !stacked() ? undefined : 0}
           minWidth={0}
@@ -468,7 +473,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={sessionTranscriptWidthValue()}
+              width={sessionPaneWidth() ?? sessionTranscriptWidthValue()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>
