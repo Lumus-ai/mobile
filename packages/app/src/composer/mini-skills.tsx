@@ -164,17 +164,17 @@ export function ComposerMiniSkills(props: ParentProps<{ model: ComposerModel }>)
       instruction,
     }
 
-    setSettings(
-      "items",
-      editingID
+    setSettings({
+      ...settings,
+      items: editingID
         ? settings.items.map((current) => (current.id === editingID ? item : current))
         : [...settings.items, item],
-    )
+    })
     setUI({ editorOpen: false, editingID: undefined, draftLabel: "", draftIcon: "✨", draftInstruction: "" })
   }
 
   function removeItem(id: string) {
-    setSettings("items", settings.items.filter((item) => item.id !== id))
+    setSettings({ ...settings, items: settings.items.filter((item) => item.id !== id) })
     if (ui.selectedID === id) setUI({ selectedID: undefined, additionalText: "" })
     if (ui.editingID === id) setUI({ editorOpen: false, editingID: undefined })
   }
@@ -190,7 +190,7 @@ export function ComposerMiniSkills(props: ParentProps<{ model: ComposerModel }>)
     if (!current || !adjacent) return
     items[from] = adjacent
     items[to] = current
-    setSettings("items", items)
+    setSettings({ ...settings, items })
   }
 
   const MiniSkillBar = () => (
@@ -391,7 +391,10 @@ export function ComposerMiniSkills(props: ParentProps<{ model: ComposerModel }>)
               class={INPUT_CLASS + " w-fit"}
               value={settings.placement}
               onChange={(event) =>
-                setSettings("placement", event.currentTarget.value === "below" ? "below" : "above")
+                setSettings({
+                  ...settings,
+                  placement: event.currentTarget.value === "below" ? "below" : "above",
+                })
               }
             >
               <option value="above">{language.t("composer.miniSkills.position.above")}</option>
