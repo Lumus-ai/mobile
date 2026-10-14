@@ -58,6 +58,10 @@ export function clampSessionPaneWidth(width: number, total: number) {
   return Math.max(min, Math.min(width, max))
 }
 
+export function resolveSessionPaneWidth(measured: number, initial: number) {
+  return measured > 0 ? measured : initial
+}
+
 export function sessionTranscriptWidth(input: {
   availableWidth: number
   hasCanvas: boolean

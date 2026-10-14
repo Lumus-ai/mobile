@@ -27,6 +27,7 @@ import {
   clampSessionSidebarWidth,
   defaultSessionPaneWidth,
   noteCanvasFlexGrow,
+  resolveSessionPaneWidth,
   sessionPanesStacked,
   sessionTranscriptWidth,
   sessionSidebarDocks,
@@ -223,6 +224,13 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       fullscreenContentWidth: Math.max(0, panels.width() - paneResize.size()),
       fullscreen: fullscreen(),
     })
+
+  // The center frame shrinks/grows when the right panel is docked or when a note
+  // canvas is closed. Its real allocation is authoritative; saved widths are only
+  // a fallback before OpenTUI emits the first size event.
+  const [measuredSessionPaneWidth, setMeasuredSessionPaneWidth] = createSignal(0)
+  const transcriptWidth = () =>
+    resolveSessionPaneWidth(measuredSessionPaneWidth(), initialSessionTranscriptWidth())
 
   const toggleSidebar = () => {
     batch(() => {
@@ -443,6 +451,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         <box
           id="session-pane"
           ref={(value: BoxRenderable) => (sessionNode = value)}
+          onSizeChange={function () {
+            setMeasuredSessionPaneWidth(this.width)
+          }}
           flexGrow={canvas() && !stacked() ? 0 : canvas() ? 2 : 1}
           flexBasis={canvas() && !stacked() ? undefined : 0}
           minWidth={0}
@@ -470,7 +481,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={initialSessionTranscriptWidth()}
+              width={transcriptWidth()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>

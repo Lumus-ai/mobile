@@ -10,6 +10,7 @@ import {
   homeProjectPanelWidth,
   sessionPanesStacked,
   sessionSidebarDocks,
+  resolveSessionPaneWidth,
   sessionTranscriptWidth,
   sessionTabsFitVertically,
   SESSION_SIDEBAR_MAX_WIDTH,
@@ -209,4 +210,10 @@ test("transcript width follows the active note split and visible side rail", () 
       revealRailVisible: true,
     }),
   ).toBe(107)
+})
+
+test("the actual session pane width supersedes the initial estimate after reflow", () => {
+  expect(resolveSessionPaneWidth(0, 72)).toBe(72)
+  expect(resolveSessionPaneWidth(38, 72)).toBe(38)
+  expect(resolveSessionPaneWidth(74, 72)).toBe(74)
 })
