@@ -344,6 +344,49 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   ),
 
+  it.live("forgetting a project releases only its outstanding task reservations and keeps sessions", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-forget-tasks-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Forgotten tasks", directory: tmp.path, template: "bugfix" })
+      const other = yield* orchestra.create({ name: "Other project", directory: tmp.path, template: "bugfix" })
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+      const otherWorker = (yield* orchestra.sessions(other.id)).find((session) => session.title === "Developer")!
+
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          suppressTerminalEvent.add(worker.id)
+          suppressTerminalEvent.add(otherWorker.id)
+        }),
+        () =>
+          Effect.sync(() => {
+            suppressTerminalEvent.delete(worker.id)
+            suppressTerminalEvent.delete(otherWorker.id)
+          }),
+      )
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Finish the forgotten project task" })
+      yield* orchestra.dispatch({ project: other, sessionID: otherWorker.id, text: "Finish the other project task" })
+      yield* Effect.sleep("50 millis")
+      expect(yield* orchestra.pending(worker.id)).toBeNumber()
+      expect(yield* orchestra.pending(otherWorker.id)).toBeNumber()
+
+      yield* orchestra.remove(project.id)
+
+      // Removing a project forgets its coordination records, not the chat history or sessions.
+      expect(yield* orchestra.pending(worker.id)).toBeUndefined()
+      expect(yield* sessions.get(worker.id)).toMatchObject({ id: worker.id })
+      expect(yield* sessions.get(project.main!)).toMatchObject({ id: project.main })
+      expect(yield* orchestra.owners()).not.toHaveProperty(worker.id)
+
+      // Reservations belonging to a different project survive.
+      expect(yield* orchestra.pending(otherWorker.id)).toBeNumber()
+      expect(yield* sessions.get(other.main!)).toMatchObject({ id: other.main })
+      expect((yield* orchestra.projects()).map((item) => item.id)).toContain(other.id)
+      expect((yield* orchestra.projects()).map((item) => item.id)).not.toContain(project.id)
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("does not resolve a removed project's main session as a live orchestrator", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-forgotten-main-")))

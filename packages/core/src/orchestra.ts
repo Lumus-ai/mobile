@@ -1426,7 +1426,32 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           Effect.gen(function* () {
             yield* mainLocks.withLock(id)(
               Effect.gen(function* () {
-                yield* get(id)
+                const project = yield* get(id)
+                // Forgetting a project keeps its sessions, but outstanding task reservations
+                // belong to the project lifecycle. Release only this project's tasks so a
+                // surviving worker can be claimed by another project instead of staying blocked.
+                // Lock project -> worker, matching dispatch(), and re-read each marker under lock
+                // because its terminal report may have completed since the initial scan.
+                const tasks = yield* scanAll(TASK)
+                const ownedTasks = tasks.flatMap((entry) => {
+                  const task = decodeTask(entry.value)
+                  if (Option.isNone(task)) return []
+                  if (task.value.projectID !== id && task.value.main !== project.main) return []
+                  return [{ key: entry.key, sessionID: SessionID.make(entry.key.slice(TASK.length)) }]
+                })
+                yield* Effect.forEach(
+                  ownedTasks,
+                  (item) =>
+                    dispatchLocks.withLock(item.sessionID)(
+                      Effect.gen(function* () {
+                        const current = decodeTask(yield* kv.get(item.key))
+                        if (Option.isNone(current)) return
+                        if (current.value.projectID !== id && current.value.main !== project.main) return
+                        yield* kv.remove(item.key)
+                      }),
+                    ),
+                  { concurrency: 1, discard: true },
+                )
                 yield* kv.remove(MAIN_INITIALIZING + id)
                 yield* kv.remove(PROJECT + id)
                 yield* kv.remove(TEAM_PLAN + id)
