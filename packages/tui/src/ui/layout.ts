@@ -73,7 +73,7 @@ export function clampSessionSidebarWidth(width: number, total: number) {
 // Full layout uses the normal-width sidebar, but may dock it once the chat can still
 // retain its readable minimum. Otherwise the sidebar remains available via its toggle.
 export const SESSION_TABS_COMPACT_LAYOUT_WIDTH = 34
-export const SESSION_SIDEBAR_COMPACT_WIDTH = 32
+export const SESSION_SIDEBAR_COMPACT_WIDTH = 38
 const SESSION_SIDEBAR_DOCK_GUTTER = 8
 const COMPACT_LAYOUT_AUTO_FROM = 110
 const COMPACT_LAYOUT_AUTO_BELOW = 170

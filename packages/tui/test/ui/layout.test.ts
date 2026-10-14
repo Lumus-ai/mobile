@@ -52,8 +52,8 @@ test("the session sidebar docks beside a readable chat at laptop widths", () => 
   expect(sessionSidebarDocks(94, false)).toBe(true)
   expect(sessionSidebarDocks(93, false)).toBe(false)
   expect(sessionSidebarDocks(98, false)).toBe(true)
-  expect(sessionSidebarDocks(96, true)).toBe(true)
-  expect(sessionSidebarDocks(95, true)).toBe(false)
+  expect(sessionSidebarDocks(102, true)).toBe(true)
+  expect(sessionSidebarDocks(101, true)).toBe(false)
 })
 
 test("home project panel respects width bounds and preserves usable prompt space", () => {
