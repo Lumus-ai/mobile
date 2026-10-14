@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useData } from "../context/data"
 import type { PromptRef } from "../component/prompt"
 import { appendPrompt, emptyPrompt } from "../prompt/history"
@@ -23,6 +23,7 @@ export type IdeaSignal = {
   createdAt: number
   updatedAt: number
   starter?: boolean
+  global?: boolean
   nextStep?: string
 }
 
@@ -158,7 +159,62 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
   const prompt = props.prompt
   // The bundled ideas make the bank useful before any private-session signals are collected.
   // They are inspiration only: no market demand or novelty is claimed to have been verified.
-  const ideas = createMemo(() => [...(state.ideas ?? []), ...STARTER_IDEAS].sort((a, b) => {
+  const globalBase = () => process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\\/+$/, "")
+  const [globalIdeas, setGlobalIdeas] = createSignal<IdeaSignal[]>([])
+  const [globalStatus, setGlobalStatus] = createSignal<"loading" | "connected" | "not-configured" | "error">("loading")
+  const [globalTotal, setGlobalTotal] = createSignal(0)
+  const [shareArmed, setShareArmed] = createSignal<string>()
+
+  const loadGlobalIdeas = async () => {
+    const base = globalBase()
+    if (!base) {
+      setGlobalStatus("not-configured")
+      return
+    }
+    setGlobalStatus("loading")
+    try {
+      const response = await fetch(new URL("/v1/ideas?limit=50", base), { signal: AbortSignal.timeout(8_000) })
+      const payload: unknown = await response.json()
+      if (!response.ok) throw new Error("Global Idea Bank returned HTTP " + response.status)
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid global bank response")
+      const data = payload as Record<string, unknown>
+      const rows = Array.isArray(data.items) ? data.items : []
+      const normalized = rows.flatMap((value): IdeaSignal[] => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return []
+        const item = value as Record<string, unknown>
+        if (
+          typeof item.id !== "string" ||
+          typeof item.title !== "string" ||
+          typeof item.summary !== "string" ||
+          typeof item.category !== "string"
+        )
+          return []
+        return [{
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          kind: "Community idea",
+          description: item.summary,
+          signalCount: 0,
+          createdAt: typeof item.createdAt === "number" ? item.createdAt : 0,
+          updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : 0,
+          global: true,
+        }]
+      })
+      setGlobalIdeas(normalized)
+      setGlobalTotal(typeof data.total === "number" ? data.total : normalized.length)
+      setGlobalStatus("connected")
+    } catch {
+      setGlobalIdeas([])
+      setGlobalTotal(0)
+      setGlobalStatus("error")
+    }
+  }
+
+  onMount(() => void loadGlobalIdeas())
+
+  const ideas = createMemo(() => [...globalIdeas(), ...(state.ideas ?? []), ...STARTER_IDEAS].sort((a, b) => {
+    if (a.global !== b.global) return a.global ? -1 : 1
     if (a.starter !== b.starter) return a.starter ? 1 : -1
     return b.signalCount - a.signalCount || b.updatedAt - a.updatedAt
   }))
@@ -167,6 +223,19 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
   // The dialog is wider and centered, so give its idea list more room while
   // reserving enough rows for the header, privacy notes, counters, and footer.
   const bodyHeight = () => Math.max(4, Math.min(24, dimensions().height - 20))
+
+  const globalStatusText = () => {
+    switch (globalStatus()) {
+      case "loading":
+        return t("Connecting to global bank…")
+      case "connected":
+        return t("Global bank connected") + " · " + globalTotal()
+      case "not-configured":
+        return t("Global bank not configured. Set OPENCODE_IDEA_BANK_URL to use the shared catalogue.")
+      case "error":
+        return t("Global bank unavailable; local ideas are still available.")
+    }
+  }
 
   const clearLocalData = async () => {
     if (!clearArmed()) {
@@ -211,6 +280,52 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
     dialog.clear()
     toast.show({ variant: "info", message: t("Idea added to prompt; review it and send when ready") })
   }
+  const shareIdea = async (idea: IdeaSignal) => {
+    const base = globalBase()
+    if (!base) {
+      toast.show({ variant: "error", message: t("Global Idea Bank is not connected.") })
+      setGlobalStatus("not-configured")
+      return
+    }
+    if (idea.global) {
+      toast.show({ variant: "info", message: t("This idea is already in the global bank.") })
+      return
+    }
+    if (shareArmed() !== idea.id) {
+      setShareArmed(idea.id)
+      toast.show({ variant: "info", message: t("Click share again to submit this idea for public moderation.") })
+      return
+    }
+    setShareArmed(undefined)
+    try {
+      const response = await fetch(new URL("/v1/ideas", base), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          consent: true,
+          title: idea.title,
+          summary: idea.description,
+          category: idea.category,
+          tags: [idea.category, idea.kind].map((value) => value.toLowerCase()).slice(0, 8),
+          language: "en",
+        }),
+        signal: AbortSignal.timeout(8_000),
+      })
+      const payload: unknown = await response.json()
+      const data = payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : {}
+      if (!response.ok) {
+        const message = typeof data.error === "string" ? data.error : t("Could not submit to global Idea Bank")
+        toast.show({ variant: "error", message })
+        return
+      }
+      toast.show({ variant: "success", message: t("Idea submitted for moderation; it is not public yet.") })
+    } catch {
+      toast.show({ variant: "error", message: t("Could not submit to global Idea Bank") })
+    }
+  }
+
   const toggleCapture = () => {
     const enabled = !state.autoCapture
     void update((draft) => {
@@ -260,10 +375,13 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
         </text>
       </Show>
       <text fg={theme.text.muted} wrapMode="word">
-        {t("Local-only MVP: no extra LLM/API calls. The bank stores broad categories and local processing cursors; original chat text is not sent to external services. Enabling applies to future messages only.")}
+        {t("Local capture stays on this computer. Global search reads published ideas; chat text is never uploaded automatically.")}
       </text>
       <text fg={theme.text.muted} wrapMode="word">
         {t("Starter ideas are unverified prompts for exploration, not claims of market demand or originality.")}
+      </text>
+      <text fg={globalStatus() === "connected" ? theme.text.feedback.success.base : theme.text.muted} wrapMode="word">
+        {globalStatusText()}
       </text>
       <box flexDirection="row" gap={2}>
         <text fg={theme.text.muted}>{t("Potential directions")}: {ideas().length}</text>
@@ -296,7 +414,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
                 </box>
                 <text fg={theme.text.muted} wrapMode="word">{t(idea.description)}</text>
                 <text fg={idea.starter ? theme.text.muted : theme.text.action.primary.base} wrapMode="word">
-                  {idea.starter ? t("Starter idea · unverified") : t("Detected pattern · not a validated idea")}
+                  {idea.global ? t("Public idea from the global bank") : idea.starter ? t("Starter idea · unverified") : t("Detected pattern · not a validated idea")}
                 </text>
                 <text fg={theme.text.muted} wrapMode="word">
                   {t(idea.category)} · {t(idea.kind)}
@@ -304,7 +422,19 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
                 <Show when={idea.nextStep}>
                   {(step) => <text fg={theme.text.muted} wrapMode="word">{t("Next step")}: {t(step())}</text>}
                 </Show>
-                <box flexDirection="row" justifyContent="flex-end">
+                <box flexDirection="row" justifyContent="flex-end" gap={1}>
+                  <Show when={!idea.global}>
+                    <HoverAction
+                      id={"idea-bank.share." + idea.id}
+                      onClick={() => void shareIdea(idea)}
+                      paddingLeft={1}
+                      paddingRight={1}
+                    >
+                      <text fg={shareArmed() === idea.id ? theme.text.feedback.warning.base : theme.text.muted}>
+                        {shareArmed() === idea.id ? t("Confirm public share") : t("Share globally")}
+                      </text>
+                    </HoverAction>
+                  </Show>
                   <HoverAction
                     id={"idea-bank.use." + idea.id}
                     onClick={() => useIdea(idea)}
@@ -321,7 +451,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
         </scrollbox>
       </Show>
       <text fg={theme.text.muted} wrapMode="word">
-        {t("This first version keeps ideas on this computer. Shared publishing and deep research are not connected yet.")}
+        {t("The global bank shows approved ideas. Shared contributions stay pending until a moderator approves them.")}
       </text>
     </box>
   )
