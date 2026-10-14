@@ -56,6 +56,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const [frameWidth, setFrameWidth] = createSignal(Math.max(0, dimensions().width - props.verticalTabsWidth))
   const availableWidth = () => frameWidth()
   const [canvasHostWidth, setCanvasHostWidth] = createSignal(availableWidth())
+  const [sessionPaneWidth, setSessionPaneWidth] = createSignal<number>()
   const compactLayout = useCompactLayout()
   const defaultPaneWidth = () => defaultSessionPaneWidth(panels.width(), compactLayout.compact())
   const [layout, updateLayout] = useStorage().store<{
@@ -93,8 +94,11 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     value: () => layout.sidebarWidth ?? defaultSidebarWidth(),
     defaultValue: defaultSidebarWidth,
     clamp: (width) => clampSessionSidebarWidth(width, panels.width()),
-    fromMouse: (event) => dimensions().width - event.x - 1,
-    contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
+    fromMouse: (event) => frameWidth() - (event.x - props.verticalTabsWidth) - 1,
+    contains: (event, width) => {
+      const boundary = props.verticalTabsWidth + frameWidth() - width
+      return event.x >= boundary - 1 && event.x <= boundary
+    },
     onCommit: (width) => {
       void updateLayout((draft) => {
         draft.sidebarWidth = width
@@ -107,8 +111,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     value: () => layout.noteChatWidth ?? defaultNoteChatWidth(),
     defaultValue: defaultNoteChatWidth,
     clamp: (width) => clampNoteChatWidth(width, canvasHostWidth()),
-    // Mouse coordinates are terminal-global; subtract the note/chat divider position
-    // from the right edge of the actual split container, not the entire terminal.
+    // Mouse coordinates are terminal-global; translate x to this split container before resizing.
     fromMouse: (event) => canvasHostWidth() - (event.x - props.verticalTabsWidth) - 1,
     contains: (event, width) => {
       const boundary = props.verticalTabsWidth + canvasHostWidth() - width
@@ -122,30 +125,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   })
   const rightPaneResize = () => (rightPane() === "sidebar" ? sidebarResize : paneResize)
 
-  const sessionTranscriptWidthValue = createMemo(() =>
-    sessionTranscriptWidth({
-      availableWidth: availableWidth(),
-      hasCanvas: canvas() !== undefined,
-      stacked: stacked(),
-      canvasHostWidth: canvasHostWidth(),
-      noteChatWidth: noteChatResize.size(),
-      rightPaneVisible:
-        !rightPaneHidden() &&
-        (rightPane() === "terminal" || rightPane() === "panel" || (rightPane() === "sidebar" && wide())),
-      rightPaneWidth: rightPaneResize().size(),
-      revealRailVisible:
-        !fullscreen() &&
-        (rightPaneHidden() ||
-          (rightPane() === undefined &&
-            !canvas() &&
-            !activePanel() &&
-            !selectedTerminal() &&
-            !data.session.get(props.sessionID)?.parentID)),
-      revealRailWidth: 3,
-      fullscreenContentWidth: Math.max(0, panels.width() - paneResize.size()),
-      fullscreen: fullscreen(),
-    }),
-  )
   let resizeRelease = false
   const finishPaneResize = (event: MouseEvent) => {
     if (paneResize.resizing() || sidebarResize.resizing() || noteChatResize.resizing()) {
@@ -218,6 +197,32 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     if (selectedTerminal()) return "terminal"
     if (sidebarVisible()) return "sidebar"
   })
+
+  const sessionTranscriptWidthValue = createMemo(() =>
+    sessionTranscriptWidth({
+      availableWidth: availableWidth(),
+      hasCanvas: canvas() !== undefined,
+      stacked: stacked(),
+      canvasHostWidth: canvasHostWidth(),
+      noteChatWidth: noteChatResize.size(),
+      rightPaneVisible:
+        !rightPaneHidden() &&
+        (rightPane() === "terminal" || rightPane() === "panel" || (rightPane() === "sidebar" && wide())),
+      rightPaneWidth: rightPaneResize().size(),
+      revealRailVisible:
+        !fullscreen() &&
+        (rightPaneHidden() ||
+          (rightPane() === undefined &&
+            !canvas() &&
+            !activePanel() &&
+            !selectedTerminal() &&
+            !data.session.get(props.sessionID)?.parentID)),
+      revealRailWidth: 3,
+      fullscreenContentWidth: Math.max(0, panels.width() - paneResize.size()),
+      fullscreen: fullscreen(),
+    }),
+  )
+
   const toggleSidebar = () => {
     batch(() => {
       const visible = rightPane() === "sidebar"
@@ -437,6 +442,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         <box
           id="session-pane"
           ref={(value: BoxRenderable) => (sessionNode = value)}
+          onSizeChange={function () {
+            setSessionPaneWidth(this.width)
+          }}
           flexGrow={canvas() && !stacked() ? 0 : canvas() ? 2 : 1}
           flexBasis={canvas() && !stacked() ? undefined : 0}
           minWidth={0}
@@ -464,7 +472,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={sessionTranscriptWidthValue()}
+              width={sessionPaneWidth() ?? sessionTranscriptWidthValue()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>
