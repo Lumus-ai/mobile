@@ -243,7 +243,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
 
   const ideas = createMemo(() => {
     const query = globalQuery().normalize("NFKC").toLocaleLowerCase().trim()
-    const terms = query.split(/\\s+/u).filter(Boolean)
+    const terms = query.split(/\s+/u).filter(Boolean)
     return [...globalIdeas(), ...(state.ideas ?? []), ...STARTER_IDEAS]
       .filter((idea) => {
         if (terms.length === 0) return true
