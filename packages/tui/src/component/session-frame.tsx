@@ -386,39 +386,35 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           setCanvasHostWidth(this.width)
         }}
       >
-        {/* Always mounted and only hidden, so the session pane next to it never re-anchors. */}
-        <box
-          id="note-canvas"
-          visible={canvas() !== undefined}
-          flexGrow={noteCanvasFlexGrow(canvas() !== undefined, stacked())}
-          flexBasis={canvas() && !stacked() ? undefined : 0}
-          width={
-            canvas()
-              ? stacked()
-                ? "100%"
-                : Math.max(0, canvasHostWidth() - noteChatResize.size())
-              : 0
-          }
-          minWidth={0}
-          minHeight={0}
-          border={[stacked() ? "bottom" : "right"]}
-          borderColor={theme.border.base}
-        >
-          {/* Another note gets a fresh document, never the editor state of the previous one. */}
-          <Show when={canvas()?.name} keyed>
-            {(_) => (
-              <Show when={canvas()}>
-                {(note) => (
-                  <NoteCanvas
-                    sessionID={props.sessionID}
-                    note={note()}
-                    directory={data.session.get(props.sessionID)?.location.directory ?? ""}
-                  />
-                )}
-              </Show>
-            )}
-          </Show>
-        </box>
+        {/* Remove the document column from flex layout when switching back to Projects.
+            OpenTUI's visible=false hides drawing, but the box can still reserve width. */}
+        <Show when={canvas() !== undefined}>
+          <box
+            id="note-canvas"
+            flexGrow={noteCanvasFlexGrow(true, stacked())}
+            flexBasis={stacked() ? 0 : undefined}
+            width={stacked() ? "100%" : Math.max(0, canvasHostWidth() - noteChatResize.size())}
+            minWidth={0}
+            minHeight={0}
+            border={[stacked() ? "bottom" : "right"]}
+            borderColor={theme.border.base}
+          >
+            {/* Another note gets a fresh document, never the editor state of the previous one. */}
+            <Show when={canvas()?.name} keyed>
+              {(_) => (
+                <Show when={canvas()}>
+                  {(note) => (
+                    <NoteCanvas
+                      sessionID={props.sessionID}
+                      note={note()}
+                      directory={data.session.get(props.sessionID)?.location.directory ?? ""}
+                    />
+                  )}
+                </Show>
+              )}
+            </Show>
+          </box>
+        </Show>
         <box
           id="session-pane"
           ref={(value: BoxRenderable) => (sessionNode = value)}
