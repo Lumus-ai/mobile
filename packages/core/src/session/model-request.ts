@@ -248,11 +248,15 @@ export const layer = Layer.effect(
       // the built-in OpenCode provider, while Tool.snapshot.execute still enforces local policy.
       // This does not grant permission to execute either tool: hidden tools are not present in the
       // snapshot's active executor maps.
-      const compatibility = model.ref.providerID === "opencode" ? (tools.compatibilityDefinitions ?? []) : []
+      const zenCompatibility = model.ref.providerID === "opencode"
+        ? [...(tools.codeModeDefinitions ?? []), ...(tools.compatibilityDefinitions ?? [])]
+        : []
       const advertised = [
         ...tools.definitions,
-        ...compatibility.filter((candidate) => !tools.definitions.some((tool) => tool.name === candidate.name)),
+        ...zenCompatibility.filter((candidate) => !tools.definitions.some((tool) => tool.name === candidate.name)),
       ]
+      const deniedCompatibility =
+        model.ref.providerID === "opencode" ? (tools.compatibilityDefinitions ?? []) : []
       // Remember which tool each definition object came from. Hooks rename a tool by moving
       // its definition to a new key, so after the hook we find the tool by object identity.
       const given = new Map(
@@ -275,20 +279,18 @@ export const layer = Layer.effect(
       )
       // Match by identity first, then by key. Entries matching neither were invented by a
       // hook and are dropped. `t.name` stays the real name so execution can map renames back.
-      const byName = new Map(tools.definitions.map((t) => [t.name, t]))
+      const byName = new Map(advertised.map((t) => [t.name, t]))
       const hooked = new Map(
         Object.entries(shaped.tools ?? {}).flatMap(([name, d]) => {
           const t = given.get(d) ?? byName.get(name)
           return t ? [[name, { ...t, description: d.description, inputSchema: d.input }] as const] : []
         }),
       )
-      // Context hooks may intentionally trim the advertised tool set. Re-add only the two
-      // compatibility schemas for the OpenCode provider after hooks run; the original snapshot
-      // executor still rejects calls to tools removed by permissions.
-      if (model.ref.providerID === "opencode") {
-        for (const candidate of compatibility) {
-          if (!hooked.has(candidate.name)) hooked.set(candidate.name, candidate)
-        }
+      // Context hooks may intentionally trim active CodeMode tools. Do not re-add those here.
+      // Only restore denied schemas for Zen's brittle tool-list validator; Tool.snapshot.execute
+      // has no executor for them, so a model cannot use this as a permission bypass.
+      for (const candidate of deniedCompatibility) {
+        if (!hooked.has(candidate.name)) hooked.set(candidate.name, candidate)
       }
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
