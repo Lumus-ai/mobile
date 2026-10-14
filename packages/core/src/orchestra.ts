@@ -87,9 +87,9 @@ export interface Interface {
   // Forgets the project; its sessions and its main session stay.
   readonly remove: (id: ProjectID) => Effect.Effect<void, ProjectNotFoundError>
   // The project's stable main session. Repairs legacy projects which predate eager creation.
-  readonly main: (id: ProjectID) => Effect.Effect<SessionSchema.Info, ProjectNotFoundError | Dod.DodError>
+  readonly main: (id: ProjectID) => Effect.Effect<SessionSchema.Info, ProjectNotFoundError | Dod.DodError | ProjectMoveError>
   // Top-level sessions the project owns (see ownerOf), every project's main session excluded.
-  readonly sessions: (id: ProjectID) => Effect.Effect<ReadonlyArray<SessionSchema.Info>, ProjectNotFoundError>
+  readonly sessions: (id: ProjectID) => Effect.Effect<ReadonlyArray<SessionSchema.Info>, ProjectNotFoundError | ProjectMoveError | Dod.DodError>
   // Whether a session belongs to the project, so the orchestrator never reaches another project's team.
   readonly owns: (project: Project, session: SessionSchema.Info) => Effect.Effect<boolean>
   // Which project opened each session that a project opened, by session ID.
@@ -1102,7 +1102,7 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           Effect.gen(function* () {
             const current = decodeProject(yield* kv.get(PROJECT + candidate.id))
             if (Option.isNone(current) || current.value.main !== sessionID) return undefined
-            const project = yield* reconcileProjectMoveUnlocked(current.value)
+            const project = yield* reconcileProjectMoveUnlocked(current.value).pipe(Effect.orDie)
             yield* reconcileTeamUnlocked(project)
             yield* recoverPending(sessionID)
             return project
