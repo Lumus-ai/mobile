@@ -97,10 +97,18 @@ export function sessionTranscriptWidth(input: {
   fullscreen: boolean
 }) {
   if (input.fullscreen) return Math.max(0, input.fullscreenContentWidth)
+  // In a horizontal note layout, the saved divider explicitly controls the chat width.
   if (input.hasCanvas && !input.stacked) return Math.max(0, input.noteChatWidth)
-  // canvasHostWidth is the measured center column after OpenTUI has allocated
-  // space to the right-hand sibling. Do not subtract the panel a second time.
-  return Math.max(0, input.canvasHostWidth)
+
+  // availableWidth is the measured full SessionFrame width; its right pane is a
+  // sibling of the chat host. canvasHostWidth can retain an old Notes measurement
+  // after switching tabs, so never use it to size the Projects chat.
+  const occupiedRight = input.rightPaneVisible
+    ? input.rightPaneWidth
+    : input.revealRailVisible
+      ? input.revealRailWidth
+      : 0
+  return Math.max(0, input.availableWidth - occupiedRight)
 }
 
 export function clampSessionSidebarWidth(width: number, total: number) {
