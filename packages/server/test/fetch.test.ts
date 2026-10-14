@@ -5,7 +5,8 @@ import path from "node:path"
 import { Agent } from "@opencode/schema/agent"
 import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Exit, Layer, Schedule, Schema, Scope } from "effect"
+import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Session } from "@opencode/schema/session"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -18,6 +19,34 @@ const options = {
   models: { fetch: false },
   fs: { filewatcher: false },
 } as const
+
+it.live("cancels boot recovery when the fetch application scope closes", () =>
+  Effect.gen(function* () {
+    const scope = yield* Scope.make()
+    let started = false
+    let interrupted = false
+    const restart = SessionRestart.Service.of({
+      resumeSuspendedSessions: Effect.sync(() => {
+        started = true
+      }).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() => Effect.sync(() => (interrupted = true))),
+      ),
+    })
+
+    yield* ServerFetch.make(options, {
+      overrides: [SessionRestart.node.replace(Layer.succeed(SessionRestart.Service, restart))],
+    }).pipe(Effect.provideService(Scope.Scope, scope))
+
+    // Wait until the scoped startup fiber has actually started before closing its owner.
+    yield* Effect.gen(function* () {
+      if (!started) return yield* Effect.fail(new Error("startup recovery did not start"))
+    }).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("1 second"))
+
+    yield* Scope.close(scope, Exit.void)
+    expect(interrupted).toBe(true)
+  }).pipe(Effect.scoped),
+)
 
 it.live("returns LocationNotFoundError for a missing folder and recovers once it exists", () =>
   Effect.gen(function* () {

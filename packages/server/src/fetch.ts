@@ -47,7 +47,7 @@ export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOpti
   // may have been lost. Suspended/active workers are skipped by the Orchestra recovery sweep.
   const restart = Context.get(context, SessionRestart.Service)
   const orchestra = Context.get(context, Orchestra.Service)
-  yield* Effect.forkDetach(restart.resumeSuspendedSessions.pipe(Effect.andThen(orchestra.recoverPendingTasks())))
+  yield* Effect.forkScoped(restart.resumeSuspendedSessions.pipe(Effect.andThen(orchestra.recoverPendingTasks())))
   return Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(
