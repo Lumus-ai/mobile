@@ -176,9 +176,27 @@ async function submitIdea(request: Request, env: Env) {
   const duplicate = await env.DB.prepare("SELECT id, status FROM ideas WHERE content_hash = ? LIMIT 1")
     .bind(contentHash)
     .first<{ id: string; status: string }>()
+
+
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown"
+  const salt = env.RATE_LIMIT_SALT
+  const submitterHash = await hash(`${salt}:${ip}`)
+  const now = Date.now()
+  // Atomic per-IP daily counter: duplicate signals count too, so they cannot bypass the limit.
+  const windowStart = Math.floor(now / (24 * 60 * 60 * 1000))
+  const quota = await env.DB.prepare(
+    `INSERT INTO submission_rate_limits (submitter_hash, window_start, count)
+     VALUES (?, ?, 1)
+     ON CONFLICT (submitter_hash, window_start)
+     DO UPDATE SET count = count + 1 WHERE count < 5
+     RETURNING count`,
+  )
+    .bind(submitterHash, windowStart)
+    .first<{ count: number }>()
+  if (!quota) return json({ error: "Contribution limit reached for today; try again tomorrow" }, 429)
+
   if (duplicate) {
     if (duplicate.status === "published") {
-      const now = Date.now()
       await env.DB.prepare(
         "UPDATE ideas SET signal_count = signal_count + 1, updated_at = ? WHERE id = ? AND status = 'published'",
       )
@@ -196,19 +214,6 @@ async function submitIdea(request: Request, env: Env) {
     }
     return json({ error: "A matching idea already exists", existingId: duplicate.id, status: duplicate.status }, 409)
   }
-
-  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown"
-  const salt = env.RATE_LIMIT_SALT
-  const submitterHash = await hash(`${salt}:${ip}`)
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000
-  const recent = await env.DB.prepare(
-    "SELECT COUNT(*) AS total FROM ideas WHERE submitter_hash = ? AND created_at >= ?",
-  )
-    .bind(submitterHash, dayAgo)
-    .first<{ total: number }>()
-  if ((recent?.total ?? 0) >= 5) return json({ error: "Contribution limit reached; try again later" }, 429)
-
-  const now = Date.now()
   const id = crypto.randomUUID()
   await env.DB.prepare(
     `INSERT INTO ideas
