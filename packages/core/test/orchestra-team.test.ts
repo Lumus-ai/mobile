@@ -295,8 +295,8 @@ describe("Orchestra team", () => {
       // the claim sees ProjectNotFoundError. Neither schedule may leave a dangling owner key.
       yield* Effect.all(
         {
-          claim: orchestra.claim(worker.id, project.id).pipe(Effect.either),
-          remove: orchestra.remove(project.id).pipe(Effect.either),
+          claim: orchestra.claim(worker.id, project.id).pipe(Effect.orElseSucceed(() => undefined)),
+          remove: orchestra.remove(project.id).pipe(Effect.orElseSucceed(() => undefined)),
         },
         { concurrency: "unbounded" },
       )
