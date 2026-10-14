@@ -5,7 +5,6 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect, Option, Schema } from "effect"
 import { Orchestra } from "../../orchestra.js"
-import { AbsolutePath } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import type { SessionMessage } from "../../session/message.js"
@@ -227,20 +226,19 @@ export const Plugin = {
                   // A role without its own model runs on the orchestrator's, the one the operator picked,
                   // rather than the server's first catalog model.
                   const main = yield* sessions.get(context.sessionID).pipe(Effect.option)
-                  // Claimed first, so the new member never shows up in another project's team.
-                  const id = SessionSchema.ID.create()
-                  yield* orchestra.claim(id, project.id).pipe(Effect.orDie)
-                  const created = yield* sessions
-                    .create({
-                      id,
-                      location: { directory: AbsolutePath.make(project.directory) },
+                  // The core service holds the project lifecycle lock across ownership, creation,
+                  // access and category writes; removal cannot leave a half-created member behind.
+                  const created = yield* orchestra
+                    .createMember({
+                      project,
                       title: input.title?.trim() || undefined,
                       agent: role.agent,
                       model: Orchestra.modelOf(role) ?? Option.getOrUndefined(main)?.model,
+                      category: input.category,
                     })
-                    .pipe(Effect.mapError((error) => new ToolFailure({ message: "Could not create a session", error })))
-                  yield* orchestra.setAccess(created.id, "full")
-                  if (input.category?.trim()) yield* orchestra.setCategory(created.id, input.category)
+                    .pipe(
+                      Effect.mapError((error) => new ToolFailure({ message: `Could not create a session: ${error.message}`, error })),
+                    )
                   if (input.text?.trim()) yield* dispatch(created.id, input.text)
                   return {
                     sessionID: created.id,

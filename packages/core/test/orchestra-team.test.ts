@@ -727,6 +727,40 @@ describe("Orchestra team", () => {
       expect(yield* orchestra.pending(worker.id)).toBeUndefined()
     }).pipe(Effect.scoped),
   ),
+  it.live("creates manual members under the project lock and rejects stale or removed owners", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-member-lifecycle-")))
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "Member lifecycle", directory: tmp.path })
+
+      const member = yield* orchestra.createMember({
+        project,
+        title: "Manual worker",
+        agent: Orchestra.role("developer"),
+        category: "Build",
+      })
+      expect(member).toMatchObject({ title: "Manual worker", agent: Orchestra.role("developer") })
+      expect((yield* orchestra.owners())[member.id]).toBe(project.id)
+      expect(yield* orchestra.access(member.id)).toBe("full")
+      expect(yield* orchestra.categories([member.id])).toEqual({ [member.id]: "Build" })
+      expect((yield* orchestra.sessions(project.id)).map((item) => item.id)).toContain(member.id)
+
+      const stale = { ...project, main: undefined }
+      const staleError = yield* orchestra
+        .createMember({ project: stale, title: "Stale worker", agent: Orchestra.role("developer") })
+        .pipe(Effect.flip)
+      expect(staleError.message).toContain("main session")
+      expect((yield* orchestra.sessions(project.id)).map((item) => item.title)).not.toContain("Stale worker")
+
+      yield* orchestra.remove(project.id)
+      const removedError = yield* orchestra
+        .createMember({ project, title: "Late worker", agent: Orchestra.role("developer") })
+        .pipe(Effect.flip)
+      expect(removedError.message).toContain("no longer exists")
+      expect(Object.values(yield* orchestra.owners())).not.toContain(project.id)
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("rejects dispatch to a worker owned by another project in the same directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-cross-project-dispatch-")))

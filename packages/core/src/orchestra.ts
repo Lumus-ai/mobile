@@ -96,6 +96,15 @@ export interface Interface {
   readonly owners: () => Effect.Effect<Record<string, ProjectID>>
   // Records that the project opened this session, so it stays with it in a shared directory.
   readonly claim: (sessionID: SessionID, projectID: ProjectID) => Effect.Effect<void, ProjectNotFoundError>
+  // Atomically claims and creates a worker while holding the project lifecycle lock. This prevents
+  // a project removal from interleaving between session ownership, Session creation and access setup.
+  readonly createMember: (input: {
+    project: Project
+    title?: string
+    agent: Role["agent"]
+    model?: Model.Ref
+    category?: string
+  }) => Effect.Effect<SessionSchema.Info, DispatchError>
   // The project whose main session this is, if any.
   readonly mainOf: (sessionID: SessionID) => Effect.Effect<Project | undefined>
   readonly access: (sessionID: SessionID) => Effect.Effect<Access>
@@ -933,6 +942,53 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       claim: Effect.fn("Orchestra.claim")(function* (sessionID, projectID) {
         yield* get(projectID)
         yield* kv.set(OWNER + sessionID, projectID)
+      }),
+      createMember: Effect.fn("Orchestra.createMember")(function* (input) {
+        return yield* mainLocks.withLock(input.project.id)(
+          Effect.gen(function* () {
+            const project = yield* get(input.project.id).pipe(
+              Effect.mapError(
+                (error) =>
+                  new DispatchError({
+                    message: `Project ${error.projectID} no longer exists. Reopen the project before creating a worker.`,
+                  }),
+              ),
+            )
+            const mainID = project.main
+            if (!mainID || input.project.main !== mainID)
+              return yield* new DispatchError({
+                message: `The main session for project "${project.name}" changed or is stale. Reopen the current orchestrator before creating a worker.`,
+              })
+            const main = yield* sessions.get(mainID).pipe(Effect.orElseSucceed(() => undefined))
+            if (!main || main.agent !== Orchestra.agent)
+              return yield* new DispatchError({
+                message: `The main orchestrator session for project "${project.name}" is missing or invalid. Reopen the project to repair it.`,
+              })
+
+            // Finish any interrupted template roster before adding a manual member.
+            yield* reconcileTeamUnlocked(project)
+            const id = SessionID.create()
+            yield* kv.set(OWNER + id, project.id)
+            const created = yield* sessions
+              .create({
+                id,
+                location: { directory: AbsolutePath.make(project.directory) },
+                title: input.title?.trim() || undefined,
+                agent: input.agent,
+                model: input.model,
+              })
+              .pipe(
+                Effect.tapError(() => kv.remove(OWNER + id)),
+                Effect.mapError((error) => new DispatchError({ message: `Could not create worker session: ${String(error)}` })),
+              )
+            const category = input.category?.trim()
+            yield* Effect.all([
+              kv.set(ACCESS + created.id, "full"),
+              category ? kv.set(CATEGORY + created.id, category) : Effect.void,
+            ])
+            return created
+          }),
+        )
       }),
       mainOf: Effect.fn("Orchestra.mainOf")(function* (sessionID) {
         const candidate = (yield* projects()).find((item) => item.main === sessionID)
