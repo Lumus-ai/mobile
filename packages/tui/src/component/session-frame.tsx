@@ -51,6 +51,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     paneWidth?: number
     terminalWidth?: number
     compactPaneWidth?: number
+    sidebarWidth?: number
   }>("layout", {
     initial: {},
   })
@@ -70,9 +71,25 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       }).catch((error) => console.error("Failed to persist TUI layout", error))
     },
   })
+  // The session sidebar has an independent width preference so resizing MCP/DoD
+  // does not silently change the width of terminal or plugin panels.
+  const defaultSidebarWidth = () => compactLayout.sidebarWidth()
+  const sidebarResize = createPaneResize({
+    value: () => layout.sidebarWidth ?? defaultSidebarWidth(),
+    defaultValue: defaultSidebarWidth,
+    clamp: (width) => clampSessionPaneWidth(width, panels.width()),
+    fromMouse: (event) => dimensions().width - event.x - 1,
+    contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
+    onCommit: (width) => {
+      void updateLayout((draft) => {
+        draft.sidebarWidth = width
+      }).catch((error) => console.error("Failed to persist sidebar width", error))
+    },
+  })
+  const rightPaneResize = () => (rightPane() === "sidebar" ? sidebarResize : paneResize)
   let resizeRelease = false
   const finishPaneResize = (event: MouseEvent) => {
-    if (paneResize.resizing()) {
+    if (paneResize.resizing() || sidebarResize.resizing()) {
       // A captured drag-end can be followed by mouse-up on the focus overlay.
       resizeRelease = true
       queueMicrotask(() => {
@@ -80,6 +97,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       })
     }
     paneResize.onMouseUp(event)
+    sidebarResize.onMouseUp(event)
   }
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [sessionWidth, setSessionWidth] = createSignal<number>()
@@ -305,7 +323,10 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       minHeight={0}
       flexDirection="row"
       position="relative"
-      onMouseDrag={paneResize.onMouseDrag}
+      onMouseDrag={(event) => {
+        paneResize.onMouseDrag(event)
+        sidebarResize.onMouseDrag(event)
+      }}
       onMouseDragEnd={finishPaneResize}
       onMouseUp={finishPaneResize}
     >
@@ -403,7 +424,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           flexShrink={0}
           height="100%"
           flexDirection="column"
-          width={fullscreen() ? availableWidth() : paneResize.size()}
+          width={fullscreen() ? availableWidth() : rightPaneResize().size()}
           minWidth={0}
           minHeight={0}
         >
@@ -510,8 +531,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         }
       >
         <PaneResizeHandle
-          resize={paneResize}
-          left={availableWidth() - paneResize.size() - 1}
+          resize={rightPaneResize()}
+          left={availableWidth() - rightPaneResize().size() - 1}
           highlight="right"
         />
       </Show>
