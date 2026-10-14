@@ -198,7 +198,7 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
       "team-security-auditor",
       "team-tester",
     ])
-    expect(Object.values(coreListed.access).every((access: string) => access === "full")).toBe(true)
+    expect(Object.values(coreListed.access).every((access) => access === "full")).toBe(true)
 
     // switching the orchestra to another agent is ignored
     expect((yield* call(`/api/session/${main.id}/agent`, "POST", { agent: "build" })).status).toBe(204)
