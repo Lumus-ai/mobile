@@ -94,11 +94,20 @@ export function contentFilterError(summary: string, reason: FinishReasonDetails)
   }
 }
 
+const OPENCODE_FREE_TIER_ERROR = "OpenCode's free tier can only be used from within OpenCode"
+
+const OPENCODE_FREE_TIER_GUIDANCE =
+  "OpenCode Zen rejected this free-tier request. Connect OpenCode Zen with `opencode auth login opencode` or `/connect` in the TUI. If it is already connected, check whether the active agent or project config denies `read` or `bash/shell`; Zen can return the same message for restricted tool sets."
+
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
+  const raw = [reason.message, reason.body].filter(Boolean).join("\\n")
+  const message = raw.includes(OPENCODE_FREE_TIER_ERROR)
+    ? OPENCODE_FREE_TIER_GUIDANCE
+    : (Object.entries(tokenSharingMessages).find(([code]) => reason.body?.includes(code))?.[1] ?? reason.message)
   return {
     type,
-    message: Object.entries(tokenSharingMessages).find(([code]) => reason.body?.includes(code))?.[1] ?? reason.message,
+    message,
     ...(status === undefined ? {} : { status }),
     ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
   }
