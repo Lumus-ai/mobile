@@ -430,47 +430,47 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
             <Show
               when={rightPane() === "sidebar"}
               fallback={
-              <Show
-                keyed
-                when={activePanel()}
-                fallback={
-                  <Show keyed when={selectedTerminal()?.id}>
-                    {(ptyID) => (
-                      <TerminalPane
-                        ptyID={ptyID}
-                        resizing={paneResize.resizing()}
-                        autoFocus={restoreTerminalFocus() || sessions.shouldFocus(ptyID)}
-                        onAutoFocus={() => {
-                          sessions.clearFocus(ptyID)
-                          setRestoreTerminalFocus(false)
-                        }}
-                        onFocusRequest={(value) => (focusTerminal = value)}
-                        onDisconnect={() => setRestoreTerminalFocus(true)}
-                      />
-                    )}
-                  </Show>
-                }
-              >
-                {(item) => (
-                  <PanelHost
-                    panel={item}
-                    width={fullscreen() ? availableWidth() : paneResize.size()}
-                    focused={activePane() === "right"}
-                    onFocus={focusRightPane}
-                    onTarget={(node) => {
-                      panelNode = node
-                      if (node) {
-                        focusRightPane()
-                        return
-                      }
-                      setActivePane("session")
-                    }}
-                  />
-                )}
-              </Show>
-            }
-          >
-            <Sidebar sessionID={props.sessionID} onHide={hideRightPane} />
+                <Show
+                  keyed
+                  when={activePanel()}
+                  fallback={
+                    <Show keyed when={selectedTerminal()?.id}>
+                      {(ptyID) => (
+                        <TerminalPane
+                          ptyID={ptyID}
+                          resizing={paneResize.resizing()}
+                          autoFocus={restoreTerminalFocus() || sessions.shouldFocus(ptyID)}
+                          onAutoFocus={() => {
+                            sessions.clearFocus(ptyID)
+                            setRestoreTerminalFocus(false)
+                          }}
+                          onFocusRequest={(value) => (focusTerminal = value)}
+                          onDisconnect={() => setRestoreTerminalFocus(true)}
+                        />
+                      )}
+                    </Show>
+                  }
+                >
+                  {(item) => (
+                    <PanelHost
+                      panel={item}
+                      width={fullscreen() ? availableWidth() : paneResize.size()}
+                      focused={activePane() === "right"}
+                      onFocus={focusRightPane}
+                      onTarget={(node) => {
+                        panelNode = node
+                        if (node) {
+                          focusRightPane()
+                          return
+                        }
+                        setActivePane("session")
+                      }}
+                    />
+                  )}
+                </Show>
+              }
+            >
+              <Sidebar sessionID={props.sessionID} onHide={hideRightPane} />
             </Show>
           </box>
         </box>

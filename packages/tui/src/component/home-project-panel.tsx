@@ -147,9 +147,18 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
       >
       <box flexDirection="row" alignItems="center" flexShrink={0} gap={1}>
         <box flexDirection="column" flexGrow={1} minWidth={0} gap={1}>
-          <text fg={theme.text.base}>
-            <b>{t("Project DoD")}</b>
-          </text>
+          <box flexDirection="row" alignItems="center" gap={1}>
+            <box flexGrow={1} minWidth={0}>
+              <text fg={theme.text.base}>
+                <b>{t("Project DoD")}</b>
+              </text>
+            </box>
+            <Show when={props.onHide}>
+              <HoverAction id="home-project-panel.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
+                <text fg={theme.text.action.primary.base}>›</text>
+              </HoverAction>
+            </Show>
+          </box>
           <text fg={theme.text.muted} wrapMode="none" truncate>
             {project()?.name ?? t("Current directory")}
           </text>
@@ -157,82 +166,77 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
             {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
           </Show>
         </box>
-        <Show when={props.onHide}>
-          <HoverAction id="home-project-panel.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
-            <text fg={theme.text.action.primary.base}>›</text>
-          </HoverAction>
-        </Show>
       </box>
 
-      <Show when={board().type === "loading"}>
-        <text fg={theme.text.muted}>{t("Loading DoD…")}</text>
-      </Show>
-      <Show when={board().type === "missing"}>
-        <text fg={theme.text.muted} wrapMode="word">{t("DoD file is missing")}</text>
-      </Show>
-      <Show when={board().type === "error"}>
-        <text fg={theme.text.feedback.error.base} wrapMode="word">
-          {(board() as Extract<BoardState, { type: "error" }>).reason}
-        </text>
-      </Show>
-
-      <Show when={board().type === "ready"}>
-        <box flexDirection="column" gap={1} flexShrink={0}>
-          <box flexDirection="row" justifyContent="space-between" gap={1}>
-            <text fg={theme.text.base}>{t("Progress")}</text>
-            <text fg={theme.text.feedback.success.base} wrapMode="none">
-              {summary().finished}/{summary().total} · {summary().percent}%
-            </text>
-          </box>
-          <text wrapMode="none">
-            <span style={{ fg: theme.text.feedback.success.base }}>{"█".repeat(filled())}</span>
-            <span style={{ fg: theme.text.muted }}>{"░".repeat(Math.max(0, barWidth() - filled()))}</span>
+        <Show when={board().type === "loading"}>
+          <text fg={theme.text.muted}>{t("Loading DoD…")}</text>
+        </Show>
+        <Show when={board().type === "missing"}>
+          <text fg={theme.text.muted} wrapMode="word">{t("DoD file is missing")}</text>
+        </Show>
+        <Show when={board().type === "error"}>
+          <text fg={theme.text.feedback.error.base} wrapMode="word">
+            {(board() as Extract<BoardState, { type: "error" }>).reason}
           </text>
-          <text fg={theme.text.feedback.info.base}>{t("In progress")}: {items().filter((item) => item.state === "IN_PROGRESS").length}</text>
-          <text fg={theme.text.feedback.warning.base}>{t("Blocked")}: {items().filter((item) => item.state === "BLOCKED").length}</text>
-          <text fg={theme.text.feedback.error.base}>{t("Failed")}: {items().filter((item) => item.state === "FAILED").length}</text>
-        </box>
-        <box flexGrow={1} minHeight={0}>
-          <scrollbox
-            flexGrow={1}
-            minHeight={0}
-            verticalScrollbarOptions={{ visible: true }}
-            horizontalScrollbarOptions={{ visible: false }}
-          >
-            <box flexDirection="column" gap={1} paddingRight={1}>
-              <Show when={items().length === 0}>
-                <text fg={theme.text.muted}>{t("No tasks yet")}</text>
-              </Show>
-              <For each={items()}>
-                {(item) => (
-                  <box
-                    flexDirection="column"
-                    gap={1}
-                    paddingLeft={1}
-                    paddingRight={1}
-                    border={["bottom"]}
-                    borderColor={theme.border.base}
-                  >
-                    <box flexDirection="row" gap={1}>
-                      <text flexShrink={0} fg={color(item.state)}>{MARK[item.state] ?? "·"}</text>
-                      <box flexGrow={1} minWidth={0}>
-                        <text fg={theme.text.base} wrapMode="word">
-                          <span style={{ fg: theme.text.muted }}>{item.id + " "}</span>
-                          {item.title}
-                        </text>
-                      </box>
-                    </box>
-                    <text fg={color(item.state)}>{stateLabel(item.state)}</text>
-                    <Show when={item.total > 0}>
-                      <text fg={theme.text.muted}>{item.done}/{item.total} steps</text>
-                    </Show>
-                  </box>
-                )}
-              </For>
+        </Show>
+
+        <Show when={board().type === "ready"}>
+          <box flexDirection="column" gap={1} flexShrink={0}>
+            <box flexDirection="row" justifyContent="space-between" gap={1}>
+              <text fg={theme.text.base}>{t("Progress")}</text>
+              <text fg={theme.text.feedback.success.base} wrapMode="none">
+                {summary().finished}/{summary().total} · {summary().percent}%
+              </text>
             </box>
-          </scrollbox>
-        </box>
-      </Show>
+            <text wrapMode="none">
+              <span style={{ fg: theme.text.feedback.success.base }}>{"█".repeat(filled())}</span>
+              <span style={{ fg: theme.text.muted }}>{"░".repeat(Math.max(0, barWidth() - filled()))}</span>
+            </text>
+            <text fg={theme.text.feedback.info.base}>{t("In progress")}: {items().filter((item) => item.state === "IN_PROGRESS").length}</text>
+            <text fg={theme.text.feedback.warning.base}>{t("Blocked")}: {items().filter((item) => item.state === "BLOCKED").length}</text>
+            <text fg={theme.text.feedback.error.base}>{t("Failed")}: {items().filter((item) => item.state === "FAILED").length}</text>
+          </box>
+          <box flexGrow={1} minHeight={0}>
+            <scrollbox
+              flexGrow={1}
+              minHeight={0}
+              verticalScrollbarOptions={{ visible: true }}
+              horizontalScrollbarOptions={{ visible: false }}
+            >
+              <box flexDirection="column" gap={1} paddingRight={1}>
+                <Show when={items().length === 0}>
+                  <text fg={theme.text.muted}>{t("No tasks yet")}</text>
+                </Show>
+                <For each={items()}>
+                  {(item) => (
+                    <box
+                      flexDirection="column"
+                      gap={1}
+                      paddingLeft={1}
+                      paddingRight={1}
+                      border={["bottom"]}
+                      borderColor={theme.border.base}
+                    >
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} fg={color(item.state)}>{MARK[item.state] ?? "·"}</text>
+                        <box flexGrow={1} minWidth={0}>
+                          <text fg={theme.text.base} wrapMode="word">
+                            <span style={{ fg: theme.text.muted }}>{item.id + " "}</span>
+                            {item.title}
+                          </text>
+                        </box>
+                      </box>
+                      <text fg={color(item.state)}>{stateLabel(item.state)}</text>
+                      <Show when={item.total > 0}>
+                        <text fg={theme.text.muted}>{item.done}/{item.total} steps</text>
+                      </Show>
+                    </box>
+                  )}
+                </For>
+              </box>
+            </scrollbox>
+          </box>
+        </Show>
       </box>
     </Show>
   )

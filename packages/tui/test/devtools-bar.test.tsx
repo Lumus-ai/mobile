@@ -87,7 +87,8 @@ test("home side panels collapse and restore from their own edge controls", async
   await setup.mockMouse.click(leftRail.x, leftRail.y)
   await setup.waitForFrame((frame) => frame.includes("Multiplayer") && frame.includes("Project DoD"))
 
-  await clickGlyphOnLine("Project DoD", "›", true)
+  const homeHide = glyphAtEdge("›", "right")
+  await setup.mockMouse.click(homeHide.x, homeHide.y)
   await setup.waitForFrame((frame) => !frame.includes("Project DoD"))
   const rightRail = glyphAtEdge("‹", "right")
   await setup.mockMouse.click(rightRail.x, rightRail.y)

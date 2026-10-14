@@ -265,292 +265,292 @@ export function ProjectTree(props: { width: number; collapsed?: boolean; onHide?
       }
     >
       <box width={props.width} height="100%" flexShrink={0} backgroundColor={theme.background.raised.base} paddingTop={1}>
-      <box flexDirection="row" paddingLeft={1} paddingRight={1} paddingBottom={1}>
-        <Tab tab="projects" label={t("Projects")} hover={hover} setHover={setHover} />
-        <text fg={theme.text.muted}>│</text>
-        <Tab tab="notes" label={t("Notes")} hover={hover} setHover={setHover} />
-        <box flexGrow={1} />
-        <Row
-          id="new"
-          hover={hover}
-          setHover={setHover}
-          onClick={() => (notes.tab() === "notes" ? notes.setCreating(true) : edit())}
-        >
-          <text fg={hover() === "new" ? theme.text.action.primary.hovered : theme.text.action.primary.base}>
-            {t("+ New")}
-          </text>
-        </Row>
-        <Show when={props.onHide}>
-          <HoverAction id="project-tree.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
-            <text fg={theme.text.action.primary.base}>‹</text>
-          </HoverAction>
-        </Show>
-      </box>
-      <Show when={notes.tab() === "notes"}>
-        <ProjectNotes />
-      </Show>
-      <scrollbox
-        visible={notes.tab() === "projects"}
-        flexGrow={notes.tab() === "projects" ? 1 : 0}
-        minHeight={0}
-        horizontalScrollbarOptions={{ visible: false }}
-      >
-        <For each={projects()}>
-          {(project) => (
-            <box>
-              <Row id={project.id} hover={hover} setHover={setHover} onClick={() => toggle(project.id)}>
-                <text flexShrink={0} fg={theme.text.muted}>
-                  {expanded[project.id] ? "▾ " : "▸ "}
-                </text>
-                <box flexGrow={1} minWidth={0}>
-                  <text fg={theme.text.base} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-                    {project.name}
-                  </text>
-                </box>
-                <HoverAction
-                  id={`project-edit:${project.id}`}
-                  onMouseEnter={() => setHover(project.id)}
-                  onMouseLeave={() => setHover(project.id)}
-                  onClick={() => edit(project)}
-                >
-                  <text fg={hover() === project.id ? theme.text.action.primary.base : theme.text.muted}> ⚙</text>
-                </HoverAction>
-              </Row>
-              <Show when={expanded[project.id]}>
-                <Row
-                  id={`${project.id}:main`}
-                  hover={hover}
-                  setHover={setHover}
-                  selected={project.main !== undefined && project.main === current()?.id}
-                  onClick={() => void openMain(project)}
-                >
-                  <text flexShrink={0} fg={theme.text.action.primary.base}>
-                    {"  ★ "}
-                  </text>
-                  <text fg={theme.text.base} wrapMode="none" truncate>
-                    {t("Orchestrator")}
-                  </text>
-                </Row>
-                <For each={groupsOf(project)}>
-                  {(group) => (
-                    <>
-                      <Show when={group.name}>
-                        <box paddingLeft={4}>
-                          <text fg={theme.text.muted} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-                            {group.name}
-                          </text>
-                        </box>
-                      </Show>
-                      <For each={group.sessions}>
-                        {(session) => (
-                          <Row
-                            id={session.id}
-                            hover={hover}
-                            setHover={setHover}
-                            selected={session.id === current()?.id}
-                            onClick={() => route.navigate({ type: "session", sessionID: session.id })}
-                          >
-                            <text
-                              flexShrink={0}
-                              fg={
-                                data.session.status(session.id) === "running"
-                                  ? theme.text.feedback.success.base
-                                  : theme.text.muted
-                              }
-                            >
-                              {data.session.status(session.id) === "running" ? "  ● " : "  ○ "}
-                            </text>
-                            <box flexGrow={1} minWidth={0}>
-                              <text fg={theme.text.base} wrapMode="none" truncate>
-                                {`${shared().has(session.id) ? "⇄ " : ""}${session.title || t("Untitled")}`}
-                              </text>
-                            </box>
-                            <Show when={!narrow() || hover() === session.id}>
-                              <HoverAction
-                                id={`session-category:${session.id}`}
-                                onMouseEnter={() => setHover(session.id)}
-                                onMouseLeave={() => setHover(session.id)}
-                                onClick={() => categorize(session.id)}
-                              >
-                                <text fg={hover() === session.id ? theme.text.action.primary.base : theme.text.muted}>
-                                  {" # "}
-                                </text>
-                              </HoverAction>
-                              <HoverAction
-                                id={`session-access:${session.id}`}
-                                onMouseEnter={() => setHover(session.id)}
-                                onMouseLeave={() => setHover(session.id)}
-                                onClick={() => cycle(session.id)}
-                              >
-                                <text fg={theme.text.formfield.base}>{`[${access[session.id] ?? Orchestra.defaultAccess}]`}</text>
-                              </HoverAction>
-                            </Show>
-                            <HoverAction
-                              id={`session-delete:${session.id}`}
-                              onMouseEnter={() => setHover(session.id)}
-                              onMouseLeave={() => setHover(session.id)}
-                              onClick={() => remove(session.id)}
-                            >
-                              <text fg={armed() === session.id ? theme.text.feedback.error.base : theme.text.muted}>
-                                {armed() === session.id ? ` ${t("delete?")}` : " ×"}
-                              </text>
-                            </HoverAction>
-                          </Row>
-                        )}
-                      </For>
-                    </>
-                  )}
-                </For>
-                <Row
-                  id={`${project.id}:new`}
-                  hover={hover}
-                  setHover={setHover}
-                  onClick={() =>
-                    route.navigate({ type: "home", location: { directory: project.directory }, project: project.id })
-                  }
-                >
-                  <text fg={theme.text.muted}>{"  " + t("+ New session")}</text>
-                </Row>
-              </Show>
-            </box>
-          )}
-        </For>
-        <box paddingTop={projects().length > 0 ? 1 : 0}>
-          <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-            <text flexShrink={0} fg={theme.text.action.secondary.base} attributes={TextAttributes.BOLD}>
-              {"⇄ "}
+        <box flexDirection="row" paddingLeft={1} paddingRight={1} paddingBottom={1}>
+          <Tab tab="projects" label={t("Projects")} hover={hover} setHover={setHover} />
+          <text fg={theme.text.muted}>│</text>
+          <Tab tab="notes" label={t("Notes")} hover={hover} setHover={setHover} />
+          <box flexGrow={1} />
+          <Row
+            id="new"
+            hover={hover}
+            setHover={setHover}
+            onClick={() => (notes.tab() === "notes" ? notes.setCreating(true) : edit())}
+          >
+            <text fg={hover() === "new" ? theme.text.action.primary.hovered : theme.text.action.primary.base}>
+              {t("+ New")}
             </text>
-            <box flexGrow={1} minWidth={0}>
-              <text fg={theme.text.base} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-                {t("Multiplayer")}
-              </text>
-            </box>
-            <Show when={!narrow()}>
-              <MultiplayerActions hover={hover} setHover={setHover} onOpen={openRooms} />
-            </Show>
-          </box>
-          {/* A narrow panel has no room beside the heading, so Host and Connect go under it. */}
-          <Show when={narrow()}>
-            <box flexDirection="row" paddingLeft={3} paddingRight={1}>
-              <MultiplayerActions hover={hover} setHover={setHover} onOpen={openRooms} />
-            </box>
-          </Show>
-          <RoomPeople rooms={rooms.latest ?? []} hover={hover} setHover={setHover} />
-          <For each={rooms.latest ?? []}>
-            {(room) => (
-              <>
-                <Row
-                  id={`hosted:${room.id}`}
-                  hover={hover}
-                  setHover={setHover}
-                  selected={room.sessionID === current()?.id}
-                  onClick={() => route.navigate({ type: "session", sessionID: room.sessionID })}
-                >
-                  <text flexShrink={0} fg={theme.text.action.secondary.base}>
-                    {"  ⇄ "}
-                  </text>
-                  <box flexGrow={1} minWidth={0}>
-                    <text fg={theme.text.base} wrapMode="none" truncate>
-                      {room.name}
-                    </text>
-                  </box>
-                  <HoverAction
-                    id={`hosted-close:${room.id}`}
-                    onMouseEnter={() => setHover(`hosted:${room.id}`)}
-                    onMouseLeave={() => setHover(`hosted:${room.id}`)}
-                    onClick={() => stopHosting(room.id)}
-                  >
-                    <text
-                      fg={
-                        armed() === `hosted:${room.id}`
-                          ? theme.text.action.destructive.focused
-                          : theme.text.action.destructive.base
-                      }
-                    >
-                      {armed() === `hosted:${room.id}` ? ` ${t("close?")}` : " ×"}
-                    </text>
-                  </HoverAction>
-                </Row>
-                <RoomDodRows
-                  id={`hosted:${room.id}`}
-                  hover={hover}
-                  setHover={setHover}
-                  load={() => client.api.room.dod.get({ roomID: room.id })}
-                  release={(id) => client.api.room.dod.release({ roomID: room.id, id })}
-                  feed={(after, wait) => client.api.room.feed({ roomID: room.id, after, wait })}
-                />
-              </>
-            )}
-          </For>
-          <For each={joined.joined}>
-            {(room) => (
-              <>
-                <Row
-                  id={roomKey(room)}
-                  hover={hover}
-                  setHover={setHover}
-                  selected={viewing(room) && route.data.type === "room" && !route.data.sessionID}
-                  onClick={() => openRoom(room)}
-                >
-                  <text flexShrink={0} fg={theme.text.action.secondary.base}>
-                    {"  ⇄ "}
-                  </text>
-                  <box flexGrow={1} minWidth={0}>
-                    <text fg={theme.text.base} wrapMode="none" truncate>
-                      {room.name}
-                      <span style={{ fg: theme.text.muted }}>{` · ${new URL(room.url).host}`}</span>
-                    </text>
-                  </box>
-                  <HoverAction
-                    id={`room-leave:${roomKey(room)}`}
-                    onMouseEnter={() => setHover(roomKey(room))}
-                    onMouseLeave={() => setHover(roomKey(room))}
-                    onClick={() => leave(room)}
-                  >
-                    <text
-                      fg={
-                        armed() === roomKey(room)
-                          ? theme.text.action.destructive.focused
-                          : theme.text.action.destructive.base
-                      }
-                    >
-                      {armed() === roomKey(room) ? ` ${t("leave?")}` : " ×"}
-                    </text>
-                  </HoverAction>
-                </Row>
-                <RoomDodRows
-                  id={roomKey(room)}
-                  hover={hover}
-                  setHover={setHover}
-                  load={() => roomClient(room).room.guest.dod.get({ roomID: room.roomID })}
-                  take={(id) =>
-                    roomClient(room).room.guest.dod.claim(
-                      id ? { roomID: room.roomID, id, take: true } : { roomID: room.roomID, next: true, take: true },
-                    )
-                  }
-                  submit={(id) => roomClient(room).room.guest.dod.submit({ roomID: room.roomID, id })}
-                  release={(id) => roomClient(room).room.guest.dod.claim({ roomID: room.roomID, id, take: false })}
-                  feed={(after, wait) => roomClient(room).room.guest.feed({ roomID: room.roomID, after, wait })}
-                />
-                <RoomSessions
-                  room={room}
-                  hover={hover}
-                  setHover={setHover}
-                  current={route.data.type === "room" && sameRoom(route.data, room) ? route.data.sessionID : undefined}
-                  onOpen={(sessionID) => openRoom(room, sessionID)}
-                />
-              </>
-            )}
-          </For>
-          <Show when={(rooms.latest ?? []).length === 0 && joined.joined.length === 0}>
-            <box paddingLeft={4} paddingRight={1}>
-              <text fg={theme.text.muted} wrapMode="word">
-                {t("No rooms yet. Host a session or connect to someone else's.")}
-              </text>
-            </box>
+          </Row>
+          <Show when={props.onHide}>
+            <HoverAction id="project-tree.hide" onClick={() => props.onHide?.()} paddingLeft={1} paddingRight={1}>
+              <text fg={theme.text.action.primary.base}>‹</text>
+            </HoverAction>
           </Show>
         </box>
-      </scrollbox>
+        <Show when={notes.tab() === "notes"}>
+          <ProjectNotes />
+        </Show>
+        <scrollbox
+          visible={notes.tab() === "projects"}
+          flexGrow={notes.tab() === "projects" ? 1 : 0}
+          minHeight={0}
+          horizontalScrollbarOptions={{ visible: false }}
+        >
+          <For each={projects()}>
+            {(project) => (
+              <box>
+                <Row id={project.id} hover={hover} setHover={setHover} onClick={() => toggle(project.id)}>
+                  <text flexShrink={0} fg={theme.text.muted}>
+                    {expanded[project.id] ? "▾ " : "▸ "}
+                  </text>
+                  <box flexGrow={1} minWidth={0}>
+                    <text fg={theme.text.base} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                      {project.name}
+                    </text>
+                  </box>
+                  <HoverAction
+                    id={`project-edit:${project.id}`}
+                    onMouseEnter={() => setHover(project.id)}
+                    onMouseLeave={() => setHover(project.id)}
+                    onClick={() => edit(project)}
+                  >
+                    <text fg={hover() === project.id ? theme.text.action.primary.base : theme.text.muted}> ⚙</text>
+                  </HoverAction>
+                </Row>
+                <Show when={expanded[project.id]}>
+                  <Row
+                    id={`${project.id}:main`}
+                    hover={hover}
+                    setHover={setHover}
+                    selected={project.main !== undefined && project.main === current()?.id}
+                    onClick={() => void openMain(project)}
+                  >
+                    <text flexShrink={0} fg={theme.text.action.primary.base}>
+                      {"  ★ "}
+                    </text>
+                    <text fg={theme.text.base} wrapMode="none" truncate>
+                      {t("Orchestrator")}
+                    </text>
+                  </Row>
+                  <For each={groupsOf(project)}>
+                    {(group) => (
+                      <>
+                        <Show when={group.name}>
+                          <box paddingLeft={4}>
+                            <text fg={theme.text.muted} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                              {group.name}
+                            </text>
+                          </box>
+                        </Show>
+                        <For each={group.sessions}>
+                          {(session) => (
+                            <Row
+                              id={session.id}
+                              hover={hover}
+                              setHover={setHover}
+                              selected={session.id === current()?.id}
+                              onClick={() => route.navigate({ type: "session", sessionID: session.id })}
+                            >
+                              <text
+                                flexShrink={0}
+                                fg={
+                                  data.session.status(session.id) === "running"
+                                    ? theme.text.feedback.success.base
+                                    : theme.text.muted
+                                }
+                              >
+                                {data.session.status(session.id) === "running" ? "  ● " : "  ○ "}
+                              </text>
+                              <box flexGrow={1} minWidth={0}>
+                                <text fg={theme.text.base} wrapMode="none" truncate>
+                                  {`${shared().has(session.id) ? "⇄ " : ""}${session.title || t("Untitled")}`}
+                                </text>
+                              </box>
+                              <Show when={!narrow() || hover() === session.id}>
+                                <HoverAction
+                                  id={`session-category:${session.id}`}
+                                  onMouseEnter={() => setHover(session.id)}
+                                  onMouseLeave={() => setHover(session.id)}
+                                  onClick={() => categorize(session.id)}
+                                >
+                                  <text fg={hover() === session.id ? theme.text.action.primary.base : theme.text.muted}>
+                                    {" # "}
+                                  </text>
+                                </HoverAction>
+                                <HoverAction
+                                  id={`session-access:${session.id}`}
+                                  onMouseEnter={() => setHover(session.id)}
+                                  onMouseLeave={() => setHover(session.id)}
+                                  onClick={() => cycle(session.id)}
+                                >
+                                  <text fg={theme.text.formfield.base}>{`[${access[session.id] ?? Orchestra.defaultAccess}]`}</text>
+                                </HoverAction>
+                              </Show>
+                              <HoverAction
+                                id={`session-delete:${session.id}`}
+                                onMouseEnter={() => setHover(session.id)}
+                                onMouseLeave={() => setHover(session.id)}
+                                onClick={() => remove(session.id)}
+                              >
+                                <text fg={armed() === session.id ? theme.text.feedback.error.base : theme.text.muted}>
+                                  {armed() === session.id ? ` ${t("delete?")}` : " ×"}
+                                </text>
+                              </HoverAction>
+                            </Row>
+                          )}
+                        </For>
+                      </>
+                    )}
+                  </For>
+                  <Row
+                    id={`${project.id}:new`}
+                    hover={hover}
+                    setHover={setHover}
+                    onClick={() =>
+                      route.navigate({ type: "home", location: { directory: project.directory }, project: project.id })
+                    }
+                  >
+                    <text fg={theme.text.muted}>{"  " + t("+ New session")}</text>
+                  </Row>
+                </Show>
+              </box>
+            )}
+          </For>
+          <box paddingTop={projects().length > 0 ? 1 : 0}>
+            <box flexDirection="row" paddingLeft={1} paddingRight={1}>
+              <text flexShrink={0} fg={theme.text.action.secondary.base} attributes={TextAttributes.BOLD}>
+                {"⇄ "}
+              </text>
+              <box flexGrow={1} minWidth={0}>
+                <text fg={theme.text.base} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                  {t("Multiplayer")}
+                </text>
+              </box>
+              <Show when={!narrow()}>
+                <MultiplayerActions hover={hover} setHover={setHover} onOpen={openRooms} />
+              </Show>
+            </box>
+            {/* A narrow panel has no room beside the heading, so Host and Connect go under it. */}
+            <Show when={narrow()}>
+              <box flexDirection="row" paddingLeft={3} paddingRight={1}>
+                <MultiplayerActions hover={hover} setHover={setHover} onOpen={openRooms} />
+              </box>
+            </Show>
+            <RoomPeople rooms={rooms.latest ?? []} hover={hover} setHover={setHover} />
+            <For each={rooms.latest ?? []}>
+              {(room) => (
+                <>
+                  <Row
+                    id={`hosted:${room.id}`}
+                    hover={hover}
+                    setHover={setHover}
+                    selected={room.sessionID === current()?.id}
+                    onClick={() => route.navigate({ type: "session", sessionID: room.sessionID })}
+                  >
+                    <text flexShrink={0} fg={theme.text.action.secondary.base}>
+                      {"  ⇄ "}
+                    </text>
+                    <box flexGrow={1} minWidth={0}>
+                      <text fg={theme.text.base} wrapMode="none" truncate>
+                        {room.name}
+                      </text>
+                    </box>
+                    <HoverAction
+                      id={`hosted-close:${room.id}`}
+                      onMouseEnter={() => setHover(`hosted:${room.id}`)}
+                      onMouseLeave={() => setHover(`hosted:${room.id}`)}
+                      onClick={() => stopHosting(room.id)}
+                    >
+                      <text
+                        fg={
+                          armed() === `hosted:${room.id}`
+                            ? theme.text.action.destructive.focused
+                            : theme.text.action.destructive.base
+                        }
+                      >
+                        {armed() === `hosted:${room.id}` ? ` ${t("close?")}` : " ×"}
+                      </text>
+                    </HoverAction>
+                  </Row>
+                  <RoomDodRows
+                    id={`hosted:${room.id}`}
+                    hover={hover}
+                    setHover={setHover}
+                    load={() => client.api.room.dod.get({ roomID: room.id })}
+                    release={(id) => client.api.room.dod.release({ roomID: room.id, id })}
+                    feed={(after, wait) => client.api.room.feed({ roomID: room.id, after, wait })}
+                  />
+                </>
+              )}
+            </For>
+            <For each={joined.joined}>
+              {(room) => (
+                <>
+                  <Row
+                    id={roomKey(room)}
+                    hover={hover}
+                    setHover={setHover}
+                    selected={viewing(room) && route.data.type === "room" && !route.data.sessionID}
+                    onClick={() => openRoom(room)}
+                  >
+                    <text flexShrink={0} fg={theme.text.action.secondary.base}>
+                      {"  ⇄ "}
+                    </text>
+                    <box flexGrow={1} minWidth={0}>
+                      <text fg={theme.text.base} wrapMode="none" truncate>
+                        {room.name}
+                        <span style={{ fg: theme.text.muted }}>{` · ${new URL(room.url).host}`}</span>
+                      </text>
+                    </box>
+                    <HoverAction
+                      id={`room-leave:${roomKey(room)}`}
+                      onMouseEnter={() => setHover(roomKey(room))}
+                      onMouseLeave={() => setHover(roomKey(room))}
+                      onClick={() => leave(room)}
+                    >
+                      <text
+                        fg={
+                          armed() === roomKey(room)
+                            ? theme.text.action.destructive.focused
+                            : theme.text.action.destructive.base
+                        }
+                      >
+                        {armed() === roomKey(room) ? ` ${t("leave?")}` : " ×"}
+                      </text>
+                    </HoverAction>
+                  </Row>
+                  <RoomDodRows
+                    id={roomKey(room)}
+                    hover={hover}
+                    setHover={setHover}
+                    load={() => roomClient(room).room.guest.dod.get({ roomID: room.roomID })}
+                    take={(id) =>
+                      roomClient(room).room.guest.dod.claim(
+                        id ? { roomID: room.roomID, id, take: true } : { roomID: room.roomID, next: true, take: true },
+                      )
+                    }
+                    submit={(id) => roomClient(room).room.guest.dod.submit({ roomID: room.roomID, id })}
+                    release={(id) => roomClient(room).room.guest.dod.claim({ roomID: room.roomID, id, take: false })}
+                    feed={(after, wait) => roomClient(room).room.guest.feed({ roomID: room.roomID, after, wait })}
+                  />
+                  <RoomSessions
+                    room={room}
+                    hover={hover}
+                    setHover={setHover}
+                    current={route.data.type === "room" && sameRoom(route.data, room) ? route.data.sessionID : undefined}
+                    onOpen={(sessionID) => openRoom(room, sessionID)}
+                  />
+                </>
+              )}
+            </For>
+            <Show when={(rooms.latest ?? []).length === 0 && joined.joined.length === 0}>
+              <box paddingLeft={4} paddingRight={1}>
+                <text fg={theme.text.muted} wrapMode="word">
+                  {t("No rooms yet. Host a session or connect to someone else's.")}
+                </text>
+              </box>
+            </Show>
+          </box>
+        </scrollbox>
       </box>
     </Show>
   )
