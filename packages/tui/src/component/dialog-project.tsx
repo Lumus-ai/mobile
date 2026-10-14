@@ -64,9 +64,11 @@ export function DialogProject(props: {
     { name: t("No team"), detail: t("only the Orchestrator") },
     ...(templates() ?? []).map((template) => ({
       name: builtinName(t, template) ?? template.id,
+      // Role names tell the user what each team actually does; descriptions remain useful
+      // as a fallback for a custom template that has no members yet.
       detail:
-        template.description ||
-        template.members.map((member) => (template.origin === "builtin" ? t(member.title) : member.title)).join(", "),
+        template.members.map((member) => (template.origin === "builtin" ? t(member.title) : member.title)).join(", ") ||
+        template.description,
     })),
   ]
   const teamCount = () => teamOptions().length

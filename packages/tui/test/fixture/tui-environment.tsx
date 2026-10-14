@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import {
+  TuiAppProvider,
   TuiPathsProvider,
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
@@ -8,6 +9,7 @@ import {
 import type { ParentProps } from "solid-js"
 import { LogProvider, type LogSink } from "../../src/context/log"
 import { ClipboardProvider, type ClipboardService } from "../../src/context/clipboard"
+import { StorageProvider } from "../../src/context/storage"
 
 const clipboard: ClipboardService = {
   async read() {
@@ -27,6 +29,7 @@ export function TestTuiContexts(
 ) {
   return (
     <LogProvider log={props.log ?? (() => {})}>
+      <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
       <TuiPathsProvider
         value={{
           cwd: props.cwd ?? props.directory ?? "/tmp/opencode/packages/tui",
@@ -36,12 +39,15 @@ export function TestTuiContexts(
           ...props.paths,
         }}
       >
-        <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
-          <TuiStartupProvider value={{ skipInitialLoading: false }}>
-            <ClipboardProvider value={props.clipboard ?? clipboard}>{props.children}</ClipboardProvider>
-          </TuiStartupProvider>
-        </TuiTerminalEnvironmentProvider>
+        <StorageProvider>
+          <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
+            <TuiStartupProvider value={{ skipInitialLoading: false }}>
+              <ClipboardProvider value={props.clipboard ?? clipboard}>{props.children}</ClipboardProvider>
+            </TuiStartupProvider>
+          </TuiTerminalEnvironmentProvider>
+        </StorageProvider>
       </TuiPathsProvider>
+      </TuiAppProvider>
     </LogProvider>
   )
 }

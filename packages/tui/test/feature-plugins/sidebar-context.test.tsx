@@ -7,6 +7,7 @@ import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import type { Context } from "@opencode/plugin/tui/context"
 import { SidebarContext } from "../../src/feature-plugins/sidebar/context"
+import { TestTuiContexts } from "../fixture/tui-environment"
 
 function context(options?: {
   cost?: number
@@ -68,7 +69,7 @@ function context(options?: {
 }
 
 test("sidebar omits context before usage is available", async () => {
-  const app = await testRender(() => <SidebarContext context={context()} sessionID="session" />, {
+  const app = await testRender(() => <TestTuiContexts><SidebarContext context={context()} sessionID="session" /></TestTuiContexts>, {
     width: 42,
     height: 8,
   })
@@ -83,7 +84,7 @@ test("sidebar omits context before usage is available", async () => {
 })
 
 test("sidebar shows available context usage", async () => {
-  const app = await testRender(() => <SidebarContext context={context({ tokens: 1234 })} sessionID="session" />, {
+  const app = await testRender(() => <TestTuiContexts><SidebarContext context={context({ tokens: 1234 })} sessionID="session" /></TestTuiContexts>, {
     width: 42,
     height: 8,
   })
@@ -99,7 +100,7 @@ test("sidebar shows available context usage", async () => {
 
 test("sidebar shows usage against the model context limit", async () => {
   const app = await testRender(
-    () => <SidebarContext context={context({ tokens: 150000, limit: 200000, cost: 1.5 })} sessionID="session" />,
+    () => <TestTuiContexts><SidebarContext context={context({ tokens: 150000, limit: 200000, cost: 1.5 })} sessionID="session" /></TestTuiContexts>,
     { width: 42, height: 8 },
   )
 
@@ -119,16 +120,18 @@ test("only the explicit Open button launches the existing DoD task panel and kee
   const opened: string[] = []
   const app = await testRender(
     () => (
-      <SidebarContext
-        context={context({
-          actionColor: false,
-          openPanel: (name) => {
-            opened.push(name)
-            return true
-          },
-        })}
-        sessionID="session"
-      />
+      <TestTuiContexts>
+        <SidebarContext
+          context={context({
+            actionColor: false,
+            openPanel: (name) => {
+              opened.push(name)
+              return true
+            },
+          })}
+          sessionID="session"
+        />
+      </TestTuiContexts>
     ),
     { width: 72, height: 12 },
   )
@@ -193,7 +196,7 @@ test("sidebar DoD progress bar reflects completed project tasks", async () => {
     "utf8",
   )
   const app = await testRender(
-    () => <SidebarContext context={context({ directory })} sessionID="session" />,
+    () => <TestTuiContexts><SidebarContext context={context({ directory })} sessionID="session" /></TestTuiContexts>,
     { width: 72, height: 16 },
   )
 

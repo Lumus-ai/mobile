@@ -24,9 +24,8 @@ export function PaneResizeHandle(props: {
         width={1}
         height="100%"
         marginLeft={props.highlight === "right" ? 1 : 0}
-        backgroundColor={
-          props.resize.hovered() || props.resize.resizing() ? theme.background.raised.high : theme.border.base
-        }
+        // Keep the resize affordance invisible at rest; its themed highlight appears on hover.
+        backgroundColor={props.resize.hovered() || props.resize.resizing() ? theme.background.raised.high : undefined}
       />
     </box>
   )
