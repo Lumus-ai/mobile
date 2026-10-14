@@ -274,8 +274,8 @@ const layer = Layer.effect(
               : CodeModeTool.catalog(codeModeInventory)
           if (codeModeCatalog) catalog = { data, names, value: codeModeCatalog }
           return {
-            ...(compatibilityDefinitions.length ? { compatibilityDefinitions } : {}),
-            ...(codeModeDefinitions.length ? { codeModeDefinitions } : {}),
+            compatibilityDefinitions,
+            codeModeDefinitions,
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
               ...Array.from(direct)
