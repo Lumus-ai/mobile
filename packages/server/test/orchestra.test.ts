@@ -98,6 +98,8 @@ it.live("operator projects own the sessions under their directory and one main s
 it.live("a team template opens the orchestra and its role sessions, and the orchestra keeps its role", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))
+    const coreDirectory = path.join(tmp.path, "core")
+    yield* Effect.promise(() => mkdir(coreDirectory))
     const handler = yield* ServerFetch.make({
       app: { version: "test" },
       database: { path: ":memory:" },
@@ -176,6 +178,27 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
     expect((yield* call(`/api/orchestra/project/${project.id}/session`)).body.category[developer.id]).toBe("Core")
     expect((yield* call(`/api/orchestra/category/${developer.id}`, "PUT", { category: " " })).status).toBe(204)
     expect((yield* call(`/api/orchestra/project/${project.id}/session`)).body.category[developer.id]).toBeUndefined()
+
+    // The dedicated core template creates its specialized sessions through the same project workflow.
+    const coreProject = (yield* call("/api/orchestra/project", "POST", {
+      name: "OpenCode++ Core",
+      directory: coreDirectory,
+      template: "opencode-core",
+    })).body
+    const coreListed = (yield* call(`/api/orchestra/project/${coreProject.id}/session`)).body
+    expect(
+      coreListed.data.map((item: { agent: string }) => item.agent).toSorted(),
+    ).toEqual([
+      "team-api-contract-engineer",
+      "team-architect",
+      "team-compatibility-engineer",
+      "team-core-maintainer",
+      "team-integration-engineer",
+      "team-reviewer",
+      "team-security-auditor",
+      "team-tester",
+    ])
+    expect(Object.values(coreListed.access).every((access: string) => access === "full")).toBe(true)
 
     // switching the orchestra to another agent is ignored
     expect((yield* call(`/api/session/${main.id}/agent`, "POST", { agent: "build" })).status).toBe(204)
