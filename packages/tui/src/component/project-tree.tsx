@@ -156,8 +156,10 @@ export function ProjectTree(props: { width: number; collapsed?: boolean; onHide?
 
   const openCreatedProject = (project: OrchestraProject) => {
     setExpanded(project.id, true)
-    // Load its roster first so the sidebar immediately shows the sessions that belong to it.
-    void expand(project.id).then(() => openMain(project))
+    // Refresh the roster in the background; opening the project's main session must not
+    // depend on a second endpoint responding first.
+    void expand(project.id)
+    openMain(project)
   }
 
   const edit = (project?: OrchestraProject) =>
