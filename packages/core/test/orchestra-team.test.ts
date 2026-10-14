@@ -503,6 +503,38 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   ),
 
+  it.live("lists owned sessions even when hundreds of unrelated sessions are newer", () =>
+    Effect.gen(function* () {
+      const projectDir = yield* Effect.acquireDisposable(
+        Effect.promise(() => tmpdir("opencode-orchestra-pagination-project-")),
+      )
+      const unrelatedDir = yield* Effect.acquireDisposable(
+        Effect.promise(() => tmpdir("opencode-orchestra-pagination-unrelated-")),
+      )
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const project = yield* orchestra.create({ name: "Pagination", directory: projectDir.path })
+      const oldWorker = yield* sessions.create({
+        location: { directory: AbsolutePath.make(projectDir.path) },
+        title: "Older project worker",
+      })
+      // Separate update timestamps so all 501 unrelated chats sort strictly after this worker.
+      yield* Effect.sleep("10 millis")
+      yield* Effect.forEach(
+        Array.from({ length: 501 }, (_, index) => index),
+        (index) =>
+          sessions.create({
+            location: { directory: AbsolutePath.make(unrelatedDir.path) },
+            title: `Unrelated ${index}`,
+          }),
+        { concurrency: 1, discard: true },
+      )
+
+      const listed = yield* orchestra.sessions(project.id)
+      expect(listed.map((session) => session.id)).toContain(oldWorker.id)
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("a dispatched task reports back to the orchestrator when its run ends", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))

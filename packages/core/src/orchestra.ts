@@ -1,6 +1,6 @@
 export * as Orchestra from "./orchestra.js"
 
-import { Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Context, DateTime, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import path from "node:path"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -270,16 +270,42 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
     const projectSessions = Effect.fn("Orchestra.projectSessions")(function* (project: Project) {
       const all = yield* projects()
       const claims = yield* owners()
-      const recent = (yield* sessions.list({ parentID: null, limit: SCAN_LIMIT, order: "desc" })).data
-      // Another project in the same directory has its own orchestrator; it never joins this team.
-      return recent.filter((session) => {
-        const claimed = claims[session.id] ?? Orchestra.sessionOwner(session.metadata)
-        return (
-          session.id !== project.main &&
-          session.agent !== Orchestra.agent &&
-          Orchestra.ownerOf(all, session.location.directory, claimed)?.id === project.id
-        )
-      })
+      const found: SessionSchema.Info[] = []
+      let anchor: SessionSchema.ListAnchor | undefined
+      // SCAN_LIMIT is a page size, not a cap. A project can have old sessions behind hundreds
+      // of unrelated recent chats, so keep paging until the session store says there is no next page.
+      while (true) {
+        const page = (
+          yield* sessions.list({
+            parentID: null,
+            limit: SCAN_LIMIT,
+            order: "desc",
+            ...(anchor ? { anchor } : {}),
+          })
+        ).data
+        // An invalid/repeated anchor must not spin forever or duplicate a page.
+        if (anchor && page.at(-1)?.id === anchor.id) break
+        for (const session of page) {
+          const claimed = claims[session.id] ?? Orchestra.sessionOwner(session.metadata)
+          // Another project in the same directory has its own orchestrator; it never joins this team.
+          if (
+            session.id !== project.main &&
+            session.agent !== Orchestra.agent &&
+            Orchestra.ownerOf(all, session.location.directory, claimed)?.id === project.id
+          ) {
+            found.push(session)
+          }
+        }
+        if (page.length < SCAN_LIMIT) break
+        const last = page.at(-1)
+        if (!last) break
+        anchor = {
+          id: last.id,
+          time: DateTime.toEpochMillis(last.time.updated),
+          direction: "next",
+        }
+      }
+      return found
     })
 
     // When a main Session is deleted, its replacement has a new ID. Keep any outstanding
