@@ -317,7 +317,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
     }
     if (shareArmed() !== idea.id) {
       setShareArmed(idea.id)
-      toast.show({ variant: "info", message: t("Click share again to submit this idea for public moderation.") })
+      toast.show({ variant: "info", message: t("Click share again to add this idea to the public global bank. Only this generic idea text is sent.") })
       return
     }
     setShareArmed(undefined)
@@ -533,8 +533,9 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef } }) {
 
 /**
  * Lightweight background collector. It runs only after explicit opt-in and only when a
- * session reaches idle. Source text exists in memory briefly for rule matching, but is
- * never written to storage, logged, sent to a model, or sent over the network by this feature.
+ * session reaches idle. Source text is inspected in memory for rule matching, but is never
+ * stored, logged, sent to a model, or sent over the network. If global sharing is separately
+ * enabled, only a fixed, generic classifier result is sent — never the original message.
  */
 export function IdeaBankCapture() {
   const data = useData()
@@ -546,8 +547,8 @@ export function IdeaBankCapture() {
     if (!state.autoCapture || busy.has(sessionID)) return
     busy.add(sessionID)
     try {
-      // Read only the transcript already cached by the TUI. This feature performs no HTTP
-      // requests and never asks a model to inspect the conversation.
+      // Read only the transcript already cached by the TUI. Only generic classifier output
+      // may be sent, and only after the separate global-sharing opt-in; no model is called.
       const messages = data.session.message.list(sessionID)
       if (!state.autoCapture || messages.length === 0) return
       const since = state.autoCaptureSince
