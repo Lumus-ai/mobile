@@ -41,6 +41,7 @@ const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 }
 const deferTaskDelivery = new Set<Session.ID>()
 // Simulates losing a terminal event while the worker answer remains durable.
 const suppressTerminalEvent = new Set<Session.ID>()
+const deliverRegularInput = new Set<Session.ID>()
 
 // Stands in for the runner: a woken team session answers with its title and ends
 // its run the way the title asks ("fails", "stops at shutdown" or succeeds).
@@ -68,6 +69,9 @@ const executionNode = makeGlobalNode({
         if (task && !deferTaskDelivery.has(sessionID)) {
           yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: task.id })
           taskDelivered = true
+        } else if (deliverRegularInput.has(sessionID)) {
+          const item = pending.find((entry) => entry.type === "user")
+          if (item) yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: item.id })
         }
         const assistantMessageID = SessionMessage.ID.create()
         yield* bus.publish(SessionEvent.Step.Started, {
@@ -733,6 +737,10 @@ describe("Orchestra team", () => {
 
       // A direct user prompt arrives before the missing terminal event is reconciled.
       // Its completion must not overwrite the answer to the task already assigned by the orchestrator.
+      yield* Effect.acquireRelease(
+        Effect.sync(() => deliverRegularInput.add(worker.id)),
+        () => Effect.sync(() => deliverRegularInput.delete(worker.id)),
+      )
       yield* sessions.prompt({ sessionID: worker.id, text: "Now answer an unrelated question" })
       expect(yield* reports(project.main!)).toHaveLength(0)
       expect(yield* orchestra.pending(worker.id)).toBeNumber()
