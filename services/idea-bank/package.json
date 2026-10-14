@@ -9,7 +9,8 @@
     "db:create": "wrangler d1 create opencode-idea-bank",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
