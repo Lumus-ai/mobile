@@ -108,7 +108,7 @@ export async function install(root = checkout): Promise<Install> {
     await $`git -C ${root} rev-list --left-right --count ${"HEAD...origin/" + INSTALL_BRANCH}`.quiet().text()
   )
     .trim()
-    .split(/\\s+/)
+    .split(/\s+/)
     .map(Number)
   if (ahead) return { type: "ahead" }
   if (!behind) return { type: "current" }
