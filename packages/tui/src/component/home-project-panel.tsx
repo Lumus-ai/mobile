@@ -40,8 +40,9 @@ export function HomeProjectPanel(props: { width: number }) {
 
   const project = createMemo(() => {
     const all = projects.list()
-    if (route.data.type === "home" && route.data.project) {
-      const selected = all.find((item) => item.id === route.data.project)
+    const currentRoute = route.data
+    if (currentRoute.type === "home" && currentRoute.project) {
+      const selected = all.find((item) => item.id === currentRoute.project)
       if (selected) return selected
     }
     const owner = Orchestra.ownerOf(all, currentDirectory())
