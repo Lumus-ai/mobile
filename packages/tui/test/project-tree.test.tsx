@@ -238,6 +238,9 @@ test("a project is created from a name and a path", async () => {
   await setup.waitFor(() =>
     calls.some((call) => call.method === "POST" && call.path === `/api/orchestra/project/${createdProject.id}/main`),
   )
+  // The project.main response schedules route navigation; render its pending frame before
+  // asserting the title, as the TUI test renderer intentionally does not auto-flush it.
+  await setup.renderOnce()
   await setup.waitForFrame((frame) => frame.includes("Created · Orchestrator"))
 })
 
