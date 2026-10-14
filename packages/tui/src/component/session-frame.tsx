@@ -28,6 +28,7 @@ import {
   defaultSessionPaneWidth,
   noteCanvasFlexGrow,
   sessionPanesStacked,
+  sessionTranscriptWidth,
   sessionSidebarDocks,
 } from "../ui/layout"
 import { useCompactLayout } from "../ui/compact-layout"
@@ -54,7 +55,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const theme = useTheme()
   const availableWidth = () => Math.max(0, dimensions().width - props.verticalTabsWidth)
   const [canvasHostWidth, setCanvasHostWidth] = createSignal(availableWidth())
-  const [sessionPaneWidth, setSessionPaneWidth] = createSignal(availableWidth())
   const compactLayout = useCompactLayout()
   const defaultPaneWidth = () => defaultSessionPaneWidth(panels.width(), compactLayout.compact())
   const [layout, updateLayout] = useStorage().store<{
@@ -117,6 +117,31 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     },
   })
   const rightPaneResize = () => (rightPane() === "sidebar" ? sidebarResize : paneResize)
+
+  const sessionTranscriptWidthValue = createMemo(() =>
+    sessionTranscriptWidth({
+      availableWidth: availableWidth(),
+      hasCanvas: canvas() !== undefined,
+      stacked: stacked(),
+      canvasHostWidth: canvasHostWidth(),
+      noteChatWidth: noteChatResize.size(),
+      rightPaneVisible:
+        !rightPaneHidden() &&
+        (rightPane() === "terminal" || rightPane() === "panel" || (rightPane() === "sidebar" && wide())),
+      rightPaneWidth: rightPaneResize().size(),
+      revealRailVisible:
+        !fullscreen() &&
+        (rightPaneHidden() ||
+          (rightPane() === undefined &&
+            !canvas() &&
+            !activePanel() &&
+            !selectedTerminal() &&
+            !data.session.get(props.sessionID)?.parentID)),
+      revealRailWidth: 3,
+      fullscreenContentWidth: Math.max(0, panels.width() - paneResize.size()),
+      fullscreen: fullscreen(),
+    }),
+  )
   let resizeRelease = false
   const finishPaneResize = (event: MouseEvent) => {
     if (paneResize.resizing() || sidebarResize.resizing() || noteChatResize.resizing()) {
@@ -421,11 +446,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
                 : undefined
           }
           height="100%"
-          onSizeChange={function () {
-            // Measure the actual flex allocation. Calculating from saved splitter
-            // widths can leave the transcript narrow after Notes -> Projects.
-            setSessionPaneWidth(this.width)
-          }}
         >
           <InteractivityProvider enabled={activePane() === "session" && !fullscreen()}>
             <Session
@@ -437,7 +457,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={sessionPaneWidth()}
+              width={sessionTranscriptWidthValue()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>

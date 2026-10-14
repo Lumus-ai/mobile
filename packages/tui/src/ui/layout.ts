@@ -58,6 +58,29 @@ export function clampSessionPaneWidth(width: number, total: number) {
   return Math.max(min, Math.min(width, max))
 }
 
+export function sessionTranscriptWidth(input: {
+  availableWidth: number
+  hasCanvas: boolean
+  stacked: boolean
+  canvasHostWidth: number
+  noteChatWidth: number
+  rightPaneVisible: boolean
+  rightPaneWidth: number
+  revealRailVisible: boolean
+  revealRailWidth: number
+  fullscreenContentWidth: number
+  fullscreen: boolean
+}) {
+  if (input.fullscreen) return Math.max(0, input.fullscreenContentWidth)
+  if (input.hasCanvas) return Math.max(0, input.stacked ? input.canvasHostWidth : input.noteChatWidth)
+  const occupied = input.rightPaneVisible
+    ? input.rightPaneWidth
+    : input.revealRailVisible
+      ? input.revealRailWidth
+      : 0
+  return Math.max(0, input.availableWidth - occupied)
+}
+
 export function clampSessionSidebarWidth(width: number, total: number) {
   // Docked session sidebars contain names and live statuses, so don't let a drag
   // shrink them into a clipped unreadable strip. Docking thresholds guarantee
