@@ -71,6 +71,9 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "@opencode/idea-bank#test": {
+      "outputs": []
+    },
     "@opencode/latex#test": {
       "dependsOn": ["^build"],
       "outputs": []
