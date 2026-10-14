@@ -73,10 +73,12 @@ export function sessionTranscriptWidth(input: {
 }) {
   if (input.fullscreen) return Math.max(0, input.fullscreenContentWidth)
   if (input.hasCanvas) return Math.max(0, input.stacked ? input.canvasHostWidth : input.noteChatWidth)
-  // SessionFrame is already laid out beside its sibling right pane; availableWidth
-  // must represent this frame's own allocation. Subtracting the sibling again
-  // creates an empty column after switching from Notes to Projects.
-  return Math.max(0, input.availableWidth)
+  const occupied = input.rightPaneVisible
+    ? input.rightPaneWidth
+    : input.revealRailVisible
+      ? input.revealRailWidth
+      : 0
+  return Math.max(0, input.availableWidth - occupied)
 }
 
 export function clampSessionSidebarWidth(width: number, total: number) {
