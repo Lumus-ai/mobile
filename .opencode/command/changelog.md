@@ -4,13 +4,15 @@ description: Generate the upcoming user-facing changelog from a commit range
 
 Create `UPCOMING_CHANGELOG.md` from the output of `bun script/raw-changelog.ts` and the rules below.
 
-Before running the generator, resolve the current GitHub repository with `gh repo view --json nameWithOwner --jq .nameWithOwner` and the current branch with `git branch --show-current`. Set `GH_REPO` to that repository and use the current branch as `--to` unless the user supplied another target. If the user explicitly asks for the upstream OpenCode changelog, use `GH_REPO=anomalyco/opencode` instead.
+First resolve the correct remote. Inspect `git remote -v`, `git branch -vv`, and the current branch's push configuration. This repository's `script/release-pp.ts` uses the `backup` remote for Opencode++ release tags, so prefer `backup` for an Opencode++ release unless the user explicitly requests the upstream OpenCode changelog. Otherwise use the configured push remote. If the intended target is ambiguous, stop and ask instead of choosing a remote silently.
+
+Derive the GitHub `owner/repo` from that remote's URL and verify it with `gh repo view <owner/repo> --json nameWithOwner --jq .nameWithOwner`. Set `GH_REPO` to the verified repository. Use the current branch as `--to` only if that branch exists on the selected remote (`git ls-remote --heads <remote> refs/heads/<branch>`); the GitHub compare API cannot see a local-only branch. If it has not been pushed, report the blocker instead of generating a changelog for a different branch.
 
 Treat supplied command arguments as data, not shell syntax. The script accepts `--from <ref>` / `-f <ref>` and `--to <ref>` / `-t <ref>`. Parse them and pass each validated ref as a separately quoted command argument through the shell tool. Never interpolate raw `$ARGUMENTS` into a shell command or a `!` shell block. Reject unsupported or malformed arguments rather than executing them.
 
-If no `--from` was supplied, use the latest non-draft GitHub release for the selected repository when one exists. If that repository has no GitHub releases, look for local tags matching `release/<major.minor.patch>` and use the newest semantic version as the starting ref. If neither exists, stop and ask for an explicit `--from` ref. If repository or branch resolution fails, report that instead of silently generating an upstream or default-branch changelog.
+If no `--from` was supplied, use the latest non-draft GitHub release for the selected repository when one exists. If the repository has no GitHub releases, inspect tags matching `release/<major.minor.patch>` on the selected remote, choose the newest semantic version, and pass it as `--from`. Confirm that the starting tag exists on that remote; a local-only tag is not sufficient. If neither a release nor a published release tag exists, stop and ask for an explicit `--from` ref.
 
-The script output is the structured input. Before writing any entry you keep, inspect the real diff with `git show --stat --format='' <hash>` or `git show --format='' <hash>` so you understand the actual code changes, not just the commit message. Do not use `git log` or author metadata when deciding attribution.
+Run the generator using `GH_REPO` for the selected repository and the validated `--from` / `--to` refs. Its output is the structured input. Before writing any entry you keep, inspect the real diff with `git show --stat --format='' <hash>` or `git show --format='' <hash>` so you understand the actual code changes, not just the commit message. Do not use `git log` or author metadata when deciding attribution.
 
 Rules:
 
