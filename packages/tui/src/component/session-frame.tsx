@@ -197,7 +197,10 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     if (sidebarVisible()) return "sidebar"
   })
 
-  const sessionTranscriptWidthValue = createMemo(() =>
+  // Use the formula only for the very first render. Once OpenTUI lays out the
+  // session pane, its measured width is the source of truth. A createMemo here
+  // eagerly evaluated canvas() in older builds before canvas was initialized.
+  const initialSessionTranscriptWidth = () =>
     sessionTranscriptWidth({
       availableWidth: availableWidth(),
       hasCanvas: canvas() !== undefined,
@@ -219,8 +222,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       revealRailWidth: 3,
       fullscreenContentWidth: Math.max(0, panels.width() - paneResize.size()),
       fullscreen: fullscreen(),
-    }),
-  )
+    })
+  const [sessionPaneMeasuredWidth, setSessionPaneMeasuredWidth] = createSignal<number>()
 
   const toggleSidebar = () => {
     batch(() => {
@@ -445,6 +448,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           flexBasis={canvas() && !stacked() ? undefined : 0}
           minWidth={0}
           minHeight={0}
+          onSizeChange={function () {
+            setSessionPaneMeasuredWidth(this.width)
+          }}
           position={fullscreen() ? "absolute" : "relative"}
           visible={!fullscreen()}
           width={
@@ -468,7 +474,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={sessionTranscriptWidthValue()}
+              width={sessionPaneMeasuredWidth() ?? initialSessionTranscriptWidth()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>

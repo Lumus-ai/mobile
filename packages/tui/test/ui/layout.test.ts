@@ -163,6 +163,26 @@ test("the transcript fills the center column after switching from Notes to Proje
   ).toBe(72)
 })
 
+test("the initial transcript width is superseded by the measured session-pane width", () => {
+  // The actual UI passes sessionPaneMeasuredWidth() after the first layout.
+  // Keep this case to document the intended fallback when layout has not run yet.
+  expect(
+    sessionTranscriptWidth({
+      availableWidth: 110,
+      hasCanvas: false,
+      stacked: false,
+      canvasHostWidth: 70,
+      noteChatWidth: 40,
+      rightPaneVisible: true,
+      rightPaneWidth: 38,
+      revealRailVisible: false,
+      revealRailWidth: 3,
+      fullscreenContentWidth: 0,
+      fullscreen: false,
+    }),
+  ).toBe(72)
+})
+
 test("transcript width follows the active note split and visible side rail", () => {
   const base = {
     availableWidth: 110,
