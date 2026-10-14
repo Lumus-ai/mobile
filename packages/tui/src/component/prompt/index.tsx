@@ -1691,6 +1691,22 @@ export function Prompt(props: PromptProps) {
 
   return (
     <>
+      <PromptMiniSkills
+        mode={() => store.mode}
+        onInsert={(instruction) => {
+          if (!input || input.isDestroyed || disabled()) return
+          input.gotoBufferEnd()
+          const prefix = input.plainText.trim() ? "\n\n" : ""
+          input.insertText(prefix + instruction + "\n\n")
+          setTimeout(() => {
+            if (!input || input.isDestroyed) return
+            input.focus()
+            input.getLayoutNode().markDirty()
+            input.gotoBufferEnd()
+            renderer.requestRender()
+          }, 0)
+        }}
+      />
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
           width="100%"
@@ -1783,22 +1799,6 @@ export function Prompt(props: PromptProps) {
                 </Show>
               </box>
             </Show>
-            <PromptMiniSkills
-              mode={() => store.mode}
-              onInsert={(instruction) => {
-                if (!input || input.isDestroyed || disabled()) return
-                input.gotoBufferEnd()
-                const prefix = input.plainText.trim() ? "\n\n" : ""
-                input.insertText(prefix + instruction + "\n\n")
-                setTimeout(() => {
-                  if (!input || input.isDestroyed) return
-                  input.focus()
-                  input.getLayoutNode().markDirty()
-                  input.gotoBufferEnd()
-                  renderer.requestRender()
-                }, 0)
-              }}
-            />
             <textarea
               width="100%"
               placeholder={placeholderText()}
