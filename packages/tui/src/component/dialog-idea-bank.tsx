@@ -394,6 +394,7 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
         toast.show({ variant: "error", message })
         return
       }
+      await loadGlobalIdeas()
       toast.show({ variant: "success", message: t("Idea added to the global bank.") })
     } catch {
       toast.show({ variant: "error", message: t("Could not submit to global Idea Bank") })
@@ -515,6 +516,9 @@ export function DialogIdeaBank(props: { prompt: { current?: PromptRef }; initial
         <box flexGrow={1} />
         <HoverAction id="idea-bank.search-global" onClick={openGlobalSearch} paddingLeft={1} paddingRight={1}>
           <text fg={theme.text.action.primary.base}>{t("Search")}</text>
+        </HoverAction>
+        <HoverAction id="idea-bank.refresh-global" onClick={() => void loadGlobalIdeas()} paddingLeft={1} paddingRight={1}>
+          <text fg={theme.text.muted}>{t("Refresh")}</text>
         </HoverAction>
         <Show when={globalQuery().length > 0}>
           <HoverAction
