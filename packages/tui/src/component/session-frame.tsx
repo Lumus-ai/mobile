@@ -56,7 +56,10 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const theme = useTheme()
   // Derive the frame's current width from live terminal and left-rail dimensions.
   // Cached width stayed at the note split size after switching back to Projects.
-  const availableWidth = () => Math.max(0, dimensions().width - props.verticalTabsWidth)
+  // SessionFrame is already rendered to the right of the project tree. Measure its
+  // actual allocation rather than subtracting the left panel from the terminal twice.
+  const [frameWidth, setFrameWidth] = createSignal(Math.max(0, dimensions().width - props.verticalTabsWidth))
+  const availableWidth = () => frameWidth()
   const [canvasHostWidth, setCanvasHostWidth] = createSignal(availableWidth())
   const compactLayout = useCompactLayout()
   const activePanel = createMemo(() => {
@@ -396,6 +399,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       minHeight={0}
       flexDirection="row"
       position="relative"
+      onSizeChange={function () {
+        setFrameWidth(this.width)
+      }}
       onMouseDrag={(event) => {
         paneResize.onMouseDrag(event)
         sidebarResize.onMouseDrag(event)
