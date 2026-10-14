@@ -505,11 +505,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           </HoverAction>
         </box>
       </Show>
-      <Show
-        when={
-          !fullscreen() &&
-          !rightPaneHidden() &&
-          rightPane() === undefined &&
       <Show when={!fullscreen() && !rightPaneHidden() && (rightPane() === "terminal" || rightPane() === "panel") && availableWidth() >= 3}>
         <PaneResizeHandle resize={paneResize} left={availableWidth() - paneResize.size() - 1} highlight="right" />
       </Show>
@@ -523,7 +518,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           alignItems="flex-end"
           backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
         >
-          <Sidebar sessionID={props.sessionID} onHide={toggleSidebar} />
+          <Sidebar sessionID={props.sessionID} onHide={hideRightPane} />
         </box>
       </Show>
     </box>
