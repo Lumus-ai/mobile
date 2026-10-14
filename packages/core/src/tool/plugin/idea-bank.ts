@@ -1,6 +1,7 @@
 export * as IdeaBankTool from "./idea-bank.js"
 
 import { ToolFailure } from "@opencode/ai"
+import { Permission } from "../../permission.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 
@@ -34,6 +35,7 @@ const failure = (message: string, error?: unknown) => Effect.fail(new ToolFailur
 export const Plugin = {
   id: "opencode.tool.idea-bank",
   effect: Effect.fn("IdeaBankTool.Plugin")(function* (ctx: Context) {
+    const permission = yield* Permission.Service
     yield* ctx.tool.transform((editor) =>
       editor.add({
         name,
@@ -41,9 +43,20 @@ export const Plugin = {
         description,
         input: Input,
         output: Output,
-        execute: (input) =>
+        execute: (input, context) =>
           Effect.gen(function* () {
-            const configured = process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\\/+$/, "")
+            if (input.action === "submit") {
+              yield* permission.assert({
+                action: name,
+                resources: ["submit"],
+                save: [],
+                metadata: { action: "submit" },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
+            }
+            const configured = process.env.OPENCODE_IDEA_BANK_URL?.trim().replace(/\/+$/, ""))
             if (!configured) {
               return {
                 output:
