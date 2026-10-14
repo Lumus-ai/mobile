@@ -99,7 +99,8 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))
     const coreDirectory = path.join(tmp.path, "core")
-    yield* Effect.promise(() => mkdir(coreDirectory))
+    const proofDirectory = path.join(tmp.path, "proof-driven")
+    yield* Effect.promise(() => Promise.all([mkdir(coreDirectory), mkdir(proofDirectory)]))
     const handler = yield* ServerFetch.make({
       app: { version: "test" },
       database: { path: ":memory:" },
@@ -131,6 +132,16 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
       "team-compatibility-engineer",
       "team-security-auditor",
       "team-tester",
+      "team-reviewer",
+    ])
+
+    const proofDriven = templates.find((item: { id: string }) => item.id === "proof-driven")
+    expect(proofDriven).toBeDefined()
+    expect(proofDriven.members.map((member: { agent: string }) => member.agent)).toEqual([
+      "team-architect",
+      "team-developer",
+      "team-tester",
+      "team-counterexample-engineer",
       "team-reviewer",
     ])
 
@@ -200,6 +211,21 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
     ])
     expect(Object.values(coreListed.access).every((access) => access === "full")).toBe(true)
 
+    const proofProject = (yield* call("/api/orchestra/project", "POST", {
+      name: "Proof-driven",
+      directory: proofDirectory,
+      template: "proof-driven",
+    })).body
+    const proofListed = (yield* call(`/api/orchestra/project/${proofProject.id}/session`)).body
+    expect(proofListed.data.map((item: { agent: string }) => item.agent).toSorted()).toEqual([
+      "team-architect",
+      "team-counterexample-engineer",
+      "team-developer",
+      "team-reviewer",
+      "team-tester",
+    ])
+    expect(Object.values(proofListed.access).every((access) => access === "full")).toBe(true)
+
     // switching the orchestra to another agent is ignored
     expect((yield* call(`/api/session/${main.id}/agent`, "POST", { agent: "build" })).status).toBe(204)
     expect((yield* call(`/api/session/${main.id}`)).body.data.agent).toBe("orchestrator")
@@ -216,6 +242,7 @@ it.live("a team template opens the orchestra and its role sessions, and the orch
       "team-integration-engineer",
       "team-api-contract-engineer",
       "team-security-auditor",
+      "team-counterexample-engineer",
       "team-performance-engineer",
       "team-compatibility-engineer",
       "team-data-migration-engineer",
