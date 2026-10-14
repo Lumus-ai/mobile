@@ -451,6 +451,7 @@ const ru: Record<string, string> = {
   "Data & Migration Engineer": "Инженер данных и миграций",
   "Reliability Engineer": "Инженер надёжности",
   "Dependency Auditor": "Аудитор зависимостей",
+  "Counterexample Engineer": "Инженер контрпримеров",
   "OpenCode++ Core": "Ядро OpenCode++",
   Platform: "Платформа",
   Data: "Данные",

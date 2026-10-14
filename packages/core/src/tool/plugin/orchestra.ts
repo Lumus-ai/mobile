@@ -21,7 +21,7 @@ const description = [
   "A report's state describes whether the worker run ended; outcome describes task progress. If outcome is partial, incomplete, unknown, failed, or stopped, treat the task as still open unless it is explicitly blocked or cancelled. Compare the report with the acceptance criteria and send a focused follow-up to that same worker after its previous task is no longer outstanding. Do not mark the overall task complete until evidence satisfies the acceptance criteria; if the work is blocked, state the exact blocker.",
   "Copy the complete sessionID exactly from the roster or action list; never abbreviate or invent one. If a sessions action fails, inspect the exact error and current list/read state, correct the cause, then retry only with changed/corrected arguments. Never repeat an identical failed call.",
   "read returns a session's latest messages; create accepts an exact role ID from the global Orchestra role registry even if no session exists for that role yet, reuses a writable matching session by default or creates one if needed, and can give it a first task; stop interrupts a running session.",
-  "Never pass a display title as a role ID. Built-in specialist IDs include core-maintainer, integration-engineer, api-contract-engineer, security-auditor, performance-engineer, compatibility-engineer, data-migration-engineer, reliability-engineer and dependency-auditor.",
+  "Never pass a display title as a role ID. Built-in specialist IDs include core-maintainer, integration-engineer, api-contract-engineer, security-auditor, performance-engineer, compatibility-engineer, data-migration-engineer, reliability-engineer, dependency-auditor and counterexample-engineer.",
   "Access per session is hidden < read < write < full: read allows list and read, write adds send, full adds stop. Sessions you create get full access.",
 ].join("\n")
 
@@ -53,7 +53,7 @@ export const Input = Schema.Struct({
   }),
   title: Schema.optionalKey(Schema.String).annotate({ description: "Title of the session to create" }),
   role: Schema.optionalKey(Schema.String).annotate({
-    description: "Exact ID of a built-in or saved Orchestra role, required; not the display title. Core specialists include core-maintainer, integration-engineer, api-contract-engineer, security-auditor, performance-engineer, compatibility-engineer, data-migration-engineer, reliability-engineer and dependency-auditor.",
+    description: "Exact ID of a built-in or saved Orchestra role, required; not the display title. Core specialists include core-maintainer, integration-engineer, api-contract-engineer, security-auditor, performance-engineer, compatibility-engineer, data-migration-engineer, reliability-engineer, dependency-auditor and counterexample-engineer.",
   }),
   category: Schema.optionalKey(Schema.String).annotate({
     description: "Category of the session to create, e.g. Planning, Build or Quality",

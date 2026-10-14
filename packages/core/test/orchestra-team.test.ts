@@ -1374,6 +1374,20 @@ describe("Orchestra team", () => {
           return event.effect
         })
       expect(String((yield* agents.get(Orchestra.role("developer")))?.name)).toBe("Developer")
+      const counterexampleRole = (yield* orchestra.roles()).find((item) => item.id === "counterexample-engineer")
+      expect(counterexampleRole).toMatchObject({
+        name: "Counterexample Engineer",
+        readOnly: true,
+        category: "Quality",
+      })
+      const counterexample = yield* agents.get(Orchestra.role("counterexample-engineer")).pipe(
+        Effect.filterOrFail((item) => item !== undefined),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(counterexample.system.toLowerCase()).toContain("falsify")
+      expect(counterexample.permissions).toContainEqual({ action: "edit", resource: "*", effect: "deny" })
+      expect(yield* evaluate(Orchestra.role("counterexample-engineer"), "edit")).toBe("deny")
 
       const role = yield* orchestra.saveRole(undefined, {
         name: "Translator",
