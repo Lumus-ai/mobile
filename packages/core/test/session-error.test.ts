@@ -110,6 +110,8 @@ describe("toSessionError", () => {
     expect(error.message).toContain("/connect")
     expect(error.message).toContain("read")
     expect(error.message).toContain("bash/shell")
+    expect(error.message).toContain("dev/branch build metadata")
+    expect(error.message).toContain("Update and rebuild OpenCode++")
     expect(error.status).toBe(403)
     expect(error.response).toEqual({ body })
   })
