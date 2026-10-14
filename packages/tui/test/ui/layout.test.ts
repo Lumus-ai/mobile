@@ -8,6 +8,7 @@ import {
   clampSessionTabsWidth,
   defaultSessionPaneWidth,
   homeProjectPanelWidth,
+  sessionPaneBoxWidth,
   sessionPanesStacked,
   sessionSidebarDocks,
   resolveSessionPaneWidth,
@@ -218,4 +219,43 @@ test("measured transcript width is ignored after leaving Notes mode", () => {
   expect(resolveSessionPaneWidth(42, 72, false)).toBe(72)
   expect(resolveSessionPaneWidth(42, 72, true)).toBe(42)
   expect(resolveSessionPaneWidth(74, 72)).toBe(74)
+})
+
+test("switching from Notes to Projects explicitly expands the session pane", () => {
+  expect(
+    sessionPaneBoxWidth({
+      fullscreen: false,
+      fullscreenWidth: 0,
+      hasCanvas: true,
+      stacked: false,
+      noteChatWidth: 42,
+    }),
+  ).toBe(42)
+  expect(
+    sessionPaneBoxWidth({
+      fullscreen: false,
+      fullscreenWidth: 0,
+      hasCanvas: false,
+      stacked: false,
+      noteChatWidth: 42,
+    }),
+  ).toBe("100%")
+  expect(
+    sessionPaneBoxWidth({
+      fullscreen: false,
+      fullscreenWidth: 0,
+      hasCanvas: true,
+      stacked: true,
+      noteChatWidth: 42,
+    }),
+  ).toBe("100%")
+  expect(
+    sessionPaneBoxWidth({
+      fullscreen: true,
+      fullscreenWidth: 80,
+      hasCanvas: false,
+      stacked: false,
+      noteChatWidth: 42,
+    }),
+  ).toBe(80)
 })

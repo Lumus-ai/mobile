@@ -28,6 +28,7 @@ import {
   defaultSessionPaneWidth,
   noteCanvasFlexGrow,
   resolveSessionPaneWidth,
+  sessionPaneBoxWidth,
   sessionPanesStacked,
   sessionTranscriptWidth,
   sessionSidebarDocks,
@@ -230,8 +231,10 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   // canvas is closed. Its real allocation is authoritative; saved widths are only
   // a fallback before OpenTUI emits the first size event.
   const [measuredSessionPaneWidth, setMeasuredSessionPaneWidth] = createSignal(0)
-  const transcriptWidth = () =>
-    resolveSessionPaneWidth(measuredSessionPaneWidth(), initialSessionTranscriptWidth(), canvas() !== undefined)
+  // Drop the previous mode's width immediately. The fallback formula is used for
+  // the first frame, then onSizeChange supplies the newly allocated width.
+  createEffect(on(canvas, () => setMeasuredSessionPaneWidth(0), { defer: true }))
+  const transcriptWidth = () => resolveSessionPaneWidth(measuredSessionPaneWidth(), initialSessionTranscriptWidth())
 
   const toggleSidebar = () => {
     batch(() => {
@@ -458,15 +461,13 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           minHeight={0}
           position={fullscreen() ? "absolute" : "relative"}
           visible={!fullscreen()}
-          width={
-            fullscreen()
-              ? Math.max(0, panels.width() - paneResize.size())
-              : canvas()
-                ? stacked()
-                  ? "100%"
-                  : noteChatResize.size()
-                : undefined
-          }
+          width={sessionPaneBoxWidth({
+            fullscreen: fullscreen(),
+            fullscreenWidth: panels.width() - paneResize.size(),
+            hasCanvas: canvas() !== undefined,
+            stacked: stacked(),
+            noteChatWidth: noteChatResize.size(),
+          })}
           height="100%"
         >
           <InteractivityProvider enabled={activePane() === "session" && !fullscreen()}>

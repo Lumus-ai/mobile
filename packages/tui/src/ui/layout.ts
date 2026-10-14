@@ -64,6 +64,20 @@ export function resolveSessionPaneWidth(measured: number, initial: number, prefe
   return preferMeasured && measured > 0 ? measured : initial
 }
 
+export function sessionPaneBoxWidth(input: {
+  fullscreen: boolean
+  fullscreenWidth: number
+  hasCanvas: boolean
+  stacked: boolean
+  noteChatWidth: number
+}): number | string {
+  if (input.fullscreen) return Math.max(0, input.fullscreenWidth)
+  if (input.hasCanvas && !input.stacked) return Math.max(0, input.noteChatWidth)
+  // Never transition from a numeric width to undefined: OpenTUI may keep the old
+  // width after switching Notes -> Projects. Explicit 100% releases the stale split.
+  return "100%"
+}
+
 export function sessionTranscriptWidth(input: {
   availableWidth: number
   hasCanvas: boolean
