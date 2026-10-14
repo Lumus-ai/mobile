@@ -39,6 +39,21 @@ export function noteCanvasFlexGrow(hasCanvas: boolean, stacked: boolean) {
   return stacked ? 3 : 0
 }
 
+export function sessionPaneContentWidth(input: {
+  available: number
+  hasCanvas: boolean
+  stacked: boolean
+  canvasHost: number
+  noteChatWidth: number
+  rightPaneDocked: boolean
+  rightPaneWidth: number
+}) {
+  if (input.hasCanvas) return input.stacked ? input.canvasHost : input.noteChatWidth
+  // When the note canvas closes, restore the entire chat width and only subtract
+  // a right panel if it is actually docked beside the conversation.
+  return Math.max(0, input.available - (input.rightPaneDocked ? input.rightPaneWidth + 1 : 0))
+}
+
 export function clampNoteChatWidth(width: number, available: number) {
   const max = Math.max(1, available - NOTE_CANVAS_MIN_WIDTH)
   const min = Math.min(NOTE_CHAT_MIN_WIDTH, max)

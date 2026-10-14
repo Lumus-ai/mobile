@@ -4,6 +4,7 @@ import {
   clampNoteChatWidth,
   clampSessionPaneWidth,
   noteCanvasFlexGrow,
+  sessionPaneContentWidth,
   clampSessionTabsWidth,
   defaultSessionPaneWidth,
   homeProjectPanelWidth,
@@ -101,4 +102,54 @@ test("a hidden note canvas releases its layout space to the chat", () => {
   expect(noteCanvasFlexGrow(false, true)).toBe(0)
   expect(noteCanvasFlexGrow(true, false)).toBe(0)
   expect(noteCanvasFlexGrow(true, true)).toBe(3)
+})
+
+test("returning from Notes to Projects restores the full session width", () => {
+  expect(
+    sessionPaneContentWidth({
+      available: 108,
+      hasCanvas: false,
+      stacked: false,
+      canvasHost: 80,
+      noteChatWidth: 48,
+      rightPaneDocked: true,
+      rightPaneWidth: 30,
+    }),
+  ).toBe(77)
+  expect(
+    sessionPaneContentWidth({
+      available: 108,
+      hasCanvas: false,
+      stacked: false,
+      canvasHost: 80,
+      noteChatWidth: 48,
+      rightPaneDocked: false,
+      rightPaneWidth: 30,
+    }),
+  ).toBe(108)
+})
+
+test("a visible note keeps the selected note/chat split width", () => {
+  expect(
+    sessionPaneContentWidth({
+      available: 108,
+      hasCanvas: true,
+      stacked: false,
+      canvasHost: 95,
+      noteChatWidth: 48,
+      rightPaneDocked: true,
+      rightPaneWidth: 30,
+    }),
+  ).toBe(48)
+  expect(
+    sessionPaneContentWidth({
+      available: 108,
+      hasCanvas: true,
+      stacked: true,
+      canvasHost: 76,
+      noteChatWidth: 48,
+      rightPaneDocked: false,
+      rightPaneWidth: 30,
+    }),
+  ).toBe(76)
 })

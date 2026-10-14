@@ -26,6 +26,7 @@ import {
   clampSessionPaneWidth,
   defaultSessionPaneWidth,
   noteCanvasFlexGrow,
+  sessionPaneContentWidth,
   sessionPanesStacked,
   sessionSidebarDocks,
 } from "../ui/layout"
@@ -129,7 +130,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     noteChatResize.onMouseUp(event)
   }
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
-  const [sessionWidth, setSessionWidth] = createSignal<number>()
   const [activePane, setActivePane] = createSignal<"session" | "right">("session")
   const [rightPaneHidden, setRightPaneHidden] = createSignal(false)
   const [restoreTerminalFocus, setRestoreTerminalFocus] = createSignal(false)
@@ -188,6 +188,19 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     if (selectedTerminal()) return "terminal"
     if (sidebarVisible()) return "sidebar"
   })
+  const sessionContentWidth = createMemo(() =>
+    sessionPaneContentWidth({
+      available: availableWidth(),
+      hasCanvas: canvas() !== undefined,
+      stacked: stacked(),
+      canvasHost: canvasHostWidth(),
+      noteChatWidth: noteChatResize.size(),
+      rightPaneDocked:
+        !rightPaneHidden() &&
+        (rightPane() === "terminal" || rightPane() === "panel" || (rightPane() === "sidebar" && wide())),
+      rightPaneWidth: rightPaneResize().size(),
+    }),
+  )
   const toggleSidebar = () => {
     batch(() => {
       const visible = rightPane() === "sidebar"
@@ -424,9 +437,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
                 : undefined
           }
           height="100%"
-          onSizeChange={function () {
-            setSessionWidth(this.width)
-          }}
         >
           <InteractivityProvider enabled={activePane() === "session" && !fullscreen()}>
             <Session
@@ -438,7 +448,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               terminals={sessions.available()}
               visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
               onTerminalPicker={(show) => (showTerminals = show)}
-              width={sessionWidth()}
+              width={sessionContentWidth()}
             />
           </InteractivityProvider>
           <Show when={activePane() === "right"}>
