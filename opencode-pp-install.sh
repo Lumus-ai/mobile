@@ -67,11 +67,16 @@ fi
 
 if [ -d "$DIR/.git" ]; then
   echo "Updating $DIR…"
-  git -C "$DIR" fetch --tags --force origin
+  # Refresh only release tags and remove stale local release refs before selecting a version.
+  git -C "$DIR" fetch --force --prune origin '+refs/tags/release/*:refs/tags/release/*'
 else
   echo "Downloading Opencode++ into $DIR…"
   git clone --filter=blob:none "$REPO" "$DIR"
 fi
+
+# Explicitly refresh the fallback branch tracking ref. An explicit branch fetch without a
+# destination can update FETCH_HEAD while leaving origin/$BRANCH stale in custom clones.
+git -C "$DIR" fetch --quiet --force origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 
 # Release tag is the normal path. Until the first release exists there is nothing to check
 # out, and an installer that only knows tags leaves a newcomer with no way in at all, so the
@@ -82,7 +87,6 @@ if [ -n "$TAG" ]; then
   VERSION="${TAG#release/}"
 else
   echo "No release yet; installing branch $BRANCH."
-  git -C "$DIR" fetch --force origin "$BRANCH"
   git -C "$DIR" checkout --quiet --detach "origin/$BRANCH"
   VERSION="$BRANCH (no release yet)"
 fi
