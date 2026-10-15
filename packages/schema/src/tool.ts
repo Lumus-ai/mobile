@@ -96,6 +96,8 @@ export type Info<
   readonly name: string
   readonly input: Input
   readonly description: string
+  /** Provider-native tool configuration, forwarded to the matching model adapter. */
+  readonly native?: Record<string, unknown>
   readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Error>
   readonly output?: Output
   readonly options?: Options
