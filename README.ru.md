@@ -1,129 +1,63 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">Открытый AI-агент для программирования.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+<h1 align="center">Opencode++</h1>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+<p align="center">Терминальный ИИ-агент для разработки в команде: мультиплеер по локальной сети, ИИ-команды с ролями, DoD-доска проекта, заметки и банк идей.<br>Основан на <a href="https://github.com/anomalyco/opencode">OpenCode</a>. Windows, Linux, macOS и Android.</p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+<p align="center"><a href="README.md">English</a> | <a href="README.ru.md">Русский</a></p>
+
+![Opencode++: проект с ИИ-командой, комната в локальной сети и DoD-доска](.github/readme/home.svg)
+
+## Установка
+
+Одна команда, git, Bun и остальное установщик поставит сам.
+
+| Система | Команда |
+| --- | --- |
+| Linux / macOS / Android (Termux) | `curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh \| sh` |
+| Windows (PowerShell) | `irm https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.ps1 \| iex` |
+
+Потом запусти `opencode-pp`. Обычный opencode остаётся командой `opencode`, настройки в `~/.config/opencode` общие.
+
+**Android:** поставь [Termux](https://f-droid.org/packages/com.termux/) из F-Droid или GitHub (версия из Google Play устарела) и выполни команду для Linux. Opencode++ ставится внутрь Debian через proot-distro, `opencode-pp` открывает его в текущей папке.
+
+**Обновление:** `/update` в приложении или повторный запуск команды установки.
+
+**Мультиплеер на Windows:** один раз нажми «Разрешить в брандмауэре Windows» в окне «Хост» или «Подключиться».
+
+## Что внутри
+
+- **Комнаты в локальной сети** — хост открывает сессию, остальные подключаются по коду: участники, роли, баны и общая DoD. Работает между Windows и Linux.
+- **ИИ-команды** — оркестратор раздаёт задачи ролям (архитектор, разработчик, тестировщик, ревьюер…). Есть готовые шаблоны, свои — в `/teams`.
+- **DoD-доска проекта** — `.opencode/dod.yaml` в виде панели прогресса: что готово, в работе и заблокировано.
+- **Банк идей** — приватные идеи из твоих сессий и общий глобальный каталог с поиском, отправка только с согласия.
+- **Заметки** — заметки проекта в Markdown, ИИ пишет в выбранную заметку.
+- **Hub** — реестр CLI-инструментов: установка и включение для модели, Nushell как оболочка ИИ.
+- **Мини-скиллы** — настраиваемые кнопки над полем ввода: Analyze, Plan, Debug, Review…
+- **Общие лимиты** — агенты одного провайдера вместе пережидают паузу, а не упираются в лимит по очереди.
+- **Русский и английский** интерфейс (`/language`).
+
+## Скриншоты
+
+![Банк идей](.github/readme/ideas.svg)
+
+![Hub CLI-инструментов](.github/readme/hub.svg)
+
+![Заметки](.github/readme/notes.svg)
+
+Скриншоты отрисованы из настоящего интерфейса на демо-данных: `bun test/readme-screenshots.tsx` в `packages/tui`.
+
+## Разработка
+
+```bash
+bun install
+bun run dev
+```
+
+`bun run check` — линтер и проверка типов. Подробнее в [CONTRIBUTING.md](CONTRIBUTING.md) и [AGENTS.md](AGENTS.md).
+
+## Лицензия
+
+MIT, как у OpenCode. См. [LICENSE](LICENSE).
 
 ---
 
-### Установка
-
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Менеджеры пакетов
-npm i -g opencode-ai@latest        # или bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS и Linux (рекомендуем, всегда актуально)
-brew install opencode              # macOS и Linux (официальная формула brew, обновляется реже)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # любая ОС
-nix run nixpkgs#opencode           # или github:anomalyco/opencode для самой свежей ветки dev
-```
-
-> [!TIP]
-> Перед установкой удалите версии старше 0.1.x.
-
-### Десктопное приложение (BETA)
-
-OpenCode также доступен как десктопное приложение. Скачайте его со [страницы релизов](https://github.com/anomalyco/opencode/releases) или с [opencode.ai/download](https://opencode.ai/download).
-
-| Платформа             | Загрузка                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm` или AppImage        |
-
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
-
-#### Каталог установки
-
-Скрипт установки выбирает путь установки в следующем порядке приоритета:
-
-1. `$OPENCODE_INSTALL_DIR` - Пользовательский каталог установки
-2. `$XDG_BIN_DIR` - Путь, совместимый со спецификацией XDG Base Directory
-3. `$HOME/bin` - Стандартный каталог пользовательских бинарников (если существует или можно создать)
-4. `$HOME/.opencode/bin` - Fallback по умолчанию
-
-```bash
-# Примеры
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-В OpenCode есть два встроенных агента, между которыми можно переключаться клавишей `Tab`.
-
-- **build** - По умолчанию, агент с полным доступом для разработки
-- **plan** - Агент только для чтения для анализа и изучения кода
-  - По умолчанию запрещает редактирование файлов
-  - Запрашивает разрешение перед выполнением bash-команд
-  - Идеален для изучения незнакомых кодовых баз или планирования изменений
-
-Также включен сабагент **general** для сложных поисков и многошаговых задач.
-Он используется внутренне и может быть вызван в сообщениях через `@general`.
-
-Подробнее об [agents](https://opencode.ai/docs/agents).
-
-### Документация
-
-Больше информации о том, как настроить OpenCode: [**наши docs**](https://opencode.ai/docs).
-
-### Вклад
-
-Если вы хотите внести вклад в OpenCode, прочитайте [contributing docs](./CONTRIBUTING.md) перед тем, как отправлять pull request.
-
-### Разработка на базе OpenCode
-
-Если вы делаете проект, связанный с OpenCode, и используете "opencode" как часть имени (например, "opencode-dashboard" или "opencode-mobile"), добавьте примечание в README, чтобы уточнить, что проект не создан командой OpenCode и не аффилирован с нами.
-
----
-
-**Присоединяйтесь к нашему сообществу** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+В разработке участвовали: ChatGPT, Claude и Opencode.

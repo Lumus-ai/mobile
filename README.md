@@ -1,162 +1,61 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+<h1 align="center">Opencode++</h1>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+<p align="center">A terminal AI coding agent for teams: LAN multiplayer, AI teams with roles, a project DoD board, notes and an Idea Bank.<br>Built on <a href="https://github.com/anomalyco/opencode">OpenCode</a>. Windows, Linux, macOS and Android.</p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+<p align="center"><a href="README.md">English</a> | <a href="README.ru.md">Русский</a></p>
 
----
+![Opencode++: project with an AI team, a LAN room and the DoD board](.github/readme/home.svg)
 
-## Opencode++
+## Install
 
-This fork adds LAN rooms (multiplayer between Windows and Linux), project AI teams, notes with their own Notes agent, a Hub of CLI tools, Nushell as the AI's shell and an English/Russian interface.
-
-**Install with one command** — git, Bun and everything else is set up for you:
+One command; git, Bun and everything else is installed for you.
 
 | System | Command |
 | --- | --- |
 | Linux / macOS / Android (Termux) | `curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh \| sh` |
 | Windows (PowerShell) | `irm https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.ps1 \| iex` |
 
-On Android install [Termux](https://f-droid.org/packages/com.termux/) from F-Droid or GitHub (the Google Play build is outdated) and run the Linux command in it: Opencode++ is set up inside a Debian made by proot-distro, and `opencode-pp` in Termux opens it in the current folder.
+Then run `opencode-pp`. A regular opencode keeps the `opencode` command; settings in `~/.config/opencode` are shared.
 
-Then run `opencode-pp`. A regular opencode on the same computer keeps the `opencode` command; sessions are kept apart and settings in `~/.config/opencode` are shared. Running the same command again updates Opencode++.
+**Android:** install [Termux](https://f-droid.org/packages/com.termux/) from F-Droid or GitHub (the Google Play build is outdated) and run the Linux command. Opencode++ is set up inside a proot-distro Debian; `opencode-pp` opens it in the current folder.
 
-<details>
-<summary>Русский</summary>
+**Updates:** `/update` inside the app, or run the install command again.
 
-**Установка одной командой** — git, Bun и остальное установщик поставит сам:
+## What's inside
 
-- Linux / macOS / Android (Termux): `curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh | sh`
-- Windows (PowerShell): `irm https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.ps1 | iex`
+- **LAN rooms** — host a session and let others on the network join with a code: members, roles, bans and a shared DoD. Works between Windows and Linux.
+- **AI teams** — an orchestrator hands tasks to roles (architect, developer, tester, reviewer, …). Ready-made templates, your own in `/teams`.
+- **Project DoD board** — `.opencode/dod.yaml` as a progress panel: what is done, in progress and blocked.
+- **Idea Bank** — private ideas from your sessions and an opt-in shared global catalogue with search.
+- **Notes** — project notes in Markdown; the AI writes into the selected note.
+- **Hub** — a registry of CLI tools to install and enable for the model; Nushell as the AI's shell.
+- **Mini skills** — editable buttons above the prompt: Analyze, Plan, Debug, Review, …
+- **Shared rate limits** — agents of one provider wait out a cooldown together instead of all hitting it.
+- **English and Russian** interface (`/language`).
 
-На Android поставь [Termux](https://f-droid.org/packages/com.termux/) из F-Droid или GitHub (версия из Google Play устарела) и выполни в нём команду для Linux: Opencode++ ставится внутрь Debian через proot-distro, а `opencode-pp` в Termux открывает его в текущей папке.
+## Screenshots
 
-Потом запусти `opencode-pp`. Обычный opencode на том же компьютере остаётся командой `opencode`: сессии у них раздельные, настройки в `~/.config/opencode` общие. Повторный запуск той же команды обновляет Opencode++.
-Мультиплеер между компьютерами: на Windows один раз нажми «Разрешить в брандмауэре Windows» в окне Host или Connect.
-Язык интерфейса переключается справа в нижней строке.
+![Idea Bank](.github/readme/ideas.svg)
 
-</details>
+![Hub of CLI tools](.github/readme/hub.svg)
 
-Upstream OpenCode installation follows below.
+![Notes](.github/readme/notes.svg)
 
-### Installation
+The screenshots are rendered from the real interface with demo data: `bun test/readme-screenshots.tsx` in `packages/tui`.
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
-```
-
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
-
-### Desktop App (BETA)
-
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+## Development
 
 ```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+bun install
+bun run dev
 ```
 
-#### Installation Directory
+`bun run check` runs lint and type checks. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).
 
-The install script respects the following priority order for the installation path:
+## License
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
+MIT, like OpenCode. See [LICENSE](LICENSE).
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+Built with ChatGPT, Claude and Opencode.
