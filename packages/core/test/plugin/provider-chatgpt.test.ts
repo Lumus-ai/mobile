@@ -6,7 +6,7 @@ import { AIError, HttpContext, RateLimitError } from "@opencode/ai"
 import { classifyProviderFailure } from "@opencode/ai/provider-error"
 import { describe, expect } from "bun:test"
 // import { DateTime, Deferred, Effect, Schedule } from "effect"
-import { DateTime, Effect, Schedule } from "effect"
+import { DateTime, Effect, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import { App } from "@opencode/core/app"
@@ -240,15 +240,25 @@ describe("ChatGPTPlugin", () => {
 
   it.effect("registers OpenAI hosted image generation without replacing project tools", () =>
     Effect.gen(function* () {
+      const toolsService = yield* Tool.Service
+      yield* toolsService.transform((editor) =>
+        editor.add({
+          name: "plugin_probe",
+          description: "A plugin tool used to verify the tool registry remains intact.",
+          input: Schema.Struct({}),
+          execute: () => Effect.succeed({ content: "ok" }),
+        }),
+      )
       yield* addPlugin()
       const tools = yield* Tool.Service.list()
       const image = tools.find((tool) => tool.name === "image_generation")
       expect(image?.native).toEqual({ openai: { type: "image_generation", action: "auto" } })
-      expect(tools.some((tool) => tool.name === "websearch")).toBe(true)
+      expect(tools.some((tool) => tool.name === "plugin_probe")).toBe(true)
       const snapshot = yield* Tool.Service.snapshot()
       expect(snapshot.definitions.find((tool) => tool.name === "image_generation")?.native).toEqual({
         openai: { type: "image_generation", action: "auto" },
       })
+      expect(snapshot.definitions.some((tool) => tool.name === "plugin_probe")).toBe(true)
     }),
   )
 
