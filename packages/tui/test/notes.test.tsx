@@ -264,7 +264,16 @@ test("a save that lost a race keeps the text and offers the latest version", asy
   const calls: Call[] = []
   const notes = [plan()]
   let conflict = false
-  await using setup = await render(state.path, { notes, calls, conflict: () => conflict })
+  let conflictResponses = 0
+  await using setup = await render(state.path, {
+    notes,
+    calls,
+    conflict: () => {
+      if (!conflict) return false
+      conflictResponses++
+      return true
+    },
+  })
   await setup.waitForFrame((frame) => frame.includes("Note: Release plan"))
   await click(setup, "Note: Release plan", 2)
   await setup.waitForFrame((frame) => frame.includes("Edit"))
@@ -275,6 +284,8 @@ test("a save that lost a race keeps the text and offers the latest version", asy
 
   conflict = true
   setup.mockInput.pressKey("s", { ctrl: true })
+  await setup.waitFor(() => calls.some((call) => call.path.endsWith("/edit")))
+  expect(conflictResponses).toBe(1)
   const frame = await setup.waitForFrame((frame) => frame.includes("Not saved: this note changed"))
   expect(frame).toContain("Reload latest")
   expect(frame).toContain("Overwrite with mine")

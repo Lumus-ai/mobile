@@ -69,8 +69,9 @@ test("/update opens the manual update dialog and checks for a newer version", as
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Build · first model"))
   setup.mockInput.typeText("/update")
-  // No-argument slash commands run when selected from autocomplete; submitting after
-  // Escape would send the literal text to the model instead of invoking the command.
+  // Wait for slash-command autocomplete before Enter; otherwise the key can land on
+  // the composer itself while the command list is still being rendered.
+  await setup.waitForFrame((frame) => frame.includes("/update") && frame.includes("Update Opencode++"))
   setup.mockInput.pressEnter()
 
   await setup.waitForFrame((frame) => frame.includes("Version 9.9.9 is available"))

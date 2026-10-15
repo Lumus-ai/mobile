@@ -4,6 +4,17 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
+import {
+  clampSessionPaneWidth,
+  compactLayout,
+  defaultSessionPaneWidth,
+  SESSION_CHAT_MIN_WIDTH,
+  SESSION_PANEL_MIN_WIDTH,
+  SESSION_SIDEBAR_COMPACT_WIDTH,
+  SESSION_SIDEBAR_WIDTH,
+  SESSION_TABS_COMPACT_LAYOUT_WIDTH,
+  sessionTabsFitVertically,
+} from "../src/ui/layout"
 import { tmpdir } from "./fixture/fixture"
 
 test
@@ -167,7 +178,17 @@ test
     const y = handle.y + Math.floor(handle.height / 2)
     await setup.mockMouse.drag(start, y, start + 4, y)
     await setup.waitForVisualIdle()
-    expect(handle.x).toBe(start + 4)
+
+    // Resizing is clamped to keep the chat and terminal readable. At 80 columns
+    // the panel is already at its minimum; at 120 it has only two columns of slack.
+    const compact = compactLayout(undefined, width)
+    const tabsWidth = compact ? SESSION_TABS_COMPACT_LAYOUT_WIDTH : SESSION_SIDEBAR_WIDTH
+    const tabs = sessionTabsFitVertically(width, tabsWidth) ? tabsWidth : 0
+    const available = width - tabs
+    const initial = clampSessionPaneWidth(defaultSessionPaneWidth(available, compact), available)
+    const minimum = Math.min(SESSION_PANEL_MIN_WIDTH, Math.max(1, available - SESSION_CHAT_MIN_WIDTH))
+    const expectedDelta = Math.min(4, Math.max(0, initial - minimum))
+    expect(handle.x).toBe(start + expectedDelta)
     expect(setup.renderer.currentFocusedRenderable).toBe(terminal)
   } finally {
     setup.renderer.destroy()

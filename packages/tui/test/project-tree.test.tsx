@@ -283,7 +283,8 @@ test("a project is created from a name and a path", async () => {
   }
 
   await setup.renderOnce()
-  await setup.waitForFrame((frame) => frame.includes("Created · Orchestrator"), { maxPasses: 100 })
+  // ProjectTree renders the project name and its main orchestrator on separate rows.
+  await setup.waitForFrame((frame) => frame.includes("Created") && frame.includes("★ Orchestrator"), { maxPasses: 100 })
 })
 
 test("a new project can start with an AI team from a template", async () => {
