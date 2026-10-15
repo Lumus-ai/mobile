@@ -1147,7 +1147,13 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
           limit: 200,
         })
         .pipe(Effect.orElseSucceed((): SessionMessage.Info[] => []))
-      return messages.some(
+      // Messages are newest-first. An assistant turn after the report does not prove the report
+      // was handled when a newer user prompt was already waiting: that turn may answer only that
+      // unrelated prompt. Restrict the acknowledgement window to the report and the messages
+      // before the first subsequent user input.
+      const nextUser = messages.findLastIndex((message) => message.type === "user")
+      const reportTurn = nextUser < 0 ? messages : messages.slice(nextUser + 1)
+      return reportTurn.some(
         (message) =>
           message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
       )

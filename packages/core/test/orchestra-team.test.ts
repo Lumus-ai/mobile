@@ -745,6 +745,84 @@ describe("Orchestra team", () => {
     }).pipe(Effect.scoped),
   ),
 
+  it.live("does not acknowledge a report from an unrelated user turn before recovering it", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-report-ack-boundary-")))
+      const orchestra = yield* Orchestra.Service
+      const sessions = yield* Session.Service
+      const bus = yield* Bus.Service
+      const kv = yield* KV.Service
+      const project = yield* orchestra.create({ name: "Report acknowledgement", directory: tmp.path, template: "bugfix" })
+      const oldMain = project.main!
+      const worker = (yield* orchestra.sessions(project.id)).find((session) => session.title === "Developer")!
+
+      yield* orchestra.dispatch({ project, sessionID: worker.id, text: "Fix the bug" })
+      const [pendingReport] = yield* reports(oldMain).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      const reportItem = (yield* sessions.inbox(oldMain)).find(
+        (item) => item.type === "synthetic" && item.payload.text === pendingReport,
+      )
+      expect(reportItem).toBeDefined()
+      if (!reportItem || reportItem.type !== "synthetic") throw new Error("Expected the worker report in the main inbox")
+
+      // Make the report visible in history, then admit an unrelated user question after it.
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID: oldMain, inboxID: reportItem.id })
+      const unrelated = yield* sessions.prompt({
+        sessionID: oldMain,
+        text: "What is the current project name?",
+        resume: false,
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID: oldMain, inboxID: unrelated.id })
+
+      // Simulate a successful assistant turn after the unrelated prompt, not a response to the report.
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: oldMain,
+        assistantMessageID,
+        agent: Orchestra.agent,
+        model,
+        started: 0,
+      })
+      yield* bus.publish(SessionEvent.Text.Started, { sessionID: oldMain, assistantMessageID, ordinal: 0 })
+      yield* bus.publish(SessionEvent.Text.Ended, {
+        sessionID: oldMain,
+        assistantMessageID,
+        ordinal: 0,
+        text: "The project is Report acknowledgement.",
+      })
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID: oldMain,
+        assistantMessageID,
+        finish: "stop",
+        cost: Money.USD.zero,
+        tokens,
+      })
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: oldMain })
+      yield* Effect.sleep("50 millis")
+
+      const ledger = yield* kv.get(`orchestra/report/${project.id}/${reportItem.id}`)
+      expect(ledger).toBeDefined()
+      expect((ledger as { acknowledged?: boolean }).acknowledged).not.toBe(true)
+
+      // The unacknowledged report must survive deletion of the session it was originally sent to.
+      yield* sessions.remove(oldMain)
+      yield* orchestra.recoverPendingTasks()
+      const repaired = (yield* orchestra.projects()).find((item) => item.id === project.id)!
+      expect(repaired.main).toBeDefined()
+      expect(repaired.main).not.toBe(oldMain)
+      const restored = yield* reports(repaired.main!).pipe(
+        Effect.filterOrFail((items) => items.length > 0),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+      expect(restored).toHaveLength(1)
+      expect(restored[0]).toContain("Developer: task answer")
+    }).pipe(Effect.scoped),
+  ),
+
   it.live("reattaches outstanding task reports when a deleted main session is recreated", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-main-recovery-")))
