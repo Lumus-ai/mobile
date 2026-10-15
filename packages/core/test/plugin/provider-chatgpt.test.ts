@@ -24,6 +24,7 @@ import { ChatGPTPlugin, fetchModels, parseRemoteCallback, verifyIDToken } from "
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
+import { Tool } from "@opencode/core/tool"
 import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
@@ -234,6 +235,20 @@ describe("ChatGPTPlugin", () => {
       const other = yield* Effect.promise(() => generateKeyPair("RS256"))
       const forged = yield* Effect.promise(() => sign("expected", "oaiapp_issued", expires, other.privateKey))
       expect(yield* Effect.flip(verifyIDToken(forged, "oaiapp_issued", "expected", jwksURL))).toBeInstanceOf(Error)
+    }),
+  )
+
+  it.effect("registers OpenAI hosted image generation without replacing project tools", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const tools = yield* Tool.Service.list()
+      const image = tools.find((tool) => tool.name === "image_generation")
+      expect(image?.native).toEqual({ openai: { type: "image_generation", action: "auto" } })
+      expect(tools.some((tool) => tool.name === "websearch")).toBe(true)
+      const snapshot = yield* Tool.Service.snapshot()
+      expect(snapshot.definitions.find((tool) => tool.name === "image_generation")?.native).toEqual({
+        openai: { type: "image_generation", action: "auto" },
+      })
     }),
   )
 
