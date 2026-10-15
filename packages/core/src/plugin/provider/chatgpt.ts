@@ -14,6 +14,7 @@ import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
+import { Tool } from "../../tool.js"
 import type { PluginInternal } from "../internal.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -338,6 +339,34 @@ export const ChatGPTPlugin = define({
         })
       },
       { discard: true },
+    )
+    // OpenAI's Responses API executes this tool on the provider side and returns the generated
+    // image as file content. The ordinary OpenCode tool registry is retained, so MCP, skills,
+    // browser, and project plugins remain available alongside image generation.
+    yield* ctx.tool.transform((editor) => {
+      editor.add({
+        name: "image_generation",
+        description: "Generate or edit an image in the conversation using OpenAI's hosted image generation tool.",
+        input: Schema.Struct({}),
+        native: { openai: { type: "image_generation", action: "auto" } },
+        options: { codemode: false },
+        execute: () =>
+          Effect.fail(
+            new Tool.Error({
+              message: "Image generation is executed by the OpenAI Responses provider and cannot run as a local tool.",
+            }),
+          ),
+      })
+    })
+    yield* ctx.session.hook(
+      "context",
+      (event) =>
+        Effect.sync(() => {
+          // Never advertise OpenAI's native tool to unrelated providers or to models for which
+          // this account integration doesn't expose a supported hosted-tool route.
+          if (event.model.providerID === providerID && fallbackModels.has(event.model.id)) return
+          delete event.tools.image_generation
+        }),
     )
     yield* load()
     yield* ctx.session.hook(
