@@ -181,6 +181,10 @@ export const dict = {
   "provider.connect.oauth.code.placeholder": "Код авторизации",
   "provider.connect.oauth.code.required": "Код авторизации обязателен",
   "provider.connect.oauth.code.invalid": "Неверный код авторизации",
+  "provider.connect.oauth.chatgptRemote.description":
+    "Этот сервер Opencode++ удалённый, поэтому callback открывается на вашем устройстве. После входа скопируйте полный URL из адресной строки браузера (даже если localhost показывает ошибку соединения) и вставьте его сюда. Сервер проверит callback и обменяет код на токены.",
+  "provider.connect.oauth.chatgptRemote.label": "Полный URL callback",
+  "provider.connect.oauth.chatgptRemote.placeholder": "http://localhost:1455/auth/callback?code=…&state=…",
   "provider.connect.oauth.auto.confirmationCode": "Код подтверждения",
   "provider.connect.toast.connected.title": "{{provider}} подключён",
   "provider.connect.toast.connected.description": "Модели {{provider}} теперь доступны.",
