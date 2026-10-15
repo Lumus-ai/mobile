@@ -20,7 +20,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, fetchModels, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import { ChatGPTPlugin, fetchModels, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -247,9 +247,33 @@ describe("ChatGPTPlugin", () => {
           type: "oauth",
           label: "Sign in with ChatGPT",
         },
+        {
+          id: Integration.MethodID.make("chatgpt-token-sharing-web"),
+          type: "oauth",
+          label: "Sign in with ChatGPT (remote web)",
+        },
       ])
     }),
   )
+
+  it("validates remote ChatGPT callback URLs against the original redirect and state", () => {
+    const redirect = "http://localhost:1455/auth/callback"
+    expect(
+      parseRemoteCallback(`${redirect}?code=auth-code&state=expected&client_id=oaiapp_issued`, redirect, "expected"),
+    ).toEqual({ code: "auth-code", clientID: "oaiapp_issued" })
+    expect(() => parseRemoteCallback(`${redirect}?code=auth-code&state=wrong`, redirect, "expected")).toThrow(
+      "Invalid OAuth state",
+    )
+    expect(() =>
+      parseRemoteCallback("https://example.com/auth/callback?code=auth-code&state=expected", redirect, "expected"),
+    ).toThrow("does not match")
+    expect(() => parseRemoteCallback(`${redirect}?error=access_denied&state=expected`, redirect, "expected")).toThrow(
+      "access_denied",
+    )
+    expect(() => parseRemoteCallback(`${redirect}?state=expected`, redirect, "expected")).toThrow(
+      "does not contain an authorization code",
+    )
+  })
 
   it.effect("keeps the Codex browser and headless methods alongside token sharing", () =>
     Effect.gen(function* () {
@@ -258,6 +282,7 @@ describe("ChatGPTPlugin", () => {
       const integrations = yield* Integration.Service
       expect((yield* integrations.get(Integration.ID.make("openai")))?.methods.map((method) => method.type === "oauth" && method.id)).toEqual([
         Integration.MethodID.make("chatgpt-token-sharing"),
+        Integration.MethodID.make("chatgpt-token-sharing-web"),
         Integration.MethodID.make("chatgpt-browser"),
         Integration.MethodID.make("chatgpt-headless"),
       ])
