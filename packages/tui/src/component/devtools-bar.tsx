@@ -31,6 +31,7 @@ import { usePromptRef } from "../context/prompt"
 import { usePlugin } from "../plugin/context"
 import { errorMessage } from "../util/error"
 import { useT } from "../util/i18n"
+import { stringWidth } from "../util/string-width"
 
 const graphWidth = 23
 const sampleIntervalMilliseconds = 2_000
@@ -277,6 +278,34 @@ export function DevToolsBar() {
     setDumping(false)
   }
 
+  // A phone-width terminal cannot fit every item, and an item past the edge is unreachable. The
+  // ones with their own commands (/themes, /teams, /tools…) fold away first, in this order.
+  const hidden = createMemo(() => {
+    const label = (text: string) => stringWidth(text) + 2
+    const widths: Record<string, number> = {
+      experiments: label(t("Experiments")),
+      theme: label(t("Theme")),
+      ui: label(`○ ${t("UI")}`),
+      teams: label(t("Teams")),
+      tools: label(t("Tools")),
+      registry: label(t("Registry")),
+    }
+    const fixed =
+      label(`✓ ${t("Server")}`) +
+      label(`✦ ${t("Ideas")}`) +
+      label(`${t("Language")} EN`) +
+      (projects.loaded() && projects.list().length === 0 ? label(t("+ Project")) : 0)
+    const total = fixed + Object.values(widths).reduce((sum, width) => sum + width, 0)
+    return Object.keys(widths).reduce(
+      (fold, id) => {
+        if (fold.width <= dimensions().width) return fold
+        fold.ids.add(id)
+        return { ids: fold.ids, width: fold.width - widths[id]! }
+      },
+      { ids: new Set<string>(), width: total },
+    ).ids
+  })
+
   return (
     <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.decrease(theme.background.base)}>
       <Show when={panel()}>
@@ -342,7 +371,7 @@ export function DevToolsBar() {
       <BarItem active={false} onClick={openIdeaBank}>
         <text fg={theme.text.muted}>✦ {t("Ideas")}</text>
       </BarItem>
-      <BarItem active={panel() === "ui"} onClick={() => toggle("ui")}>
+      <BarItem hidden={hidden().has("ui")} active={panel() === "ui"} onClick={() => toggle("ui")}>
         <text
           fg={
             panel() === "ui"
@@ -388,7 +417,7 @@ export function DevToolsBar() {
           </PanelBox>
         </Show>
       </BarItem>
-      <BarItem active={panel() === "theme"} onClick={() => toggle("theme")}>
+      <BarItem hidden={hidden().has("theme")} active={panel() === "theme"} onClick={() => toggle("theme")}>
         <text fg={panel() === "theme" ? theme.text.action.primary.focused : theme.text.muted}>{t("Theme")}</text>
         <Show when={panel() === "theme"}>
           <PanelBox>
@@ -404,7 +433,7 @@ export function DevToolsBar() {
           </PanelBox>
         </Show>
       </BarItem>
-      <BarItem active={panel() === "tools"} onClick={() => toggle("tools")}>
+      <BarItem hidden={hidden().has("tools")} active={panel() === "tools"} onClick={() => toggle("tools")}>
         <text fg={panel() === "tools" ? theme.text.action.primary.focused : theme.text.muted}>{t("Tools")}</text>
         <Show when={panel() === "tools"}>
           <PanelBox>
@@ -498,6 +527,7 @@ export function DevToolsBar() {
         </Show>
       </BarItem>
       <BarItem
+        hidden={hidden().has("registry")}
         active={false}
         onClick={() => {
           close()
@@ -517,6 +547,7 @@ export function DevToolsBar() {
         <text fg={theme.text.muted}>{t("Registry")}</text>
       </BarItem>
       <BarItem
+        hidden={hidden().has("teams")}
         active={false}
         onClick={() => {
           close()
@@ -542,6 +573,7 @@ export function DevToolsBar() {
         </Show>
       </box>
       <BarItem
+        hidden={hidden().has("experiments")}
         active={false}
         onClick={() => {
           close()
@@ -570,12 +602,13 @@ export function DevToolsBar() {
   )
 }
 
-function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
+function BarItem(props: ParentProps<{ active: boolean; onClick: () => void; hidden?: boolean }>) {
   const theme = useTheme()
   const renderer = useRenderer()
   const [hovered, setHovered] = createSignal(false)
   return (
     <box
+      visible={!props.hidden}
       position="relative"
       zIndex={props.active ? 2500 : 0}
       height={1}

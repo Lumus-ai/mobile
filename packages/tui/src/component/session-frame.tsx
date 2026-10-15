@@ -31,6 +31,7 @@ import {
   sessionPanesStacked,
   sessionTranscriptWidth,
   sessionSidebarDocks,
+  STACKED_CHAT_BASIS,
 } from "../ui/layout"
 import { useCompactLayout } from "../ui/compact-layout"
 import { createPaneResize } from "../ui/pane-resize"
@@ -453,8 +454,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         <box
           id="session-pane"
           ref={(value: BoxRenderable) => (sessionNode = value)}
-          flexGrow={canvas() && !stacked() ? 0 : canvas() ? 2 : 1}
-          flexBasis={canvas() && !stacked() ? undefined : 0}
+          flexGrow={canvas() && !stacked() ? 0 : 1}
+          flexBasis={canvas() && !stacked() ? undefined : canvas() ? STACKED_CHAT_BASIS : 0}
           minWidth={0}
           minHeight={0}
           position={fullscreen() ? "absolute" : "relative"}

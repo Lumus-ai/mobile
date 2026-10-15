@@ -21,13 +21,13 @@ const session = (id: string, title: string) => ({
 const worker = session("ses_worker", "Worker task")
 const main = session("ses_main", "Lead")
 
-function render(state: string, layout?: "mobile") {
+function render(state: string, layout?: "mobile", input: { width?: number; devtools?: boolean } = {}) {
   return createAppFixture({
-    width: WIDTH,
+    width: input.width ?? WIDTH,
     height: 36,
     state,
     args: { sessionID: worker.id },
-    config: { animations: false, layout },
+    config: { animations: false, layout, ...(input.devtools ? { debug: { devtools: true } } : {}) },
     fetch: (url) => {
       const path = url.pathname
       if (path === "/api/location") return json(location)
@@ -91,4 +91,15 @@ test("the mobile session sidebar opens across the screen", async () => {
   const title = frame.split("\n").find((line) => line.includes(worker.title))!
   // A sidebar clamped beside a 56-column chat would be a single column at the right edge.
   expect(title.indexOf(worker.title)).toBeLessThan(10)
+})
+
+test.each([48, 64])("at %i columns the mini skills and the bottom bar stay on screen", async (width) => {
+  await using state = await tmpdir()
+  await using setup = await render(state.path, "mobile", { width, devtools: true })
+  await setup.ready
+  // Both rows used to run past the right edge: "⚙ Sk" and "Te" were all a phone showed of them.
+  const frame = await setup.waitForFrame((frame) => frame.includes("⚙ Skills") && frame.includes("Language"))
+  const lines = frame.split("\n")
+  expect(lines.find((line) => line.includes("⚙ Skills"))).toContain("│")
+  expect(lines.find((line) => line.includes("Server"))?.trimEnd().endsWith("Language EN")).toBe(true)
 })

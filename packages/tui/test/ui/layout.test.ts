@@ -106,7 +106,7 @@ test("a hidden note canvas releases its layout space to the chat", () => {
   expect(noteCanvasFlexGrow(false, false)).toBe(0)
   expect(noteCanvasFlexGrow(false, true)).toBe(0)
   expect(noteCanvasFlexGrow(true, false)).toBe(0)
-  expect(noteCanvasFlexGrow(true, true)).toBe(3)
+  expect(noteCanvasFlexGrow(true, true)).toBe(1)
 })
 
 test("a docked session sidebar cannot be dragged into an unreadable strip", () => {

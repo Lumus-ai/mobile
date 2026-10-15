@@ -1,4 +1,4 @@
-import { TextAttributes, type InputRenderable, type MarkdownOptions, type TextareaRenderable } from "@opentui/core"
+import { TextAttributes, type BoxRenderable, type InputRenderable, type MarkdownOptions, type TextareaRenderable } from "@opentui/core"
 import type { NoteInfo, NoteLength, NoteStatus } from "@opencode/client"
 import { createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { useConfig } from "../config"
@@ -22,6 +22,8 @@ export type NoteSaveResult = "saved" | "conflict" | "failed"
 type Mode = "view" | "edit" | "title" | "tags"
 
 const GROUP = "Note"
+// Below this many rows the document folds its secondary header and footer.
+const SHORT_HEIGHT = 16
 
 // A note shown as the document of its chat (a canvas): title, status, tags, how
 // much the AI writes, the rendered body, and an editor. It renders and reports
@@ -133,8 +135,21 @@ export function NoteDocument(props: {
     ],
   }))
 
+  // A note stacked over its chat on a phone can get only a few rows. The length choice and the
+  // footer hint then fold away so the text itself stays in view.
+  const [short, setShort] = createSignal(false)
+
   return (
-    <box flexGrow={1} minWidth={0} minHeight={0} backgroundColor={theme.background.base}>
+    <box
+      flexGrow={1}
+      minWidth={0}
+      minHeight={0}
+      backgroundColor={theme.background.base}
+      onSizeChange={function (this: BoxRenderable) {
+        const height = this.height
+        queueMicrotask(() => setShort(height < SHORT_HEIGHT))
+      }}
+    >
       <box flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1} gap={0}>
         <box flexDirection="row" gap={2}>
           <box flexGrow={1} minWidth={0}>
@@ -195,7 +210,7 @@ export function NoteDocument(props: {
           </text>
           {props.indicator}
         </box>
-        <box flexDirection="row" flexWrap="wrap" columnGap={1} paddingTop={1}>
+        <box visible={!short()} flexDirection="row" flexWrap="wrap" columnGap={1} paddingTop={1}>
           <text fg={theme.text.muted} wrapMode="none">
             {t("Length")}
           </text>
@@ -302,7 +317,7 @@ export function NoteDocument(props: {
           </scrollbox>
         </Match>
       </Switch>
-      <box flexShrink={0} flexDirection="row" paddingLeft={2} paddingRight={2}>
+      <box visible={!short() || mode() === "edit"} flexShrink={0} flexDirection="row" paddingLeft={2} paddingRight={2}>
         <text fg={theme.text.muted} wrapMode="none" truncate>
           {mode() === "edit"
             ? saving()

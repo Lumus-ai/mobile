@@ -1,4 +1,4 @@
-import { MouseEvent, TextareaRenderable } from "@opentui/core"
+import { BoxRenderable, MouseEvent, TextareaRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { readFile, mkdir, rename, writeFile } from "node:fs/promises"
@@ -11,6 +11,13 @@ import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useToast } from "../../ui/toast"
 import { useConfig } from "../../config"
 import { stringWidth } from "../../util/string-width"
+
+// The row's fixed parts, in columns: left padding, the gap after each button, the settings
+// button and the "+N" overflow button with its gap.
+const ROW_PADDING = 3
+const ROW_GAP = 1
+const SETTINGS_WIDTH = 10
+const MORE_WIDTH = 6
 
 export type MiniSkill = {
   id: string
@@ -163,9 +170,19 @@ export function PromptMiniSkills(props: {
     toast.show({ message: `Inserted mini skill: ${skill.label}`, variant: "info", duration: 1800 })
   }
 
+  // The row is narrower than the terminal (side rails, the prompt's padding), so the buttons are
+  // fitted to its measured width: the ones that fit, then the overflow count and the settings button.
+  const [rowWidth, setRowWidth] = createSignal<number>()
   const visibleSkills = createMemo(() => {
-    const max = dimensions().width < 64 ? 3 : dimensions().width < 84 ? 4 : skills().length
-    return skills().slice(0, max)
+    const widths = skills().map((skill) => stringWidth(`${skill.icon} ${skill.label}`) + 2 + ROW_GAP)
+    const room = (rowWidth() ?? dimensions().width) - ROW_PADDING - SETTINGS_WIDTH
+    const all = widths.reduce((sum, width) => sum + width, 0)
+    if (all <= room) return skills()
+    const count = widths.reduce(
+      (fit, width, index) => (fit.count === index && fit.used + width <= room - MORE_WIDTH ? { count: index + 1, used: fit.used + width } : fit),
+      { count: 0, used: 0 },
+    ).count
+    return skills().slice(0, count)
   })
 
   return (
@@ -178,6 +195,10 @@ export function PromptMiniSkills(props: {
         paddingBottom={1}
         height={2}
         width="100%"
+        onSizeChange={function (this: BoxRenderable) {
+          const width = this.width
+          queueMicrotask(() => setRowWidth(width))
+        }}
       >
         <For each={visibleSkills()}>
           {(skill) => (

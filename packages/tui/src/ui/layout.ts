@@ -37,8 +37,13 @@ export const NOTE_CHAT_MIN_WIDTH = 40
 // blank column beside the chat.
 export function noteCanvasFlexGrow(hasCanvas: boolean, stacked: boolean) {
   if (!hasCanvas) return 0
-  return stacked ? 3 : 0
+  return stacked ? 1 : 0
 }
+
+// Stacked under a note, the chat's prompt, skill rows and footer take about this many rows before
+// any message shows. The chat starts from them and shares the rest evenly with the note, so a
+// short phone screen with the keyboard open still shows the replies.
+export const STACKED_CHAT_BASIS = 12
 
 export function clampNoteChatWidth(width: number, available: number) {
   const max = Math.max(1, available - NOTE_CANVAS_MIN_WIDTH)
