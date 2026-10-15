@@ -410,6 +410,25 @@ describe("SkillCatalogTool", () => {
     }).pipe(Effect.provide(harness({ seen: report })))
   })
 
+  it.live("refuses a language code the catalog does not have, instead of failing the whole call", () => {
+    const report = seen()
+    return Effect.gen(function* () {
+      const tools = yield* Tool.Service
+
+      const refused = yield* run(tools, "call-language-bad", { action: "search", query: "pdf", language: "klingon" })
+      const allowed = yield* run(tools, "call-language-ok", { action: "search", query: "pdf", language: "rus" })
+
+      // `language` is a closed enum on the catalog side: a code outside it fails the call, and a
+      // refusal here names the codes the model can correct itself from.
+      expect(refused).toMatchObject({ status: "error" })
+      expect(refusal(refused)).toContain("klingon")
+      expect(refusal(refused)).toContain("en")
+      expect(report.searches).toHaveLength(1)
+      expect(allowed).toMatchObject({ status: "completed" })
+      expect(report.searches[0].language).toBe("rus")
+    }).pipe(Effect.provide(harness({ seen: report })))
+  })
+
   it.live("refuses a call that is missing its argument without asking anything", () => {
     const report = seen()
     return Effect.gen(function* () {

@@ -11,15 +11,20 @@ import { SkillMarketplace } from "@opencode/schema/skill-marketplace"
 export const ENDPOINT = "https://skillsmp.com/mcp"
 
 /**
- * Sent as `MCP-Protocol-Version` on every request and declared in `initialize`. The server
- * refuses a request without it, answering `MCP-Protocol-Version header is required`, so this is
- * not decoration. It is the latest version the MCP SDK this repository depends on speaks.
+ * Sent as `MCP-Protocol-Version` on every request and declared in `initialize`. The endpoint
+ * refuses a request without it (`MCP-Protocol-Version header is required`), and it refuses this
+ * string too: measured live on 2026-10-15, `tools/list` and `initialize` both answer 200 with
+ * `2025-06-18` and 403 with `2025-11-25`, and `initialize` echoes `2025-06-18` back. The value
+ * the endpoint answers is therefore the one to send, not the latest the SDK here happens to know.
  */
-export const PROTOCOL_VERSION = "2025-11-25"
+export const PROTOCOL_VERSION = "2025-06-18"
 
 export const USER_AGENT = "opencode-skill-catalog/1.0"
 
 export const TIMEOUT = Duration.seconds(30)
+
+/** How long the client waits for an answer nobody owes it before moving on. */
+export const NOTIFICATION_WAIT = Duration.seconds(5)
 
 /**
  * Thirty calls a minute per IP means two seconds apart at best. A pause this long keeps a burst
@@ -66,17 +71,43 @@ export interface Session {
 const attempt = <A>(run: (signal: AbortSignal) => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (error: unknown) => error })
 
+const headers = (session: Session) => ({
+  "User-Agent": USER_AGENT,
+  "content-type": "application/json",
+  accept: "application/json, text/event-stream",
+  "MCP-Protocol-Version": PROTOCOL_VERSION,
+  ...(session.id === undefined ? {} : { "Mcp-Session-Id": session.id }),
+})
+
+/**
+ * Fires a notification and stops caring about the answer.
+ *
+ * A notification has no id and, by the protocol, no result — and this endpoint really sends
+ * nothing back at all: measured live on 2026-10-15, one `notifications/initialized` in three
+ * never answered and the request sat there until it was aborted, which is what turned a working
+ * call into a timeout. So it is sent, given a bounded wait, and forgotten: whether the server
+ * heard it is not this caller's problem, because the `tools/call` that follows is what the
+ * session is judged on.
+ */
+const notify = (body: unknown, session: Session, options: Options) =>
+  attempt(async (signal) => {
+    await (options.fetch ?? globalThis.fetch)(options.endpoint ?? ENDPOINT, {
+      method: "POST",
+      headers: headers(session),
+      body: JSON.stringify(body),
+      signal,
+    })
+  }).pipe(
+    Effect.timeoutOrElse({ duration: NOTIFICATION_WAIT, orElse: () => Effect.void }),
+    Effect.exit,
+    Effect.asVoid,
+  )
+
 const post = (body: unknown, session: Session, options: Options) =>
   attempt(async (signal) => {
     const response = await (options.fetch ?? globalThis.fetch)(options.endpoint ?? ENDPOINT, {
       method: "POST",
-      headers: {
-        "User-Agent": USER_AGENT,
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        "MCP-Protocol-Version": PROTOCOL_VERSION,
-        ...(session.id === undefined ? {} : { "Mcp-Session-Id": session.id }),
-      },
+      headers: headers(session),
       body: JSON.stringify(body),
       signal,
     })
@@ -153,7 +184,7 @@ export const search = (input: Query, options: Options = {}): Effect.Effect<Skill
   Effect.gen(function* () {
     if (options.wait !== false) yield* spaced
     const answer = yield* callTool(input, options)
-    const parsed = SkillMarketplace.parse(answer.text)
+    const parsed = decoded(answer.text)
     if (Result.isFailure(parsed))
       return yield* new UpstreamError({
         message: `the catalog answered something unreadable: ${parsed.failure.message}`,
@@ -164,6 +195,37 @@ export const search = (input: Query, options: Options = {}): Effect.Effect<Skill
   }).pipe(Effect.timeoutOrElse({ duration: options.timeout ?? TIMEOUT, orElse: () => Effect.fail(tooSlow()) }))
 
 const tooSlow = () => new UpstreamError({ message: "the catalog did not answer in time" })
+
+/**
+ * Reads the body of a `tools/call`, which the endpoint sends as the listing itself — `skills`
+ * and `pagination`, with no envelope and no echoed `filters` (measured live 2026-10-15). The
+ * contract describes that same listing inside the REST envelope, so the body is read twice: as
+ * the catalog wrote it, and wrapped with the two fields this channel leaves out. Both shapes are
+ * real answers; a body that is neither stays a refusal, and the first failure is the one
+ * reported, because it quotes the catalog's own words rather than this wrapping.
+ */
+const decoded = (body: string) => {
+  const asWritten = SkillMarketplace.parse(body)
+  if (Result.isSuccess(asWritten)) return asWritten
+  const wrapped = SkillMarketplace.parse(wrap(body))
+  return Result.isSuccess(wrapped) ? wrapped : asWritten
+}
+
+/**
+ * `filters` is filled in as an empty object because this channel does not echo the request's
+ * filters back; the rows, the counts and the pagination are the catalog's own and untouched.
+ */
+const wrap = (body: string) => {
+  try {
+    const listing = JSON.parse(body) as unknown
+    if (listing === null || typeof listing !== "object") return body
+    const echo = listing as { filters?: unknown }
+    return JSON.stringify({ success: true, data: { ...echo, filters: echo.filters ?? {} } })
+  } catch {
+    // Not JSON at all: `asWritten` has already said so with the better message.
+    return body
+  }
+}
 
 type Text = { readonly text: string }
 
@@ -239,11 +301,7 @@ const open = (options: Options) =>
     // against a session the server never opened, and the second failure would hide the first.
     const refused = refusal(payload(initialize.text))
     if (refused !== undefined) return yield* refused
-    yield* post({ jsonrpc: "2.0", method: "notifications/initialized" }, { id: initialize.id }, options).pipe(
-      // The protocol asks for no answer to a notification, and a server that says nothing about
-      // it still accepts the call that follows. Anything else is a real refusal.
-      Effect.catchTag("@opencode/SkillMarketplace/UpstreamError", () => Effect.void),
-    )
+    yield* notify({ jsonrpc: "2.0", method: "notifications/initialized" }, { id: initialize.id }, options)
     return { id: initialize.id } satisfies Session
   })
 

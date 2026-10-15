@@ -2,6 +2,7 @@ export * as SkillCatalogTool from "./skill-catalog.js"
 
 import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import { SkillMarketplace as Catalog } from "@opencode/schema/skill-marketplace"
 import type { Tool } from "@opencode/schema/tool"
 import { Effect, Schema } from "effect"
 import { McpTool } from "../mcp.js"
@@ -97,6 +98,12 @@ export type Output = typeof Output.Type
 
 const EMPTY = "The skill catalog returned no text."
 
+/**
+ * The catalog's own language set, read from the contract instead of a list written out here: its
+ * `enum` is the same closed set (measured live 2026-10-15), and a second copy would drift from it.
+ */
+const isLanguage = Schema.is(Catalog.ContentLanguage)
+
 const clip = (text: string, limit: number) => (text.length <= limit ? text : `${text.slice(0, limit - 1)}…`)
 
 const results = (wanted: unknown) =>
@@ -124,17 +131,28 @@ const call = (input: Input): Effect.Effect<Call, ToolFailure> => {
       return Effect.fail(new ToolFailure({ message: "skill_catalog get needs id: the skill name from a search" }))
     return Effect.succeed({ action: "get", name: input.id, global: input.save === "global", resource: "get_skill" })
   }
-  // A blank query is refused here rather than forwarded: the catalog answers one in well under a
-  // second with a rejection the model would otherwise read as the catalog's answer.
+  // A blank query is refused here rather than forwarded. The catalog's own schema refuses one
+  // (`minLength: 1`, `pattern: .*\S.*`, measured live 2026-10-15): the call would come back as a
+  // rejection of the input rather than as an answer, and the model would read that as the
+  // catalog having no skills for the task.
   if (input.query === undefined || input.query.trim() === "")
     return Effect.fail(new ToolFailure({ message: "skill_catalog search needs query: a few words naming the task" }))
+  // `language` is a closed set of codes on the catalog side, and the tool's schema only declares
+  // a string. A code outside the set fails the whole call, so it is refused here with examples
+  // the model can correct itself from.
+  if (input.language !== undefined && !isLanguage(input.language))
+    return Effect.fail(
+      new ToolFailure({
+        message: `skill_catalog search does not know the language code "${input.language}". Use a code from the catalog's list, for example en, zh, ja, de, fr, ru, rus.`,
+      }),
+    )
   return Effect.succeed({
     action: "search",
     input: {
       query: input.query,
       limit: results(input.limit),
       ...(input.category === undefined ? {} : { category: input.category }),
-      ...(input.language === undefined ? {} : { language: input.language as never }),
+      ...(input.language === undefined ? {} : { language: input.language as Catalog.ContentLanguage }),
       ...(input.sort === undefined ? {} : { sortBy: input.sort }),
     },
     resource: "search_skills",
@@ -190,7 +208,7 @@ export const failed = (error: unknown) => {
   // model would read "Skill catalog call failed: " and never learn what it got wrong.
   if (error instanceof Permission.CorrectedError) return new ToolFailure({ message: error.feedback, error })
   // The catalog's own code is the part a caller can act on, so it stays in the text. The
-    // failure carries no `error`: the session prefers an unwrapped cause's own message over the
+  // failure carries no `error`: the session prefers an unwrapped cause's own message over the
   // leaf's, and the model must read this sentence rather than the bare upstream one.
   if (error instanceof SkillMarketplaceUpstream.UpstreamError)
     return new ToolFailure({

@@ -4,10 +4,21 @@ import { SkillMarketplaceUpstream } from "@opencode/core/skill-marketplace/upstr
 import { LISTING_A, QUOTA_REFUSAL } from "./fixture/skill-marketplace"
 
 /**
+ * The channel's own shape: a `tools/call` answers the listing itself, with no envelope and no
+ * echoed `filters` (measured live on 2026-10-15 with `tools/call search_skills`).
+ */
+const channelListing = (body: string) => {
+  const data = (JSON.parse(body) as { data: Record<string, unknown> }).data
+  return JSON.stringify({ skills: data.skills, pagination: data.pagination })
+}
+
+/**
  * A stand-in for the catalog's MCP endpoint. It answers `initialize`, the notification and
  * `tools/call`, records every request, and hands out a session id the way a real server does.
  */
-const endpoint = (options: { tools?: string; session?: boolean; status?: number; raw?: string } = {}) => {
+const endpoint = (
+  options: { tools?: string; session?: boolean; status?: number; raw?: string; silentNotification?: boolean } = {},
+) => {
   const requests: { headers: Headers; body: Record<string, unknown> }[] = []
   const fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>
@@ -18,16 +29,20 @@ const endpoint = (options: { tools?: string; session?: boolean; status?: number;
     if (status !== 200) return new Response("upstream is unwell", { status })
     const method = String(body.method)
     if (method === "initialize")
-      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { protocolVersion: "2025-11-25" } }), {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { protocolVersion: "2025-06-18" } }), {
         headers,
       })
-    if (method === "notifications/initialized") return new Response("", { status: 202, headers })
+    if (method === "notifications/initialized") {
+      // A server that sends nothing at all is legal for a notification and happens here.
+      if (options.silentNotification) return new Promise<Response>(() => {}) as Promise<Response>
+      return new Response("", { status: 202, headers })
+    }
     if (options.raw !== undefined) return new Response(options.raw, { headers })
     return new Response(
       JSON.stringify({
         jsonrpc: "2.0",
         id: body.id,
-        result: { content: [{ type: "text", text: options.tools ?? LISTING_A }] },
+        result: { content: [{ type: "text", text: options.tools ?? channelListing(LISTING_A) }] },
       }),
       { headers },
     )
@@ -73,10 +88,29 @@ describe("skill catalog endpoint", () => {
 
     await call({ query: "react hooks" }, catalog.fetch)
 
-    // Without this header the endpoint answers `MCP-Protocol-Version header is required`.
-    for (const request of catalog.requests) expect(request.headers.get("MCP-Protocol-Version")).toBe("2025-11-25")
+    // Without this header the endpoint answers `MCP-Protocol-Version header is required`, and
+    // with a version it does not speak it answers 403: both measured live on 2026-10-15.
+    expect(SkillMarketplaceUpstream.PROTOCOL_VERSION).toBe("2025-06-18")
+    for (const request of catalog.requests) expect(request.headers.get("MCP-Protocol-Version")).toBe(SkillMarketplaceUpstream.PROTOCOL_VERSION)
     expect(catalog.requests[0]?.headers.get("User-Agent")).toBe("opencode-skill-catalog/1.0")
   })
+
+  // The client waits its real bound for an answer nobody owes it, so the test needs longer than
+  // the default: the point of the test is that the wait ends and the call goes on.
+  test("a notification the endpoint never answers does not fail the call", async () => {
+    const catalog = endpoint({ silentNotification: true })
+
+    // Measured live 2026-10-15: one `notifications/initialized` in three got no response at all,
+    // and waiting for it turned a working search into a timeout. The call must go on regardless.
+    const listing = await call({ query: "react hooks" }, catalog.fetch)
+
+    expect(listing.data.skills.length).toBeGreaterThan(0)
+    expect(catalog.requests.map((request) => request.body.method)).toEqual([
+      "initialize",
+      "notifications/initialized",
+      "tools/call",
+    ])
+  }, 20_000)
 
   test("the session id the endpoint hands out rides on the call that follows", async () => {
     const catalog = endpoint()
@@ -106,6 +140,24 @@ describe("skill catalog endpoint", () => {
 
     expect(error.status).toBe(503)
     expect(error.message).toContain("503")
+  })
+
+  test("an enveloped listing still reads, so both channel shapes work", async () => {
+    // The REST envelope is what the contract describes; the MCP channel sends the bare listing.
+    // Both are real answers, so a body of either shape must reach the caller as rows.
+    const listing = await call({ query: "react hooks" }, endpoint({ tools: LISTING_A }).fetch)
+
+    expect(listing.data.skills).toHaveLength(3)
+    expect(listing.data.pagination.provenRowCount).toBe(4)
+  })
+
+  test("the channel's bare listing reads even though it echoes no filters", async () => {
+    const listing = await call({ query: "react hooks" }, endpoint({}).fetch)
+
+    // `filters` is absent on this channel and is filled in as an empty object, so the request's
+    // own filters are not claimed back from an answer that never carried them.
+    expect(listing.data.filters).toEqual({})
+    expect(listing.data.skills[0].name).toBe("openclaw-secret-scanning-maintainer")
   })
 
   test("a body that is not the contract is an error, not an empty listing", async () => {

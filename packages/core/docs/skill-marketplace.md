@@ -15,11 +15,10 @@ at all — it is the `SKILL.md` in the skill's GitHub repository.
 
 - `skill-marketplace/upstream.ts` — the official entry point `POST https://skillsmp.com/mcp`:
   JSON-RPC `initialize`, `notifications/initialized`, then `tools/call` on `search_skills`.
-  Sends `MCP-Protocol-Version: 2025-11-25` (the endpoint refuses a request without it) and
-  carries the `Mcp-Session-Id` the server hands back. `MIN_INTERVAL` (2.1 s) keeps calls at the
-  documented rate of thirty per minute per IP; nothing here retries, because one refusal turned
-  into several is how a client gets itself blocked. The answer is decoded with
-  `SkillMarketplace.parse`.
+  Sends `MCP-Protocol-Version: 2025-06-18` and carries the `Mcp-Session-Id` the server hands back
+  (this endpoint is stateless and sends none). `MIN_INTERVAL` (2.1 s) keeps calls at the documented
+  rate of thirty per minute per IP; nothing here retries, because one refusal turned into several
+  is how a client gets itself blocked. The answer is decoded with `SkillMarketplace.parse`.
 - `skill-marketplace/store.ts` — the cache: NDJSON, one decoded catalog row per line, in
   `<project>/.opencode/skill-catalog/skills.jsonl`, written temp+rename. A damaged line costs the
   whole cache and says which line: a plausible subset would answer queries with something the
@@ -69,6 +68,5 @@ it to check the catalog at the start of a new task. Tests: `test/skill-marketpla
   rejects — becomes `UpstreamError` and never reaches the cache.
 - `save: "global"` writes outside the project, so it asks permission under the `skill` action
   separately; without it a search or a read only ever writes into the project.
-- The endpoint sits behind Cloudflare: a request from a blocked network answers 403 with an HTML
-  page before the catalog sees it. That is reported as an upstream refusal with the status, and
-  nothing is cached.
+- A 403 with an HTML body is the edge refusing the protocol version, not a rate limit and not a
+  blocked network; the status is reported as an upstream refusal and nothing is cached.
