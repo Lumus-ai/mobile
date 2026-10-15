@@ -1691,23 +1691,6 @@ export function Prompt(props: PromptProps) {
 
   return (
     <>
-      <PromptMiniSkills
-        mode={() => store.mode}
-        visible={props.visible !== false}
-        onInsert={(instruction) => {
-          if (!input || input.isDestroyed || disabled()) return
-          input.gotoBufferEnd()
-          const prefix = input.plainText.trim() ? "\n\n" : ""
-          input.insertText(prefix + instruction + "\n\n")
-          setTimeout(() => {
-            if (!input || input.isDestroyed) return
-            input.focus()
-            input.getLayoutNode().markDirty()
-            input.gotoBufferEnd()
-            renderer.requestRender()
-          }, 0)
-        }}
-      />
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
           width="100%"
@@ -1721,12 +1704,31 @@ export function Prompt(props: PromptProps) {
           <box
             paddingLeft={paddingX()}
             paddingRight={mascot() ? paddingX() + MASCOT_WIDTH + 2 : paddingX()}
-            paddingTop={1}
+            // The mini skills row takes the prompt's top line, or leaves it blank when hidden.
+            paddingTop={0}
             flexShrink={0}
             backgroundColor={promptBg()}
             flexGrow={1}
             width="100%"
           >
+            {/* Quick prompts sit on the prompt's first line, part of the input rather than a row above it. */}
+            <PromptMiniSkills
+              mode={() => store.mode}
+              visible={props.visible !== false}
+              onInsert={(instruction) => {
+                if (!input || input.isDestroyed || disabled()) return
+                input.gotoBufferEnd()
+                const prefix = input.plainText.trim() ? "\n\n" : ""
+                input.insertText(prefix + instruction + "\n\n")
+                setTimeout(() => {
+                  if (!input || input.isDestroyed) return
+                  input.focus()
+                  input.getLayoutNode().markDirty()
+                  input.gotoBufferEnd()
+                  renderer.requestRender()
+                }, 0)
+              }}
+            />
             <Show when={mascot()}>
               <box position="absolute" right={paddingX()} bottom={0}>
                 <Mascot state={mascotState()} backdrop={promptBg()} />

@@ -1,5 +1,5 @@
 import path from "node:path"
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Orchestra } from "@opencode/schema/orchestra"
 import { useData } from "../context/data"
 import { useLocation } from "../context/location"
@@ -7,24 +7,23 @@ import { useProjects } from "../context/projects"
 import { useRoute } from "../context/route"
 import { useTheme } from "../context/theme"
 import { useT } from "../util/i18n"
-import { parseDodBoard, resolveDodRoot, summarizeDodBoard, type DodTask } from "../feature-plugins/sidebar/dod"
-
-const MARK: Record<string, string> = {
-  DONE: "✓",
-  IN_PROGRESS: "●",
-  BLOCKED: "!",
-  FAILED: "✗",
-  OUT_OF_SCOPE: "–",
-  NOT_STARTED: "○",
-}
+import {
+  DodTaskList,
+  parseDodBoard,
+  resolveDodRoot,
+  summarizeDodBoard,
+  type DodTask,
+} from "../feature-plugins/sidebar/dod"
 
 type BoardState =
-  | { type: "loading" }
-  | { type: "missing" }
-  | { type: "ready"; items: DodTask[] }
-  | { type: "error"; reason: string }
+  { type: "loading" } | { type: "missing" } | { type: "ready"; items: DodTask[] } | { type: "error"; reason: string }
 
-export function HomeProjectPanel(props: { width: number; collapsed?: boolean; onHide?: () => void; onShow?: () => void }) {
+export function HomeProjectPanel(props: {
+  width: number
+  collapsed?: boolean
+  onHide?: () => void
+  onShow?: () => void
+}) {
   const theme = useTheme()
   const t = useT()
   const route = useRoute()
@@ -91,27 +90,6 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
   const summary = () => summarizeDodBoard(items())
   const barWidth = () => Math.max(8, Math.min(28, props.width - 10))
   const filled = () => Math.round((summary().percent / 100) * barWidth())
-  const color = (state: string) =>
-    state === "DONE" || state === "OUT_OF_SCOPE"
-      ? theme.text.feedback.success.base
-      : state === "IN_PROGRESS"
-        ? theme.text.feedback.info.base
-        : state === "BLOCKED"
-          ? theme.text.feedback.warning.base
-          : state === "FAILED"
-            ? theme.text.feedback.error.base
-            : theme.text.muted
-  const stateLabel = (state: string) => {
-    const labels: Record<string, string> = {
-      DONE: "Done",
-      IN_PROGRESS: "In progress",
-      BLOCKED: "Blocked",
-      FAILED: "Failed",
-      OUT_OF_SCOPE: "Out of scope",
-      NOT_STARTED: "Not started",
-    }
-    return t(labels[state] ?? state)
-  }
 
   return (
     <Show
@@ -167,7 +145,11 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
             {project()?.name ?? t("Current directory")}
           </text>
           <Show when={boardRoot()}>
-            {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{root()}</text>}
+            {(root) => (
+              <text fg={theme.text.muted} wrapMode="none" truncate>
+                {root()}
+              </text>
+            )}
           </Show>
         </box>
 
@@ -175,7 +157,9 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
           <text fg={theme.text.muted}>{t("Loading DoD…")}</text>
         </Show>
         <Show when={board().type === "missing"}>
-          <text fg={theme.text.muted} wrapMode="word">{t("DoD file is missing")}</text>
+          <text fg={theme.text.muted} wrapMode="word">
+            {t("DoD file is missing")}
+          </text>
         </Show>
         <Show when={board().type === "error"}>
           <text fg={theme.text.feedback.error.base} wrapMode="word">
@@ -186,7 +170,9 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
         <Show when={board().type === "ready"}>
           <box flexDirection="column" gap={1} flexShrink={0}>
             <box flexDirection="row" alignItems="center" gap={1} minWidth={0}>
-              <text fg={theme.text.base} flexShrink={0}>{t("Progress")}</text>
+              <text fg={theme.text.base} flexShrink={0}>
+                {t("Progress")}
+              </text>
               <box flexGrow={1} minWidth={0} />
               <text fg={theme.text.feedback.success.base} wrapMode="none" flexShrink={0}>
                 {`${summary().finished}/${summary().total} · ${summary().percent}%`}
@@ -196,50 +182,17 @@ export function HomeProjectPanel(props: { width: number; collapsed?: boolean; on
               <span style={{ fg: theme.text.feedback.success.base }}>{"█".repeat(filled())}</span>
               <span style={{ fg: theme.text.muted }}>{"░".repeat(Math.max(0, barWidth() - filled()))}</span>
             </text>
-            <text fg={theme.text.feedback.info.base}>{t("In progress")}: {items().filter((item) => item.state === "IN_PROGRESS").length}</text>
-            <text fg={theme.text.feedback.warning.base}>{t("Blocked")}: {items().filter((item) => item.state === "BLOCKED").length}</text>
-            <text fg={theme.text.feedback.error.base}>{t("Failed")}: {items().filter((item) => item.state === "FAILED").length}</text>
+            <text fg={theme.text.feedback.info.base}>
+              {t("In progress")}: {items().filter((item) => item.state === "IN_PROGRESS").length}
+            </text>
+            <text fg={theme.text.feedback.warning.base}>
+              {t("Blocked")}: {items().filter((item) => item.state === "BLOCKED").length}
+            </text>
+            <text fg={theme.text.feedback.error.base}>
+              {t("Failed")}: {items().filter((item) => item.state === "FAILED").length}
+            </text>
           </box>
-          <box flexGrow={1} minHeight={0}>
-            <scrollbox
-              flexGrow={1}
-              minHeight={0}
-              verticalScrollbarOptions={{ visible: true }}
-              horizontalScrollbarOptions={{ visible: false }}
-            >
-              <box flexDirection="column" gap={1} paddingRight={1}>
-                <Show when={items().length === 0}>
-                  <text fg={theme.text.muted}>{t("No tasks yet")}</text>
-                </Show>
-                <For each={items()}>
-                  {(item) => (
-                    <box
-                      flexDirection="column"
-                      gap={1}
-                      paddingLeft={1}
-                      paddingRight={1}
-                      border={["bottom"]}
-                      borderColor={theme.border.base}
-                    >
-                      <box flexDirection="row" gap={1}>
-                        <text flexShrink={0} fg={color(item.state)}>{MARK[item.state] ?? "·"}</text>
-                        <box flexGrow={1} minWidth={0}>
-                          <text fg={theme.text.base} wrapMode="word">
-                            <span style={{ fg: theme.text.muted }}>{item.id + " "}</span>
-                            {item.title}
-                          </text>
-                        </box>
-                      </box>
-                      <text fg={color(item.state)}>{stateLabel(item.state)}</text>
-                      <Show when={item.total > 0}>
-                        <text fg={theme.text.muted}>{item.done}/{item.total} steps</text>
-                      </Show>
-                    </box>
-                  )}
-                </For>
-              </box>
-            </scrollbox>
-          </box>
+          <DodTaskList items={items()} />
         </Show>
         {/* Keep the collapse control above all panel content and outside normal flex layout. */}
         <Show when={props.onHide}>

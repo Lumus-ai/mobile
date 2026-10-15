@@ -2,7 +2,15 @@ import { expect, test } from "bun:test"
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { DOD_PANEL, openDodPanel, parseDodBoard, resolveDodRoot, summarizeDodBoard } from "../src/feature-plugins/sidebar/dod"
+import {
+  DOD_PANEL,
+  openDodPanel,
+  parseDodBoard,
+  resolveDodRoot,
+  summarizeDodBoard,
+  orderDodTasks,
+  filterDodTasks,
+} from "../src/feature-plugins/sidebar/dod"
 
 test("nested sessions resolve the DoD board from the nearest repository root", async () => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "opencode-dod-root-"))
@@ -32,26 +40,28 @@ test("markerless projects keep their selected directory as the DoD root", async 
 })
 
 test("DoD progress counts only tasks with a terminal state", () => {
-  const items = parseDodBoard([
-    "task_id: PROJECT-BOARD",
-    "stages: []",
-    "leaves:",
-    "  - id: L-001",
-    "    what: Parse the board",
-    "    task_state: DONE",
-    "    steps:",
-    '      - "[x] parse"',
-    '      - "[X] validate"',
-    "  - id: L-002",
-    "    what: Add tests",
-    "    task_state: IN_PROGRESS",
-    "    steps:",
-    '      - "[x] add test"',
-    '      - "[ ] run test"',
-    "  - id: L-003",
-    "    what: Not in scope",
-    "    task_state: OUT_OF_SCOPE",
-  ].join("\n"))
+  const items = parseDodBoard(
+    [
+      "task_id: PROJECT-BOARD",
+      "stages: []",
+      "leaves:",
+      "  - id: L-001",
+      "    what: Parse the board",
+      "    task_state: DONE",
+      "    steps:",
+      '      - "[x] parse"',
+      '      - "[X] validate"',
+      "  - id: L-002",
+      "    what: Add tests",
+      "    task_state: IN_PROGRESS",
+      "    steps:",
+      '      - "[x] add test"',
+      '      - "[ ] run test"',
+      "  - id: L-003",
+      "    what: Not in scope",
+      "    task_state: OUT_OF_SCOPE",
+    ].join("\n"),
+  )
 
   expect(items.map((item) => ({ id: item.id, done: item.done, total: item.total }))).toEqual([
     { id: "L-001", done: 2, total: 2 },
@@ -86,4 +96,55 @@ test("the DoD launcher opens the registered full task panel", () => {
 
   expect(openDodPanel(context)).toBe(true)
   expect(opened).toEqual([DOD_PANEL])
+})
+
+test("a task carries its checklist, holder and the unfinished tasks it waits for", () => {
+  const [first, second] = parseDodBoard(
+    [
+      "leaves:",
+      "  - id: A",
+      "    task_state: DONE",
+      "  - id: B",
+      "    what: Build it",
+      "    owner: Alex",
+      "    depends_on: [A, C, Z]",
+      "    steps:",
+      '      - "[x] write"',
+      '      - "[ ] check"',
+      "  - id: C",
+    ].join("\n"),
+  ).slice(1)
+  expect(first).toMatchObject({
+    id: "B",
+    owner: "Alex",
+    // A is done and Z is not on the board, so only C holds it back
+    waits: ["C"],
+    steps: [
+      { text: "write", done: true },
+      { text: "check", done: false },
+    ],
+  })
+  expect(second).toMatchObject({ id: "C", waits: [], steps: [] })
+})
+
+test("active work is listed first and the filter splits unfinished from finished", () => {
+  const items = parseDodBoard(
+    [
+      "leaves:",
+      ...["DONE", "NOT_STARTED", "FAILED", "IN_PROGRESS", "BLOCKED", "OUT_OF_SCOPE"].map(
+        (state, index) => `  - id: T${index}\n    task_state: ${state}`,
+      ),
+    ].join("\n"),
+  )
+  expect(orderDodTasks(items).map((item) => item.state)).toEqual([
+    "FAILED",
+    "BLOCKED",
+    "IN_PROGRESS",
+    "NOT_STARTED",
+    "DONE",
+    "OUT_OF_SCOPE",
+  ])
+  expect(filterDodTasks(items, "active").map((item) => item.id)).toEqual(["T2", "T4", "T3", "T1"])
+  expect(filterDodTasks(items, "done").map((item) => item.id)).toEqual(["T0", "T5"])
+  expect(filterDodTasks(items, "all")).toHaveLength(6)
 })

@@ -1,11 +1,12 @@
 import path from "node:path"
 import { access } from "node:fs/promises"
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { Plugin } from "@opencode/plugin/tui"
 import type { PanelInput } from "@opencode/plugin/tui/context"
 import { useCompactLayout } from "../../ui/compact-layout"
 import { useT } from "../../util/i18n"
 import { hoverBackground } from "../../ui/hover"
+import { useTheme } from "../../context/theme"
 
 export const DOD_PANEL = "opencode.sidebar.dod"
 const FILE = path.join(".opencode", "dod.yaml")
@@ -47,13 +48,16 @@ export type DodTask = {
   state: string
   done: number
   total: number
+  // The checklist, each step with its tick removed.
+  steps: { text: string; done: boolean }[]
+  // Who took the task in a room, when someone did.
+  owner?: string
+  // Tasks it depends on that are not finished yet.
+  waits: string[]
 }
 
 type BoardState =
-  | { type: "loading" }
-  | { type: "missing" }
-  | { type: "ready"; items: DodTask[] }
-  | { type: "error"; reason: string }
+  { type: "loading" } | { type: "missing" } | { type: "ready"; items: DodTask[] } | { type: "error"; reason: string }
 
 // Keep the sidebar's progress definition aligned with the project's DoD service:
 // only explicitly finished or out-of-scope leaf tasks count as complete.
@@ -67,23 +71,51 @@ export function parseDodBoard(source: string): DodTask[] {
   if (leaves === undefined) return []
   if (!Array.isArray(leaves)) throw new Error("DoD leaves must be a list")
 
-  return leaves.flatMap((raw): DodTask[] => {
+  const tasks = leaves.flatMap((raw) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return []
     const leaf = raw as Record<string, unknown>
     if (typeof leaf.id !== "string" || !leaf.id.trim()) return []
-    const steps = Array.isArray(leaf.steps)
-      ? leaf.steps.filter((step): step is string => typeof step === "string")
-      : []
+    const steps = (Array.isArray(leaf.steps) ? leaf.steps : [])
+      .filter((step): step is string => typeof step === "string")
+      .map((step) => ({ text: step.replace(/^\s*\[[ xX]\]\s*/, "").trim(), done: /^\s*\[(x|X)\]/.test(step) }))
+    const depends = (Array.isArray(leaf.depends_on) ? leaf.depends_on : []).filter(
+      (id): id is string => typeof id === "string" && id.trim() !== "",
+    )
     return [
       {
         id: leaf.id.trim(),
         title: typeof leaf.what === "string" && leaf.what.trim() ? leaf.what.trim() : leaf.id.trim(),
         state: typeof leaf.task_state === "string" && leaf.task_state.trim() ? leaf.task_state.trim() : "NOT_STARTED",
-        done: steps.filter((step) => /^\s*\[(x|X)\]/.test(step)).length,
+        done: steps.filter((step) => step.done).length,
         total: steps.length,
+        steps,
+        ...(typeof leaf.owner === "string" && leaf.owner.trim() ? { owner: leaf.owner.trim() } : {}),
+        depends,
       },
     ]
   })
+  // A dependency the board does not list cannot hold a task back, as in the core's DoD.
+  const states = new Map(tasks.map((task) => [task.id, task.state]))
+  return tasks.map(({ depends, ...task }): DodTask => ({
+    ...task,
+    waits: depends.filter((id) => states.has(id) && !FINISHED.has(states.get(id)!)),
+  }))
+}
+
+// What needs a look comes first: failed, blocked, in progress, then not started, with
+// finished work last; tasks keep the file's order within each group.
+const RANK: Record<string, number> = { FAILED: 0, BLOCKED: 1, IN_PROGRESS: 2, NOT_STARTED: 3, DONE: 4, OUT_OF_SCOPE: 5 }
+
+export function orderDodTasks(items: readonly DodTask[]) {
+  return items.toSorted((a, b) => (RANK[a.state] ?? 3) - (RANK[b.state] ?? 3))
+}
+
+export type DodFilter = "active" | "all" | "done"
+
+export function filterDodTasks(items: readonly DodTask[], filter: DodFilter) {
+  const ordered = orderDodTasks(items)
+  if (filter === "all") return ordered
+  return ordered.filter((item) => FINISHED.has(item.state) === (filter === "done"))
 }
 
 export function summarizeDodBoard(items: readonly DodTask[]) {
@@ -262,7 +294,6 @@ export function SidebarDod(props: { context: Plugin.Context; sessionID: string }
   )
 }
 
-
 /**
  * Full task-board view opened from the session sidebar. It deliberately reads the
  * exact same project DoD file and uses the same parser/progress rules as the compact
@@ -272,7 +303,8 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
   const theme = props.context.theme
   const t = useT()
   const [closeHovered, setCloseHovered] = createSignal(false)
-  const closeHoverColor = () => theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action?.primary?.base ?? theme.text.base, 2)
+  const closeHoverColor = () =>
+    theme.text.action?.primary?.hovered ?? theme.increase(theme.text.action?.primary?.base ?? theme.text.base, 2)
   const [board, setBoard] = createSignal<BoardState>({ type: "loading" })
   const [boardRoot, setBoardRoot] = createSignal<string>()
   let revision = 0
@@ -320,42 +352,26 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
   const summary = () => summarizeDodBoard(items())
   const barWidth = () => Math.max(8, Math.min(40, props.panel.width - 8))
   const filled = () => Math.round((summary().percent / 100) * barWidth())
-  const color = (state: string) =>
-    state === "DONE" || state === "OUT_OF_SCOPE"
-      ? theme.text.feedback.success.base
-      : state === "IN_PROGRESS"
-        ? theme.text.feedback.info.base
-        : state === "BLOCKED"
-          ? theme.text.feedback.warning.base
-          : state === "FAILED"
-            ? theme.text.feedback.error.base
-            : theme.text.muted
   const errorHeading = () => {
     const value = board()
     return value.type === "error" ? t("DoD read error: {reason}", { reason: value.reason }) : ""
   }
 
-  const stateLabel = (state: string) => {
-    const labels: Record<string, string> = {
-      DONE: "Done",
-      IN_PROGRESS: "In progress",
-      BLOCKED: "Blocked",
-      FAILED: "Failed",
-      OUT_OF_SCOPE: "Out of scope",
-      NOT_STARTED: "Not started",
-    }
-    return t(labels[state] ?? state)
-  }
-
   return (
     <box flexDirection="column" flexGrow={1} minWidth={0} minHeight={0} padding={1} gap={1}>
-      <box flexDirection="row" alignItems="center" gap={1}>
+      {/* The header and the summary keep their height: squeezed by the task list below, the
+          progress line would be drawn over the close control and it could not be clicked. */}
+      <box flexDirection="row" alignItems="flex-start" gap={1} flexShrink={0}>
         <box flexGrow={1} minWidth={0} gap={1}>
           <text fg={theme.text.base}>
             <b>{t("Project DoD")}</b>
           </text>
           <Show when={boardRoot()}>
-            {(root) => <text fg={theme.text.muted} wrapMode="none" truncate>{props.context.ui.format.path(root())}</text>}
+            {(root) => (
+              <text fg={theme.text.muted} wrapMode="none" truncate>
+                {props.context.ui.format.path(root())}
+              </text>
+            )}
           </Show>
         </box>
         <box flexShrink={0}>
@@ -372,7 +388,9 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
               props.panel.close()
             }}
           >
-            <text fg={closeHovered() ? closeHoverColor() : (theme.text.action?.primary?.base ?? theme.text.base)}>{t("Close")} ✕</text>
+            <text fg={closeHovered() ? closeHoverColor() : (theme.text.action?.primary?.base ?? theme.text.base)}>
+              {t("Close")} ✕
+            </text>
           </box>
         </box>
       </box>
@@ -389,7 +407,7 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
         </text>
       </Show>
       <Show when={board().type === "ready"}>
-        <box gap={1}>
+        <box gap={1} flexShrink={0}>
           <box flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
             <text fg={theme.text.base}>{t("Progress")}</text>
             <text fg={theme.text.feedback.success.base}>
@@ -412,45 +430,197 @@ export function SidebarDodPanel(props: { context: Plugin.Context; panel: PanelIn
             </text>
           </box>
         </box>
-        <box flexGrow={1} minHeight={0}>
-          <scrollbox
-            flexGrow={1}
-            minHeight={0}
-            verticalScrollbarOptions={{ visible: true }}
-            horizontalScrollbarOptions={{ visible: false }}
-          >
-            <box gap={1} paddingRight={1}>
-              <Show when={items().length === 0}>
-                <text fg={theme.text.muted}>{t("No tasks yet")}</text>
-              </Show>
-              <For each={items()}>
-                {(item) => (
-                  <box
-                    id={"dod.task." + item.id}
-                    flexDirection="row"
-                    alignItems="flex-start"
-                    gap={1}
-                    paddingLeft={1}
-                    paddingRight={1}
-                  >
-                    <text fg={color(item.state)}>{MARK[item.state] ?? "·"}</text>
-                    <box flexGrow={1} minWidth={0} gap={1}>
-                      <text fg={theme.text.base} wrapMode="word">
-                        <span style={{ fg: theme.text.muted }}>{item.id + " "}</span>
-                        {item.title}
-                      </text>
-                      <text fg={color(item.state)}>{stateLabel(item.state)}</text>
-                    </box>
-                    <Show when={item.total > 0}>
-                      <text fg={theme.text.muted} wrapMode="none">
-                        {item.done}/{item.total} {t("steps")}
-                      </text>
-                    </Show>
-                  </box>
-                )}
-              </For>
-            </box>
-          </scrollbox>
+        <DodTaskList items={items()} />
+      </Show>
+    </box>
+  )
+}
+
+// The task list both DoD panels show: active work first, a filter between active, all and
+// finished tasks, and a task that opens on click to show its checklist, holder and blockers.
+export function DodTaskList(props: { items: readonly DodTask[] }) {
+  const theme = useTheme()
+  const t = useT()
+  const [filter, setFilter] = createSignal<DodFilter>("active")
+  const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set())
+  const shown = createMemo(() => filterDodTasks(props.items, filter()))
+  const count = (value: DodFilter) => filterDodTasks(props.items, value).length
+  const toggle = (id: string) =>
+    setOpened((current) =>
+      current.has(id) ? new Set([...current].filter((item) => item !== id)) : new Set(current).add(id),
+    )
+  const empty = () =>
+    props.items.length === 0
+      ? t("No tasks yet")
+      : filter() === "active"
+        ? t("Every task is finished")
+        : t("Nothing finished yet")
+
+  return (
+    <box flexGrow={1} minHeight={0} gap={1}>
+      <box flexDirection="row" gap={1} flexShrink={0}>
+        <For each={["active", "all", "done"] as const}>
+          {(value) => (
+            <DodFilterChip
+              text={`${t(FILTER_LABEL[value])} ${count(value)}`}
+              selected={filter() === value}
+              onClick={() => setFilter(value)}
+            />
+          )}
+        </For>
+      </box>
+      <scrollbox
+        flexGrow={1}
+        minHeight={0}
+        verticalScrollbarOptions={{ visible: true }}
+        horizontalScrollbarOptions={{ visible: false }}
+      >
+        <box gap={1} paddingRight={1}>
+          <Show when={shown().length === 0}>
+            <text fg={theme.text.muted}>{empty()}</text>
+          </Show>
+          <For each={shown()}>
+            {(item) => <DodTaskRow item={item} open={opened().has(item.id)} onToggle={() => toggle(item.id)} />}
+          </For>
+        </box>
+      </scrollbox>
+    </box>
+  )
+}
+
+const FILTER_LABEL: Record<DodFilter, string> = { active: "Unfinished", all: "All", done: "Finished" }
+
+const STATE_LABEL: Record<string, string> = {
+  DONE: "Done",
+  IN_PROGRESS: "In progress",
+  BLOCKED: "Blocked",
+  FAILED: "Failed",
+  OUT_OF_SCOPE: "Out of scope",
+  NOT_STARTED: "Not started",
+}
+
+function useStateColor() {
+  const theme = useTheme()
+  return (state: string) =>
+    state === "DONE" || state === "OUT_OF_SCOPE"
+      ? theme.text.feedback.success.base
+      : state === "IN_PROGRESS"
+        ? theme.text.feedback.info.base
+        : state === "BLOCKED"
+          ? theme.text.feedback.warning.base
+          : state === "FAILED"
+            ? theme.text.feedback.error.base
+            : theme.text.muted
+}
+
+function DodFilterChip(props: { text: string; selected: boolean; onClick: () => void }) {
+  const theme = useTheme()
+  const [hovered, setHovered] = createSignal(false)
+  return (
+    <box
+      flexShrink={0}
+      paddingLeft={1}
+      paddingRight={1}
+      backgroundColor={
+        props.selected
+          ? theme.background.action.primary.selected
+          : hovered()
+            ? hoverBackground(theme)
+            : theme.background.base
+      }
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
+      onMouseUp={(event) => {
+        event.stopPropagation()
+        props.onClick()
+      }}
+    >
+      <text
+        fg={
+          props.selected
+            ? theme.text.action.primary.selected
+            : hovered()
+              ? theme.text.action.primary.hovered
+              : theme.text.muted
+        }
+        selectable={false}
+        wrapMode="none"
+      >
+        {props.text}
+      </text>
+    </box>
+  )
+}
+
+function DodTaskRow(props: { item: DodTask; open: boolean; onToggle: () => void }) {
+  const theme = useTheme()
+  const t = useT()
+  const color = useStateColor()
+  const [hovered, setHovered] = createSignal(false)
+  const details = () => props.item.steps.length > 0 || props.item.owner !== undefined || props.item.waits.length > 0
+
+  return (
+    <box gap={0} paddingLeft={1} paddingRight={1}>
+      <box
+        id={"dod.task." + props.item.id}
+        flexDirection="row"
+        alignItems="flex-start"
+        gap={1}
+        backgroundColor={hovered() && details() ? hoverBackground(theme) : undefined}
+        onMouseOver={() => setHovered(true)}
+        onMouseOut={() => setHovered(false)}
+        onMouseUp={(event) => {
+          event.stopPropagation()
+          if (details()) props.onToggle()
+        }}
+      >
+        <text fg={color(props.item.state)} flexShrink={0} selectable={false}>
+          {MARK[props.item.state] ?? "·"}
+        </text>
+        <box flexGrow={1} minWidth={0}>
+          <text fg={theme.text.base} wrapMode="word">
+            <span style={{ fg: theme.text.muted }}>{props.item.id + " "}</span>
+            {props.item.title}
+          </text>
+        </box>
+        <Show when={props.item.total > 0}>
+          <text fg={theme.text.muted} wrapMode="none" flexShrink={0} selectable={false}>
+            {`${props.item.done}/${props.item.total}`}
+          </text>
+        </Show>
+        <text fg={theme.text.muted} flexShrink={0} selectable={false}>
+          {details() ? (props.open ? "▾" : "▸") : " "}
+        </text>
+      </box>
+      <Show when={props.open}>
+        <box paddingLeft={2} paddingTop={1} gap={0}>
+          <text fg={color(props.item.state)}>
+            {t(STATE_LABEL[props.item.state] ?? props.item.state)}
+            <Show when={props.item.owner}>
+              {(owner) => (
+                <span style={{ fg: theme.text.muted }}>{` · ${t("taken by {name}", { name: owner() })}`}</span>
+              )}
+            </Show>
+          </text>
+          <Show when={props.item.waits.length > 0}>
+            <text fg={theme.text.feedback.warning.base} wrapMode="word">
+              {t("Waits for {items}", { items: props.item.waits.join(", ") })}
+            </text>
+          </Show>
+          <For each={props.item.steps}>
+            {(step) => (
+              <box flexDirection="row" gap={1}>
+                <text fg={step.done ? theme.text.feedback.success.base : theme.text.muted} flexShrink={0}>
+                  {step.done ? "✓" : "○"}
+                </text>
+                <box flexGrow={1} minWidth={0}>
+                  <text fg={step.done ? theme.text.muted : theme.text.base} wrapMode="word">
+                    {step.text}
+                  </text>
+                </box>
+              </box>
+            )}
+          </For>
         </box>
       </Show>
     </box>
