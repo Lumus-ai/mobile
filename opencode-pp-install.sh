@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs Opencode++ for Linux and macOS with one command:
+# Installs Opencode++ for Linux, macOS and Android (Termux) with one command:
 #
 #   curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh | sh
 #
@@ -23,6 +23,61 @@ fail() {
 need() {
   command -v "$1" >/dev/null 2>&1
 }
+
+# Android (Termux): Bun and the terminal UI's native library are built for glibc Linux, not
+# Android, so Opencode++ lives in a Debian made by proot-distro and this same script installs it
+# there as on any Linux. The `opencode-pp` command in Termux enters that Debian with the Termux
+# home and shared storage visible at their usual paths, in the folder it was started from.
+# Running this again in Termux updates, and so does the app's own updater inside Debian.
+termux() {
+  DISTRO="${OPENCODE_PP_DISTRO:-debian}"
+  ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"
+  URL="${OPENCODE_PP_INSTALL_URL:-https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/$BRANCH/opencode-pp-install.sh}"
+
+  if ! need proot-distro; then
+    echo "Installing proot-distro…"
+    pkg install -y proot-distro || fail "could not install proot-distro. Run: pkg install proot-distro"
+  fi
+  if [ ! -d "$ROOTFS" ]; then
+    echo "Installing $DISTRO for Opencode++ (once, a few hundred MB)…"
+    proot-distro install "$DISTRO" || fail "could not install $DISTRO with proot-distro."
+  fi
+
+  # The script goes in through the Termux home, which Debian sees at the same path. A local copy
+  # (sh opencode-pp-install.sh) installs itself; `curl | sh` has no file, so it is downloaded.
+  mkdir -p "$HOME/.cache"
+  script="$HOME/.cache/opencode-pp-install.sh"
+  if [ -f "$0" ] && grep -q "installed by opencode-pp-install.sh" "$0"; then
+    cp "$0" "$script"
+  else
+    curl -fsSL "$URL" -o "$script" || fail "could not download $URL"
+  fi
+  proot-distro login "$DISTRO" --bind "$HOME:$HOME" -- env \
+    OPENCODE_PP_REPO="$REPO" OPENCODE_PP_BRANCH="$BRANCH" \
+    ${OPENCODE_PP_DIR:+OPENCODE_PP_DIR="$OPENCODE_PP_DIR"} \
+    sh "$script" || fail "installing inside $DISTRO failed."
+
+  # proot-distro starts Debian with a clean environment; the terminal type, colors and language
+  # come along explicitly. A folder Debian cannot see (inside $PREFIX) starts in Debian's home.
+  cat >"$PREFIX/bin/opencode-pp" <<WRAPPER
+#!$PREFIX/bin/sh
+# Opencode++ for Termux, installed by opencode-pp-install.sh. Runs inside proot-distro $DISTRO.
+set -- --bind "\$HOME:\$HOME" -- env TERM="\${TERM:-xterm-256color}" COLORTERM="\${COLORTERM:-truecolor}" LANG="\${LANG:-C.UTF-8}" /root/.local/bin/opencode-pp "\$@"
+case "\$PWD" in
+  "\$HOME"|"\$HOME"/*|/sdcard|/sdcard/*|/storage/*) set -- --work-dir "\$PWD" "\$@" ;;
+esac
+exec proot-distro login $DISTRO "\$@"
+WRAPPER
+  chmod +x "$PREFIX/bin/opencode-pp"
+
+  echo
+  echo "Opencode++ is installed in Termux. Run: opencode-pp"
+  [ -d "$HOME/storage" ] || echo "To work with files in phone storage, run once: termux-setup-storage"
+  exit 0
+}
+case "${PREFIX:-}" in
+  */com.termux/*) need pkg && termux ;;
+esac
 
 # The system package manager installs what the installer itself needs. Root needs no sudo.
 packages() {

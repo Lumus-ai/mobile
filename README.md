@@ -51,8 +51,10 @@ This fork adds LAN rooms (multiplayer between Windows and Linux), project AI tea
 
 | System | Command |
 | --- | --- |
-| Linux / macOS | `curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh \| sh` |
+| Linux / macOS / Android (Termux) | `curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh \| sh` |
 | Windows (PowerShell) | `irm https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.ps1 \| iex` |
+
+On Android install [Termux](https://f-droid.org/packages/com.termux/) from F-Droid or GitHub (the Google Play build is outdated) and run the Linux command in it: Opencode++ is set up inside a Debian made by proot-distro, and `opencode-pp` in Termux opens it in the current folder.
 
 Then run `opencode-pp`. A regular opencode on the same computer keeps the `opencode` command; sessions are kept apart and settings in `~/.config/opencode` are shared. Running the same command again updates Opencode++.
 
@@ -61,8 +63,10 @@ Then run `opencode-pp`. A regular opencode on the same computer keeps the `openc
 
 **Установка одной командой** — git, Bun и остальное установщик поставит сам:
 
-- Linux / macOS: `curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh | sh`
+- Linux / macOS / Android (Termux): `curl -fsSL https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.sh | sh`
 - Windows (PowerShell): `irm https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/lan-rooms/opencode-pp-install.ps1 | iex`
+
+На Android поставь [Termux](https://f-droid.org/packages/com.termux/) из F-Droid или GitHub (версия из Google Play устарела) и выполни в нём команду для Linux: Opencode++ ставится внутрь Debian через proot-distro, а `opencode-pp` в Termux открывает его в текущей папке.
 
 Потом запусти `opencode-pp`. Обычный opencode на том же компьютере остаётся командой `opencode`: сессии у них раздельные, настройки в `~/.config/opencode` общие. Повторный запуск той же команды обновляет Opencode++.
 Мультиплеер между компьютерами: на Windows один раз нажми «Разрешить в брандмауэре Windows» в окне Host или Connect.
