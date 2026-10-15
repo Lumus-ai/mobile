@@ -426,7 +426,8 @@ function ProviderConnection(props: {
   const integrations = useIntegrations(directory)
   const integrationID = consoleIntegration(props.provider)
   const isConsole = CONSOLE_PROVIDERS.has(props.provider)
-  const remote = isConsole && authServerName(sdk.server) !== undefined
+  const remoteServer = authServerName(sdk.server) !== undefined
+  const remote = isConsole && remoteServer
 
   const [state, setState] = createStore<{
     copied: boolean
@@ -455,6 +456,12 @@ function ProviderConnection(props: {
     keyProvider: () => props.provider,
     directory,
     autoSelect: (methods) => {
+      if (props.provider === "openai" && remoteServer) {
+        const index = methods.findIndex(
+          (method) => method.type === "oauth" && method.id === "chatgpt-token-sharing-web",
+        )
+        if (index !== -1) return index
+      }
       if (!isConsole) return undefined
       const index = methods.findIndex((method) => method.type === "oauth")
 
@@ -1050,6 +1057,10 @@ function ProviderConnection(props: {
 
   function OAuthCodeView() {
     let codeInput: HTMLInputElement | undefined
+    const remoteChatGPT = () => {
+      const method = controller.currentMethod()
+      return props.provider === "openai" && method?.type === "oauth" && method.id === "chatgpt-token-sharing-web"
+    }
     const errorID = createUniqueId()
 
     const [formStore, setFormStore] = createStore<{
@@ -1082,18 +1093,31 @@ function ProviderConnection(props: {
 
     return (
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <div>{language.t("provider.connect.oauth.code.description", { provider: provider().name })}</div>
+        <div>
+          {language.t(
+            remoteChatGPT()
+              ? "provider.connect.oauth.chatgptRemote.description"
+              : "provider.connect.oauth.code.description",
+            { provider: provider().name },
+          )}
+        </div>
         <Button variant="neutral" icon="arrow-up-right" onClick={() => void controller.auth.open()}>
           {language.t("provider.connect.oauth.openBrowser")}
         </Button>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-            {language.t("provider.connect.oauth.code.label", { method: controller.currentMethod()?.label ?? "" })}
+            {remoteChatGPT()
+              ? language.t("provider.connect.oauth.chatgptRemote.label")
+              : language.t("provider.connect.oauth.code.label", { method: controller.currentMethod()?.label ?? "" })}
             <TextInput
               ref={codeInput}
               class="!w-full"
               name="code"
-              placeholder={language.t("provider.connect.oauth.code.placeholder")}
+              placeholder={language.t(
+                remoteChatGPT()
+                  ? "provider.connect.oauth.chatgptRemote.placeholder"
+                  : "provider.connect.oauth.code.placeholder",
+              )}
               value={formStore.value}
               invalid={formStore.error !== undefined}
               aria-describedby={formStore.error ? errorID : undefined}
