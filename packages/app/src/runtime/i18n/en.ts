@@ -181,6 +181,10 @@ export const dict = {
   "provider.connect.oauth.code.placeholder": "Authorization code",
   "provider.connect.oauth.code.required": "Authorization code is required",
   "provider.connect.oauth.code.invalid": "Invalid authorization code",
+  "provider.connect.oauth.chatgptRemote.description":
+    "Because this OpenCode++ server is remote, the callback opens on your device. After signing in, copy the full URL from the browser address bar—even if localhost shows a connection error—and paste it here. The server validates the callback and exchanges the code.",
+  "provider.connect.oauth.chatgptRemote.label": "Full callback URL",
+  "provider.connect.oauth.chatgptRemote.placeholder": "http://localhost:1455/auth/callback?code=…&state=…",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
   "provider.connect.oauth.auto.confirmationCode.description":
     "Check that your browser shows the same code before you authorize.",
