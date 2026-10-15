@@ -460,8 +460,10 @@ function ProviderConnection(props: {
         const index = methods.findIndex(
           (method) => method.type === "oauth" && method.id === "chatgpt-token-sharing-web",
         )
+
         if (index !== -1) return index
       }
+
       if (!isConsole) return undefined
       const index = methods.findIndex((method) => method.type === "oauth")
 
@@ -1057,10 +1059,13 @@ function ProviderConnection(props: {
 
   function OAuthCodeView() {
     let codeInput: HTMLInputElement | undefined
+
     const remoteChatGPT = () => {
       const method = controller.currentMethod()
+
       return props.provider === "openai" && method?.type === "oauth" && method.id === "chatgpt-token-sharing-web"
     }
+
     const errorID = createUniqueId()
 
     const [formStore, setFormStore] = createStore<{
