@@ -802,6 +802,9 @@ describe("Orchestra team", () => {
       })
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: oldMain })
       yield* Effect.sleep("50 millis")
+      // Run the same durable reconciliation synchronously so the test does not depend on
+      // when the live event subscriber gets scheduled.
+      yield* orchestra.recoverPendingTasks()
 
       const ledger = yield* kv.get(`orchestra/report/${project.id}/${reportItem.id}`)
       expect(ledger).toBeDefined()
