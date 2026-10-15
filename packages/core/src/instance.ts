@@ -43,6 +43,7 @@ import { SessionContext } from "./session/context.js"
 import { Skill } from "./skill.js"
 import { SkillInstructions } from "./skill/instructions.js"
 import { NoteStore } from "./note.js"
+import { SkillMarketplace } from "./skill-marketplace/index.js"
 import { NoteInstructions } from "./note-instructions.js"
 import { Snapshot } from "./snapshot.js"
 import { InstructionDiscovery } from "./instruction-discovery.js"
@@ -96,6 +97,7 @@ const nodes = [
   Image.node,
   SkillInstructions.node,
   NoteStore.node,
+  SkillMarketplace.node,
   NoteInstructions.node,
   ReferenceInstructions.node,
   InstructionEntry.node,

@@ -86,6 +86,7 @@ import { ReadTool } from "../tool/plugin/read.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { NoteTool } from "../tool/plugin/note.js"
 import { NoteStore } from "../note.js"
+import { SkillMarketplace } from "../skill-marketplace/index.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SkillCatalogTool } from "../tool/plugin/skill-catalog.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
@@ -161,6 +162,7 @@ const services = [
   ShellSelect.Service,
   Snapshot.Service,
   NoteStore.Service,
+  SkillMarketplace.Service,
   Skill.Service,
   SkillDiscovery.Service,
   Tool.Service,
@@ -218,6 +220,7 @@ export const requirements = LayerNode.group([
   ShellSelect.node,
   Snapshot.node,
   NoteStore.node,
+  SkillMarketplace.node,
   Skill.node,
   SkillDiscovery.node,
   Tool.node,

@@ -95,6 +95,20 @@ the `vcs/`, `worktree/` directories.
 **Permissions** — `permission.ts` (347) + `permission/` (including
 `permission/saved.ts`), `managed-policy.ts`.
 
+**Skill catalog** — `skill-marketplace/` (Location-scoped service,
+`packages/core/docs/skill-marketplace.md`) + `tool/plugin/skill-catalog.ts`.
+Queries the official SkillsMP entry point `POST https://skillsmp.com/mcp`
+(`upstream.ts`: `initialize` → `notifications/initialized` → `tools/call
+search_skills`, `MCP-Protocol-Version` header, `Mcp-Session-Id`, calls spaced to
+the documented 30/min). What came back is cached **per project** in
+`.opencode/skill-catalog/skills.jsonl` (`store.ts`, NDJSON, temp+rename,
+damaged line ⇒ empty cache with a marker), ranked by an in-memory inverted
+index (`search.ts`: name hit ≫ description hit, `stars` as tiebreak), and a
+skill's text comes from GitHub and is left in `.opencode/skills/` (`read.ts`).
+A global write happens only on an explicit `save: "global"` (`save.ts`), checked
+under the `skill` permission. The tool's permission checks still carry the strings
+`skillsmp_search_skills` / `skillsmp_get_skill` so the user's saved rules keep matching.
+
 **Miscellaneous** — `shell.ts` (455), `job.ts` (482), `kv.ts`, `form.ts` (370),
 `instruction-discovery.ts` (searching the tree for AGENTS.md) +
 `instructions/` (assembly and hashing into the system prompt),
