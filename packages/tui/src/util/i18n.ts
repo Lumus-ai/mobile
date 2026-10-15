@@ -689,6 +689,7 @@ const ru: Record<string, string> = {
   auto: "авто",
   compact: "компакт",
   full: "полная",
+  mobile: "телефон",
   prompt: "спрашивать",
   "auto accept": "принимать сами",
   "launch directory": "папка запуска",
@@ -724,7 +725,8 @@ const ru: Record<string, string> = {
   "Interface language of the panels, dialogs and commands": "Язык панелей, диалогов и команд",
   "Color theme; /themes previews them": "Цветовая тема; /themes показывает их с превью",
   "Dark or light variant of the theme; system follows the terminal": "Тёмный или светлый вариант темы; «система» следует за терминалом",
-  "Compact narrows the project panel and docks the sidebar beside the chat": "Компакт сужает панель проектов и ставит боковую панель рядом с чатом",
+  "Compact narrows the project panel and docks the sidebar beside the chat; mobile fits a phone screen":
+    "Компакт сужает панель проектов и ставит боковую панель рядом с чатом; телефон — под экран смартфона",
   "Ask before the AI runs commands and edits files, or accept automatically": "Спрашивать, прежде чем ИИ запустит команду или изменит файл, или принимать сами",
   "Start new sessions in the launch directory or in the active session's directory": "Начинать новые сессии в папке запуска или в папке активной сессии",
   "Spinners, shimmer and other motion": "Спиннеры, мерцание и прочее движение",
@@ -780,6 +782,7 @@ const ru: Record<string, string> = {
   "Keyboard shortcuts": "Горячие клавиши",
   // Commands
   "Switch language": "Сменить язык",
+  "Toggle mobile layout": "Режим для телефона",
   "Switch panel layout": "Сменить раскладку панелей",
   "Open tool registry": "Открыть реестр инструментов",
   "Switch session": "Сменить сессию",

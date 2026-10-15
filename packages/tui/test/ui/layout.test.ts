@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import {
   clampHomeProjectPanelWidth,
+  compactLayout,
+  mobileLayout,
   clampNoteChatWidth,
   clampSessionPaneWidth,
   clampSessionSidebarWidth,
@@ -280,4 +282,15 @@ test("Projects transcript width is the actual center host, without subtracting s
     fullscreenContentWidth: 0,
     fullscreen: false,
   })).toBe(80)
+})
+
+test("the mobile layout is chosen explicitly or by the Termux command until a layout is set", () => {
+  expect(mobileLayout("mobile", false)).toBe(true)
+  expect(mobileLayout(undefined, true)).toBe(true)
+  expect(mobileLayout(undefined, false)).toBe(false)
+  // Any layout picked in the settings wins over the Termux default.
+  expect(mobileLayout("auto", true)).toBe(false)
+  expect(mobileLayout("full", true)).toBe(false)
+  // Mobile panels use the compact widths whatever the terminal size.
+  expect(compactLayout("mobile", 200)).toBe(true)
 })

@@ -29,6 +29,7 @@ import {
   onCleanup,
   batch,
   Show,
+  on,
 } from "solid-js"
 import {
   TuiLifecycleProvider,
@@ -543,7 +544,9 @@ function App() {
     },
   )
   // The compact layout remembers its own project panel width so switching back restores the full one.
-  const compact = useCompactLayout().compact
+  const layoutMode = useCompactLayout()
+  const compact = layoutMode.compact
+  const mobile = layoutMode.mobile
   const defaultTabsWidth = () => (compact() ? SESSION_TABS_COMPACT_LAYOUT_WIDTH : SESSION_SIDEBAR_WIDTH)
   const tabsResize = createPaneResize({
     value: () => (compact() ? layout.compactTabsWidth : layout.verticalTabsWidth) ?? defaultTabsWidth(),
@@ -561,6 +564,33 @@ function App() {
   const [openSessions, setOpenSessions] = createSignal<SessionInfo[]>([])
   const [leftPanelHidden, setLeftPanelHidden] = createSignal(false)
   const [homePanelHidden, setHomePanelHidden] = createSignal(false)
+  // On a phone the side panels start folded; each opens over the screen and closes the other.
+  createEffect(
+    on(mobile, (value) => {
+      if (!value) return
+      setLeftPanelHidden(true)
+      setHomePanelHidden(true)
+    }),
+  )
+  const showLeftPanel = () => {
+    if (mobile()) setHomePanelHidden(true)
+    setLeftPanelHidden(false)
+  }
+  const showHomePanel = () => {
+    if (mobile()) setLeftPanelHidden(true)
+    setHomePanelHidden(false)
+  }
+  // Picking a session or a room in the open panel goes to it, so the panel gets out of the way.
+  createEffect(
+    on(
+      // The route is a store reconciled in place, so its serialized form is what changes.
+      () => JSON.stringify(route.data),
+      () => {
+        if (mobile()) setLeftPanelHidden(true)
+      },
+      { defer: true },
+    ),
+  )
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
   // the same problem on every refresh while still re-alerting if the state changes.
@@ -628,10 +658,13 @@ function App() {
     panels.current()?.sessionID === route.data.sessionID &&
     panels.presentation() === "fullscreen"
   const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
-  const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+  // The mobile layout always keeps the panel's rail: a phone is never wide enough for the tree beside the chat.
+  const verticalTabsVisible = () => tabsVisible() && (mobile() || tabsVertical())
   const leftPanelVisible = () => verticalTabsVisible() && !leftPanelHidden()
+  // An open mobile panel lies over the screen, so the content keeps the room it had beside the rail.
+  const leftDrawerOpen = () => mobile() && leftPanelVisible()
   const leftPanelOccupiedWidth = () =>
-    verticalTabsVisible() ? (leftPanelHidden() ? PANEL_RAIL_WIDTH : tabsResize.size()) : 0
+    verticalTabsVisible() ? (leftPanelHidden() || mobile() ? PANEL_RAIL_WIDTH : tabsResize.size()) : 0
 
   // The home DoD panel has its own persisted resize boundary. Its maximum width
   // always leaves at least 64 columns for the main prompt/chat.
@@ -651,9 +684,11 @@ function App() {
   })
   const homePanelWidth = createMemo(() => {
     if (route.data.type !== "home") return 0
+    if (mobile()) return dimensions().width - leftPanelOccupiedWidth()
     if (defaultHomePanelWidth() <= 0) return 0
     return homePanelResize.size()
   })
+  const homeDrawerOpen = () => mobile() && homePanelWidth() > 0 && !homePanelHidden()
 
   // Dispatch drag events to the active boundary. The inactive resizer ignores them,
   // so the left and right separators never resize each other.
@@ -1251,6 +1286,20 @@ function App() {
         category: "System",
       },
       {
+        name: "app.layout.mobile",
+        title: "Toggle mobile layout",
+        slash: { name: "mobile", aliases: ["phone"] },
+        run: () => {
+          void config
+            .update((draft) => {
+              draft.layout = mobile() ? "auto" : "mobile"
+            })
+            .catch(toast.error)
+          dialog.clear()
+        },
+        category: "System",
+      },
+      {
         name: "registry.open",
         title: "Open tool registry",
         slash: { name: "registry", aliases: ["tools"] },
@@ -1563,12 +1612,25 @@ function App() {
         onMouseUp={onPaneMouseUp}
       >
         <Show when={verticalTabsVisible()}>
-          <ProjectTree
-            width={leftPanelHidden() ? PANEL_RAIL_WIDTH : tabsResize.size()}
-            collapsed={leftPanelHidden()}
-            onHide={() => setLeftPanelHidden(true)}
-            onShow={() => setLeftPanelHidden(false)}
-          />
+          {/* The same tree lifts over the screen when the mobile panel opens; a spacer keeps its rail's room. */}
+          <Show when={leftDrawerOpen()}>
+            <box width={PANEL_RAIL_WIDTH} flexShrink={0} />
+          </Show>
+          <box
+            position={leftDrawerOpen() ? "absolute" : "relative"}
+            left={0}
+            top={0}
+            zIndex={leftDrawerOpen() ? 30 : 0}
+            height="100%"
+            flexShrink={0}
+          >
+            <ProjectTree
+              width={leftDrawerOpen() ? dimensions().width : leftPanelHidden() ? PANEL_RAIL_WIDTH : tabsResize.size()}
+              collapsed={leftPanelHidden()}
+              onHide={() => setLeftPanelHidden(true)}
+              onShow={showLeftPanel}
+            />
+          </box>
         </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
@@ -1580,12 +1642,24 @@ function App() {
                       <Home />
                     </box>
                     <Show when={homePanelWidth() > 0}>
-                      <HomeProjectPanel
-                        width={homePanelHidden() ? PANEL_RAIL_WIDTH : homePanelWidth()}
-                        collapsed={homePanelHidden()}
-                        onHide={() => setHomePanelHidden(true)}
-                        onShow={() => setHomePanelHidden(false)}
-                      />
+                      <Show when={homeDrawerOpen()}>
+                        <box width={PANEL_RAIL_WIDTH} flexShrink={0} />
+                      </Show>
+                      <box
+                        position={homeDrawerOpen() ? "absolute" : "relative"}
+                        right={0}
+                        top={0}
+                        zIndex={homeDrawerOpen() ? 30 : 0}
+                        height="100%"
+                        flexShrink={0}
+                      >
+                        <HomeProjectPanel
+                          width={homePanelHidden() ? PANEL_RAIL_WIDTH : homePanelWidth()}
+                          collapsed={homePanelHidden()}
+                          onHide={() => setHomePanelHidden(true)}
+                          onShow={showHomePanel}
+                        />
+                      </box>
                     </Show>
                   </box>
                 </Match>
@@ -1631,10 +1705,10 @@ function App() {
             <NotesCommands />
           </Show>
         </box>
-        <Show when={leftPanelVisible()}>
+        <Show when={leftPanelVisible() && !mobile()}>
           <PaneResizeHandle resize={tabsResize} left={tabsResize.size() - 1} />
         </Show>
-        <Show when={route.data.type === "home" && homePanelWidth() > 0 && !homePanelHidden()}>
+        <Show when={route.data.type === "home" && homePanelWidth() > 0 && !homePanelHidden() && !mobile()}>
           <PaneResizeHandle
             resize={homePanelResize}
             left={dimensions().width - homePanelResize.size() - 1}

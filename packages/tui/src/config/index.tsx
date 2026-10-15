@@ -246,9 +246,9 @@ export const Info = Schema.Struct({
   language: Schema.optional(Schema.Literals(["en", "ru"])).annotate({
     description: "Interface language of the panels and room windows (default: en)",
   }),
-  layout: Schema.optional(Schema.Literals(["auto", "compact", "full"])).annotate({
+  layout: Schema.optional(Schema.Literals(["auto", "compact", "full", "mobile"])).annotate({
     description:
-      "Panel layout; 'compact' narrows the project panel and docks the session sidebar beside the chat, 'auto' turns it on for narrow terminals (default: auto)",
+      "Panel layout; 'compact' narrows the project panel and docks the session sidebar beside the chat, 'auto' turns it on for narrow terminals, 'mobile' fits a phone: side panels fold to edge rails and open over the screen (default: auto, mobile in Termux)",
   }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   mascot: Schema.optional(Schema.Boolean).annotate({

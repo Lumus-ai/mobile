@@ -27,7 +27,8 @@ need() {
 # Android (Termux): Bun and the terminal UI's native library are built for glibc Linux, not
 # Android, so Opencode++ lives in a Debian made by proot-distro and this same script installs it
 # there as on any Linux. The `opencode-pp` command in Termux enters that Debian with the Termux
-# home and shared storage visible at their usual paths, in the folder it was started from.
+# home and shared storage visible at their usual paths, in the folder it was started from, and
+# starts the interface in its phone layout.
 # Running this again in Termux updates, and so does the app's own updater inside Debian.
 termux() {
   DISTRO="${OPENCODE_PP_DISTRO:-debian}"
@@ -62,7 +63,7 @@ termux() {
   cat >"$PREFIX/bin/opencode-pp" <<WRAPPER
 #!$PREFIX/bin/sh
 # Opencode++ for Termux, installed by opencode-pp-install.sh. Runs inside proot-distro $DISTRO.
-set -- --bind "\$HOME:\$HOME" -- env TERM="\${TERM:-xterm-256color}" COLORTERM="\${COLORTERM:-truecolor}" LANG="\${LANG:-C.UTF-8}" /root/.local/bin/opencode-pp "\$@"
+set -- --bind "\$HOME:\$HOME" -- env OPENCODE_PP_MOBILE=1 TERM="\${TERM:-xterm-256color}" COLORTERM="\${COLORTERM:-truecolor}" LANG="\${LANG:-C.UTF-8}" /root/.local/bin/opencode-pp "\$@"
 case "\$PWD" in
   "\$HOME"|"\$HOME"/*|/sdcard|/sdcard/*|/storage/*) set -- --work-dir "\$PWD" "\$@" ;;
 esac

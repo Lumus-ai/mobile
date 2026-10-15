@@ -131,8 +131,17 @@ const SESSION_SIDEBAR_DOCK_GUTTER = 8
 const COMPACT_LAYOUT_AUTO_FROM = 110
 const COMPACT_LAYOUT_AUTO_BELOW = 170
 
-export function compactLayout(mode: "auto" | "compact" | "full" | undefined, total: number) {
-  if (mode === "compact") return true
+export type LayoutMode = "auto" | "compact" | "full" | "mobile"
+
+// The mobile layout is for a phone screen: the side panels fold to edge rails and open over
+// the screen instead of beside it. The Termux command sets OPENCODE_PP_MOBILE, so a phone
+// starts in it until a layout is chosen in the settings.
+export function mobileLayout(mode: LayoutMode | undefined, termux = process.env.OPENCODE_PP_MOBILE === "1") {
+  return mode === "mobile" || (mode === undefined && termux)
+}
+
+export function compactLayout(mode: LayoutMode | undefined, total: number) {
+  if (mode === "compact" || mode === "mobile") return true
   if (mode === "full") return false
   return total >= COMPACT_LAYOUT_AUTO_FROM && total < COMPACT_LAYOUT_AUTO_BELOW
 }

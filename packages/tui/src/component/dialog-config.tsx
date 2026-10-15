@@ -55,11 +55,11 @@ export const settings: Setting[] = [
   {
     title: "Layout",
     category: "General",
-    description: "Compact narrows the project panel and docks the sidebar beside the chat",
+    description: "Compact narrows the project panel and docks the sidebar beside the chat; mobile fits a phone screen",
     path: ["layout"],
     default: "auto",
-    values: ["auto", "compact", "full"],
-    keywords: ["panels", "laptop", "narrow"],
+    values: ["auto", "compact", "full", "mobile"],
+    keywords: ["panels", "laptop", "narrow", "phone", "termux"],
   },
   {
     title: "Permissions",
