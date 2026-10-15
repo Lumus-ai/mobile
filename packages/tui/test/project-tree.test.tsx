@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { SessionOwnerMetadataKey } from "@opencode/schema/orchestra"
+import { SESSION_SIDEBAR_COMPACT_WIDTH } from "../src/ui/layout"
 import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
@@ -384,5 +385,5 @@ test("the compact layout docks both side panels beside the chat on a laptop-size
   const top = (frame: string) => frame.split("\n").find((line) => line.includes("Projects")) ?? ""
   const row = top(await setup.waitForFrame((frame) => top(frame).includes("Worker task")))
   // the sidebar is the compact width, at the right edge
-  expect(row.indexOf("Worker task")).toBeGreaterThanOrEqual(140 - 32)
+  expect(row.indexOf("Worker task")).toBeGreaterThanOrEqual(140 - SESSION_SIDEBAR_COMPACT_WIDTH)
 })
