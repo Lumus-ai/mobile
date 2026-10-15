@@ -27,7 +27,8 @@ test("narrow geometry overrides presentation without discarding the user's choic
     panels.open({ plugin: "review", name: "diff", sessionID: "session" })
     panels.setWidth(80)
     expect(panels.canSplit()).toBe(false)
-    expect(panels.presentation()).toBe("fullscreen")
+    // Narrow terminals keep the auxiliary view docked; fullscreen remains an explicit choice.
+    expect(panels.presentation()).toBe("panel")
     panels.toggleFullscreen()
     panels.setWidth(81)
     expect(panels.canSplit()).toBe(true)

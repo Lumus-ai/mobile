@@ -163,7 +163,9 @@ test
     const handle = findHandle(setup.renderer.root)
     if (!handle) throw new Error("Separator handle not found")
     const start = handle.x
-    await setup.mockMouse.drag(start, 10, start + 4, 10)
+    // Start inside the rendered separator instead of assuming it is always on row 10.
+    const y = handle.y + Math.floor(handle.height / 2)
+    await setup.mockMouse.drag(start, y, start + 4, y)
     await setup.waitForVisualIdle()
     expect(handle.x).toBe(start + 4)
     expect(setup.renderer.currentFocusedRenderable).toBe(terminal)

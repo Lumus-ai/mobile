@@ -247,10 +247,10 @@ test("a project is created from a name and a path", async () => {
   // The initial frame can still be scheduled while setup returns, particularly on Windows.
   await setup.ready
 
-  // without projects the tree still shows, for Multiplayer; the bottom bar offers to create the first project
-  const frame = await setup.waitForFrame((frame) => frame.includes("+ Project"))
+  // Without projects, the project tree's + New action is still available above Multiplayer.
+  const frame = await setup.waitForFrame((frame) => frame.includes("+ New") && frame.includes("Multiplayer"))
   expect(frame).toContain("Multiplayer")
-  const add = cell(frame, "+ Project")
+  const add = cell(frame, "+ New")
   await setup.mockMouse.click(add.x, add.y)
   await setup.waitForFrame((frame) => frame.includes("New project") && frame.includes("Path"))
 
@@ -290,7 +290,7 @@ test("a new project can start with an AI team from a template", async () => {
   const calls: Call[] = []
   await using setup = await render(state.path, calls, [])
 
-  const add = cell(await setup.waitForFrame((frame) => frame.includes("+ Project")), "+ Project")
+  const add = cell(await setup.waitForFrame((frame) => frame.includes("+ New")), "+ New")
   await setup.mockMouse.click(add.x, add.y)
   // the template list shows each team with its roles; "No team" is selected first
   await setup.waitForFrame((frame) => frame.includes("● No team") && frame.includes("Architect, Developer"))
@@ -310,7 +310,7 @@ test("the team is picked with the mouse and a click on a field takes the keyboar
   const calls: Call[] = []
   await using setup = await render(state.path, calls, [])
 
-  const add = cell(await setup.waitForFrame((frame) => frame.includes("+ Project")), "+ Project")
+  const add = cell(await setup.waitForFrame((frame) => frame.includes("+ New")), "+ New")
   await setup.mockMouse.click(add.x, add.y)
   const frame = await setup.waitForFrame((frame) => frame.includes("● No team") && frame.includes("Feature"))
   const feature = cell(frame, "Feature")
