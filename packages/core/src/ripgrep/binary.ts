@@ -9,7 +9,6 @@ import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { which } from "../util/which.js"
-import { rgPath } from "@vscode/ripgrep"
 
 export namespace RipgrepBinary {
   const VERSION = "15.1.0"
@@ -104,7 +103,13 @@ export namespace RipgrepBinary {
 
             // The npm package ships a verified binary for the installed platform. Prefer it
             // over runtime network access (which is unavailable in offline/test environments).
-            if (yield* fs.isFile(rgPath).pipe(Effect.orDie)) return rgPath
+            // Imported lazily: the package throws on import when its platform binary is absent,
+            // and a missing package must not keep the server from starting (Termux/proot).
+            const bundled = yield* Effect.tryPromise(() => import("@vscode/ripgrep")).pipe(
+              Effect.map((mod) => mod.rgPath),
+              Effect.orElseSucceed(() => undefined),
+            )
+            if (bundled && (yield* fs.isFile(bundled).pipe(Effect.orDie))) return bundled
 
             const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
             const config = PLATFORM[platformKey]
