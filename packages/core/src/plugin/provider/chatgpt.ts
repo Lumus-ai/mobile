@@ -26,6 +26,8 @@ const tokenSharingScope = "chatgpt.tokens.use.direct"
 const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
+const webMethodID = Integration.MethodID.make("chatgpt-token-sharing-web")
+const webRedirect = "http://localhost:1455/auth/callback"
 const modelCacheKey = (clientID: string) => `models:${clientID}`
 const fallbackModels = new Set([
   "gpt-5.5",
@@ -192,6 +194,85 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
     refresh: (value) => refresh(value, app),
   }) satisfies IntegrationOAuthMethodRegistration
 
+// Remote web clients cannot receive a callback on the server's loopback interface.
+// The user pastes the browser's callback URL; the code, PKCE verifier and state stay server-side.
+const signInWeb = (app: App.Info, savedClientID: () => string | undefined, storage: Context["storage"]) =>
+  ({
+    integrationID,
+    method: {
+      id: webMethodID,
+      type: "oauth",
+      label: "Sign in with ChatGPT (remote web)",
+    },
+    authorize: () =>
+      Effect.gen(function* () {
+        const storedHostID = yield* storage.get("chatgpt-agent-host-id")
+        const hostID = typeof storedHostID === "string" ? storedHostID : `urn:uuid:${crypto.randomUUID()}`
+        if (typeof storedHostID !== "string") yield* storage.set("chatgpt-agent-host-id", hostID)
+        const pkce = yield* Effect.promise(generatePKCE)
+        const state = randomValue()
+        const nonce = randomValue()
+        const savedID = savedClientID()
+
+        return {
+          mode: "code" as const,
+          url: authorizeURL(webRedirect, pkce, state, nonce, savedID, hostID),
+          instructions: "After signing in, paste the full callback URL from your browser address bar here.",
+          callback: (callbackURL: string) =>
+            Effect.gen(function* () {
+              const result = yield* Effect.try({
+                try: () => parseRemoteCallback(callbackURL, webRedirect, state),
+                catch: (cause) =>
+                  cause instanceof Error ? cause : new Error("Invalid ChatGPT callback URL."),
+              })
+              if (savedID && result.clientID && result.clientID !== savedID)
+                return yield* Effect.fail(
+                  new Error("ChatGPT returned a different client than this connection. Connect again."),
+                )
+              const clientID = savedID ?? result.clientID
+              if (!clientID)
+                return yield* Effect.fail(new Error("ChatGPT sign-in did not return a client ID. Connect again."))
+              const tokens = yield* exchange(result.code, clientID, webRedirect, pkce, app)
+              if (!tokens.scope?.split(" ").includes(tokenSharingScope))
+                return yield* Effect.fail(
+                  new Error(
+                    "ChatGPT sign-in finished without token sharing. Sign in again and allow token sharing, or connect OpenAI with an API key.",
+                  ),
+                )
+              if (!tokens.id_token) return yield* Effect.fail(new Error("ChatGPT sign-in did not return an ID token."))
+              yield* verifyIDToken(tokens.id_token, clientID, nonce)
+              return credential(tokens, clientID, undefined, webMethodID)
+            }),
+        }
+      }),
+    refresh: (value) => refresh(value, app),
+  }) satisfies IntegrationOAuthMethodRegistration
+
+export function parseRemoteCallback(input: string, redirect: string, state: string) {
+  let callback: URL
+  try {
+    callback = new URL(input.trim())
+  } catch {
+    throw new Error("Paste the full callback URL from the browser address bar.")
+  }
+  const expected = new URL(redirect)
+  if (
+    callback.origin !== expected.origin ||
+    callback.pathname !== expected.pathname ||
+    callback.username ||
+    callback.password ||
+    callback.hash
+  )
+    throw new Error("The callback URL does not match this sign-in attempt.")
+  const error = callback.searchParams.get("error_description") ?? callback.searchParams.get("error")
+  if (error) throw new Error(error)
+  if (callback.searchParams.get("state") !== state)
+    throw new Error("Invalid OAuth state. Restart ChatGPT sign-in.")
+  const code = callback.searchParams.get("code")
+  if (!code) throw new Error("The callback URL does not contain an authorization code.")
+  return { code, clientID: callback.searchParams.get("client_id") ?? undefined }
+}
+
 function listen(server: Server) {
   return Effect.callback<number, Error>((resume) => {
     const onError = (error: Error) => resume(Effect.fail(error))
@@ -221,7 +302,10 @@ export const ChatGPTPlugin = define({
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
-      chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
+      chatgpt =
+        credential?.type === "oauth" && (credential.methodID === methodID || credential.methodID === webMethodID)
+          ? credential
+          : undefined
       source = chatgpt ? connection : undefined
       // if (previous !== IntegrationConnection.key(source)) {
       //   const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
@@ -231,9 +315,9 @@ export const ChatGPTPlugin = define({
     })
 
     yield* ctx.integration.transform((editor) => {
-      editor.method.update(
-        signIn(ctx.app, () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID, ctx.storage),
-      )
+      const savedClientID = () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID
+      editor.method.update(signIn(ctx.app, savedClientID, ctx.storage))
+      editor.method.update(signInWeb(ctx.app, savedClientID, ctx.storage))
     })
     yield* Effect.forEach(
       yield* credentials.list(Integration.ID.make("openai")),
@@ -396,7 +480,7 @@ function refresh(value: Credential.OAuth, app: App.Info) {
         resource,
       }).toString(),
     })
-    return credential(tokens, metadata.clientID, metadata.scopes)
+    return credential(tokens, metadata.clientID, metadata.scopes, value.methodID)
   })
 }
 
@@ -485,10 +569,15 @@ function request<A>(url: string, init: RequestInit) {
   })
 }
 
-function credential(tokens: TokenResponse, clientID: string, scopes?: ReadonlyArray<string>) {
+function credential(
+  tokens: TokenResponse,
+  clientID: string,
+  scopes?: ReadonlyArray<string>,
+  credentialMethodID: Integration.MethodID = methodID,
+) {
   return Credential.OAuth.make({
     type: "oauth",
-    methodID,
+    methodID: credentialMethodID,
     refresh: tokens.refresh_token,
     access: tokens.access_token,
     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
