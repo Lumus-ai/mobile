@@ -256,24 +256,26 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it("validates remote ChatGPT callback URLs against the original redirect and state", () => {
-    const redirect = "http://localhost:1455/auth/callback"
-    expect(
-      parseRemoteCallback(`${redirect}?code=auth-code&state=expected&client_id=oaiapp_issued`, redirect, "expected"),
-    ).toEqual({ code: "auth-code", clientID: "oaiapp_issued" })
-    expect(() => parseRemoteCallback(`${redirect}?code=auth-code&state=wrong`, redirect, "expected")).toThrow(
-      "Invalid OAuth state",
-    )
-    expect(() =>
-      parseRemoteCallback("https://example.com/auth/callback?code=auth-code&state=expected", redirect, "expected"),
-    ).toThrow("does not match")
-    expect(() => parseRemoteCallback(`${redirect}?error=access_denied&state=expected`, redirect, "expected")).toThrow(
-      "access_denied",
-    )
-    expect(() => parseRemoteCallback(`${redirect}?state=expected`, redirect, "expected")).toThrow(
-      "does not contain an authorization code",
-    )
-  })
+  it.effect("validates remote ChatGPT callback URLs against the original redirect and state", () =>
+    Effect.sync(() => {
+      const redirect = "http://localhost:1455/auth/callback"
+      expect(
+        parseRemoteCallback(`${redirect}?code=auth-code&state=expected&client_id=oaiapp_issued`, redirect, "expected"),
+      ).toEqual({ code: "auth-code", clientID: "oaiapp_issued" })
+      expect(() => parseRemoteCallback(`${redirect}?code=auth-code&state=wrong`, redirect, "expected")).toThrow(
+        "Invalid OAuth state",
+      )
+      expect(() =>
+        parseRemoteCallback("https://example.com/auth/callback?code=auth-code&state=expected", redirect, "expected"),
+      ).toThrow("does not match")
+      expect(() =>
+        parseRemoteCallback(`${redirect}?error=access_denied&state=expected`, redirect, "expected"),
+      ).toThrow("access_denied")
+      expect(() => parseRemoteCallback(`${redirect}?state=expected`, redirect, "expected")).toThrow(
+        "does not contain an authorization code",
+      )
+    }),
+  )
 
   it.effect("keeps the Codex browser and headless methods alongside token sharing", () =>
     Effect.gen(function* () {
