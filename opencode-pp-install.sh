@@ -32,14 +32,15 @@ need() {
 # Running this again in Termux updates, and so does the app's own updater inside Debian.
 termux() {
   DISTRO="${OPENCODE_PP_DISTRO:-debian}"
-  ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"
   URL="${OPENCODE_PP_INSTALL_URL:-https://raw.githubusercontent.com/NeiP4n/opencode-plus-plus/$BRANCH/opencode-pp-install.sh}"
 
   if ! need proot-distro; then
     echo "Installing proot-distro…"
     pkg install -y proot-distro || fail "could not install proot-distro. Run: pkg install proot-distro"
   fi
-  if [ ! -d "$ROOTFS" ]; then
+  # Ask proot-distro itself instead of looking for the rootfs folder: newer releases keep
+  # "containers" elsewhere, and a stale path made a second run fail with "already exists".
+  if ! proot-distro login "$DISTRO" -- true >/dev/null 2>&1; then
     echo "Installing $DISTRO for Opencode++ (once, a few hundred MB)…"
     proot-distro install "$DISTRO" || fail "could not install $DISTRO with proot-distro."
   fi
