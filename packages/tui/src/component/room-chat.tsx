@@ -34,7 +34,6 @@ export function RoomChat(props: { room: JoinedRoom; sessionID?: string }) {
   // host that closed the room or removed this guest answers every poll with an error.
   const [joined, setJoined] = createSignal<Awaited<ReturnType<typeof remote.room.guest.get>>>()
   const [error, setError] = createSignal<unknown>()
-  const [permissions, setPermissions] = createSignal<readonly PermissionRequest[]>([])
   const [note, setNote] = createSignal<{ name: string; title: string }>()
   // The poll replaces the answer every few seconds; only a different session remounts the view.
   const sessionID = createMemo(() => joined()?.session.id)
@@ -52,10 +51,6 @@ export function RoomChat(props: { room: JoinedRoom; sessionID?: string }) {
           // A closed room or a removed guest stays shut; a network hiccup keeps the last view.
           if (shut(cause)) setJoined()
         })
-      void remote.room.guest.permission
-        .list({ roomID, sessionID: target })
-        .then(setPermissions)
-        .catch(() => setPermissions([]))
       void remote.room.guest
         .messages({ roomID, sessionID: target })
         .then((result) => setNote(result.note))
@@ -77,9 +72,7 @@ export function RoomChat(props: { room: JoinedRoom; sessionID?: string }) {
               role={joined()?.role ?? "viewer"}
               host={new URL(props.room.url).host}
               error={error() ? errorMessage(error()) : undefined}
-              permissions={permissions()}
               note={note()}
-              onAnswered={(id) => setPermissions((list) => list.filter((item) => item.id !== id))}
             />
           </DataProvider>
         </ClientProvider>
@@ -100,11 +93,10 @@ function RoomView(props: {
   role: keyof typeof ROLE
   host: string
   error?: string
-  permissions: readonly PermissionRequest[]
   note?: { name: string; title: string }
-  onAnswered: (id: string) => void
 }) {
   const theme = useTheme()
+  const data = useData()
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const t = useT()
@@ -117,9 +109,16 @@ function RoomView(props: {
   let input: TextareaRenderable | undefined
 
   onMount(() => setTimeout(() => input?.focus(), 1))
+  // Requests asked before this view opened; later ones arrive on the room log as they are asked.
+  onMount(() => void data.session.permission.sync(props.sessionID).catch(ignoreGuestUnavailable))
 
-  // The field clears at once so the next message can be typed while this one posts;
-  // a failed post puts it back.
+  // A clicked answer hides its request at once; one the host refuses comes back with the reason.
+  const [answered, setAnswered] = createSignal<ReadonlySet<string>>(new Set())
+  const permissions = () =>
+    (data.session.permission.list(props.sessionID) ?? []).filter((request) => !answered().has(request.id))
+
+  // The field clears at once so the next message can be typed while this one posts, and the
+  // message shows in the transcript before the host answers; a failed post puts it back.
   const send = () => {
     const text = input?.plainText.trim()
     if (!text || !input) return
@@ -135,7 +134,7 @@ function RoomView(props: {
             name: command[1],
             text: command[2],
           })
-        : remote.room.guest.prompt({ roomID: props.room.roomID, sessionID: props.sessionID, text })
+        : data.session.prompt({ sessionID: props.sessionID, text })
     )
       .then(() => setFailure())
       .catch((cause: unknown) => {
@@ -145,11 +144,15 @@ function RoomView(props: {
       .finally(() => setSending((count) => count - 1))
   }
 
-  const answer = (request: PermissionRequest, decision: "once" | "always" | "reject") =>
-    void remote.room.guest.permission
-      .reply({ roomID: props.room.roomID, requestID: request.id, decision, sessionID: props.sessionID })
-      .then(() => props.onAnswered(request.id))
-      .catch((cause: unknown) => setFailure(errorMessage(cause)))
+  const answer = (request: PermissionRequest, decision: "once" | "always" | "reject") => {
+    setAnswered((ids) => new Set(ids).add(request.id))
+    void data.session.permission
+      .reply({ sessionID: props.sessionID, requestID: request.id, decision })
+      .catch((cause: unknown) => {
+        setAnswered((ids) => new Set([...ids].filter((id) => id !== request.id)))
+        setFailure(errorMessage(cause))
+      })
+  }
 
   const toggleNote = () => {
     const next = !reading()
@@ -224,8 +227,8 @@ function RoomView(props: {
             width={dimensions().width - padding() * 2 - (sidebar() ? SIDEBAR_WIDTH : 0)}
           />
         </Show>
-        <Show when={(props.role === "helper" || props.role === "cohost") && props.permissions.length > 0}>
-          <For each={props.permissions}>
+        <Show when={(props.role === "helper" || props.role === "cohost") && permissions().length > 0}>
+          <For each={permissions()}>
             {(request) => (
               <box
                 flexShrink={0}

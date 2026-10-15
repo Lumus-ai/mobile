@@ -119,6 +119,18 @@ describe("Dod", () => {
     )
   })
 
+  test("two members taking the same item at once cannot both get it", async () => {
+    await using dir = await project()
+    const results = await Promise.all(
+      [alex, bo].map((owner) =>
+        Effect.runPromise(Effect.result(Dod.take({ directory: dir.path, id: "L-003", owner }))),
+      ),
+    )
+    expect(results.filter((result) => result._tag === "Success")).toHaveLength(1)
+    const holder = (await run(Dod.read(dir.path))).items.find((item) => item.id === "L-003")?.owner
+    expect(results.find((result) => result._tag === "Success")?.success.items.find((item) => item.id === "L-003")?.owner).toBe(holder)
+  })
+
   test("an item without task_state gets the owner at its end, before the blank line", async () => {
     await using dir = await project(FILE + '\n  - id: L-004\n    what: "Last"\n\n')
     await run(Dod.take({ directory: dir.path, id: "L-003", owner: bo }))

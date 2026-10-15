@@ -2865,7 +2865,7 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/room/${encodeURIComponent(input.roomID)}/guest/prompt`,
-              body: { text: input["text"], sessionID: input["sessionID"], ai: input["ai"] },
+              body: { id: input["id"], text: input["text"], sessionID: input["sessionID"], ai: input["ai"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,

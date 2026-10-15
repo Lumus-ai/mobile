@@ -15,6 +15,8 @@ const FEED_SHOWN = 5
 // An empty feed answer waits this long on the host for the next event.
 const FEED_WAIT_MS = 20_000
 const FEED_RETRY_MS = 5_000
+// An empty feed answered faster than this did not wait for events.
+const FEED_IMMEDIATE_MS = 1_000
 
 type PanelState =
   | { type: "starting" }
@@ -138,6 +140,7 @@ export function RoomDodRows(props: {
     })
     const follow = async () => {
       while (state.alive) {
+        const asked = Date.now()
         // A custom fetch or adapter may throw before it returns its Promise.
         const feed = await Promise.resolve()
           .then(() => props.feed(state.after, FEED_WAIT_MS))
@@ -148,8 +151,9 @@ export function RoomDodRows(props: {
           continue
         }
         if (feed.events.length === 0) {
-          // A host normally long-polls; back off if an adapter returns an empty feed immediately.
-          await Bun.sleep(FEED_RETRY_MS)
+          // A host long-polls and answers empty when its wait runs out; asking again at once keeps
+          // the next event instant. Only an adapter that answers empty without waiting backs off.
+          if (Date.now() - asked < FEED_IMMEDIATE_MS) await Bun.sleep(FEED_RETRY_MS)
           continue
         }
         // A host that restarted numbers its events anew, so its feed replaces what was shown.

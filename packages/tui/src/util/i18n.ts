@@ -24,6 +24,8 @@ const ru: Record<string, string> = {
   "Session category": "Категория сессии",
   "Planning, Build, Quality… (empty removes it)": "Планирование, Сборка, Качество… (пусто — убрать)",
   "+ Project": "+ Проект",
+  "Planning, Build, Quality": "Планирование, Сборка, Качество",
+  "Default model for new sessions": "Модель по умолчанию для новых сессий",
   // Server, UI, Theme and Tools panels
   Status: "Состояние",
   Connected: "Подключён",
@@ -255,6 +257,7 @@ const ru: Record<string, string> = {
   "{count} entry": "{count} запись",
   "{count} entries": "записей: {count}",
   installed: "установлен",
+  "installed (manual)": "установлен (вручную)",
   missing: "нет",
   "Remove?": "Удалить?",
   Remove: "Удалить",
@@ -367,6 +370,14 @@ const ru: Record<string, string> = {
   "Out of scope": "Вне области задачи",
   "Not started": "Не начато",
   steps: "шагов",
+  "DoD service is starting or checking the active project…": "Сервис DoD запускается или проверяет активный проект…",
+  "DoD is disabled for this project: .opencode/dod.yaml is missing.":
+    "DoD для этого проекта выключен: нет файла .opencode/dod.yaml.",
+  "DoD response is stale; last response at {time}. Refresh failed: {reason}":
+    "Ответ DoD устарел, последний получен в {time}. Обновить не удалось: {reason}",
+  "DoD connection error: {reason}": "Ошибка соединения с DoD: {reason}",
+  "DoD state unknown: {reason}": "Состояние DoD неизвестно: {reason}",
+  "The DoD file exists but contains no tasks.": "Файл DoD есть, но задач в нём нет.",
   "{count} taken": "взято {count}",
   take: "взять",
   you: "вы",

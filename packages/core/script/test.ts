@@ -23,6 +23,9 @@ const environment = {
   ),
   HOME: home,
   OPENCODE_TEST_HOME: home,
+  // Tests match messages from git and other tools in English; a localized system would
+  // otherwise translate them. Only messages change; the encoding and formats stay.
+  LANGUAGE: "en",
   XDG_CONFIG_HOME: path.join(home, ".config"),
   XDG_DATA_HOME: path.join(home, ".local", "share"),
   XDG_CACHE_HOME: path.join(home, ".cache"),

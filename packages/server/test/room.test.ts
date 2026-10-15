@@ -130,7 +130,7 @@ const setup = Effect.gen(function* () {
     body: { sessionID: session.id, name: "Lab" },
   })).body.data
   const code = (yield* call(`/api/room/${room.id}/code`, { method: "POST", headers: host })).body.code as string
-  return { call, session, room, code, directory: tmp.path }
+  return { call, handler, session, room, code, directory: tmp.path }
 })
 
 it.live("isRoomGuestURL admits every registered guest route", () =>
@@ -293,6 +293,90 @@ it.live("the server stamps the guest as author and keeps approvals with the host
       body: { decision: "once" },
     })
     expect(reply.status).toBe(403)
+  }).pipe(Effect.scoped),
+)
+
+it.live("a guest's message keeps the ID its client minted, and a retry is admitted once", () =>
+  Effect.gen(function* () {
+    const { call, room, code } = yield* setup
+    const joined = (yield* call("/api/room/join", { method: "POST", body: { code, name: "Phone" } })).body
+    const guest = { authorization: `Bearer ${joined.token}` }
+    const send = () =>
+      call(`/api/room/${room.id}/guest/prompt`, {
+        method: "POST",
+        headers: guest,
+        body: { id: "msg_guestminted0001", text: "hello" },
+      })
+    const first = yield* send()
+    expect(first.status).toBe(200)
+    expect(first.body.data.id).toBe("msg_guestminted0001")
+    expect((yield* send()).body.data.id).toBe("msg_guestminted0001")
+    const inbox = yield* call(`/api/session/${room.sessionID}/inbox`, { headers: host })
+    expect(inbox.body.data.filter((item: { id: string }) => item.id === "msg_guestminted0001")).toHaveLength(1)
+  }).pipe(Effect.scoped),
+)
+
+it.live("a following guest log carries the session's permission requests as they are asked and answered", () =>
+  Effect.gen(function* () {
+    const { call, handler, directory } = yield* setup
+    const session = (yield* call("/api/session", {
+      method: "POST",
+      headers: host,
+      body: { title: "Work", location: { directory }, agent: "build" },
+    })).body.data
+    const room = (yield* call("/api/room", { method: "POST", headers: host, body: { sessionID: session.id } })).body
+      .data
+    const code = (yield* call(`/api/room/${room.id}/code`, { method: "POST", headers: host })).body.code as string
+    const joined = (yield* call("/api/room/join", { method: "POST", body: { code, name: "Phone" } })).body
+    const guest = { authorization: `Bearer ${joined.token}` }
+    yield* call(`/api/room/${room.id}/member/${joined.guest.id}`, {
+      method: "PATCH",
+      headers: host,
+      body: { role: "cohost" },
+    })
+
+    const controller = new AbortController()
+    yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
+    const response = yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/room/${room.id}/guest/log?follow=true`, {
+          headers: guest,
+          signal: controller.signal,
+        }),
+      ),
+    )
+    expect(response.status).toBe(200)
+    const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader()
+    const seen: string[] = []
+    const until = (type: string) =>
+      Effect.promise(async () => {
+        while (!seen.some((frame) => frame.includes(`"type":"${type}"`))) {
+          const chunk = await reader.read()
+          if (chunk.done) throw new Error(`log ended before ${type}`)
+          seen.push(...chunk.value.split("\n\n"))
+        }
+        return seen.find((frame) => frame.includes(`"type":"${type}"`))!
+      }).pipe(Effect.timeout("5 seconds"))
+
+    yield* until("log.synced")
+    const pending = yield* call(`/api/room/${room.id}/guest/run`, {
+      method: "POST",
+      headers: guest,
+      body: { command: "echo hi" },
+    }).pipe(Effect.forkScoped)
+    const asked = JSON.parse((yield* until("permission.asked")).replace(/^data: /, ""))
+    expect(asked.data.action).toBe("room.run")
+    expect(asked.data.sessionID).toBe(session.id)
+    // the host's directory is not the guest's business
+    expect(asked.location).toBeUndefined()
+    yield* call(`/api/session/${session.id}/permission/${asked.data.id}/reply`, {
+      method: "POST",
+      headers: host,
+      body: { decision: "once" },
+    })
+    const replied = JSON.parse((yield* until("permission.replied")).replace(/^data: /, ""))
+    expect(replied.data.requestID).toBe(asked.data.id)
+    expect((yield* Fiber.join(pending)).status).toBe(200)
   }).pipe(Effect.scoped),
 )
 

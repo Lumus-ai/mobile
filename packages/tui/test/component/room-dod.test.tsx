@@ -17,7 +17,11 @@ const board: RoomDod = {
   ],
 }
 
-async function render(load: () => Promise<RoomDod>, roomID: () => string = () => "room") {
+async function render(
+  load: () => Promise<RoomDod>,
+  roomID: () => string = () => "room",
+  feed: (after: number, wait: number) => Promise<{ events: [] }> = () => new Promise(() => {}),
+) {
   const [hover, setHover] = createSignal<string>()
   return testRender(
     () => (
@@ -29,7 +33,7 @@ async function render(load: () => Promise<RoomDod>, roomID: () => string = () =>
                 id={roomID()}
                 load={load}
                 release={load}
-                feed={() => new Promise(() => {})}
+                feed={feed}
                 hover={hover}
                 setHover={setHover}
               />
@@ -173,3 +177,26 @@ async function waitLong(setup: Awaited<ReturnType<typeof render>>, text: string)
   }
   throw new Error(`Timed out waiting for "${text}":\n${setup.captureCharFrame()}`)
 }
+
+test("a long poll that waited and came back empty asks again at once, so the next event is not delayed", async () => {
+  const asked: number[] = []
+  const setup = await render(
+    async () => board,
+    undefined,
+    async () => {
+      asked.push(Date.now())
+      // the host waited for events and ran out of time
+      if (asked.length === 1) await Bun.sleep(1_100)
+      return asked.length > 1 ? new Promise(() => {}) : { events: [] }
+    },
+  )
+  try {
+    const started = Date.now()
+    while (asked.length < 2 && Date.now() - started < 4_000) await Bun.sleep(20)
+    expect(asked.length).toBe(2)
+    // the second ask follows the waited one at once instead of after the retry pause
+    expect(asked[1] - asked[0]).toBeLessThan(1_500)
+  } finally {
+    setup.renderer.destroy()
+  }
+}, 15_000)

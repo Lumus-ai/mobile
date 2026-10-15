@@ -35,6 +35,10 @@ export function guestApi(room: JoinedRoom, sessionID?: string): OpenCodeClient {
   const slice = {
     session: {
       get: () => remote.room.guest.get({ roomID, sessionID }).then((result) => result.session),
+      // The data layer shows the message at once under the ID it minted; the host admits that
+      // same ID, so the row it echoes replaces the shown one instead of adding a second.
+      prompt: (input: { id?: string; sessionID: string; text: string }) =>
+        remote.room.guest.prompt({ roomID, sessionID: input.sessionID, id: input.id, text: input.text }),
       inbox: { list: async () => [] },
       form: { list: async () => [] },
     },
@@ -72,7 +76,8 @@ export function guestApi(room: JoinedRoom, sessionID?: string): OpenCodeClient {
 
 // The room log replays the session's history before following it. The data layer
 // loads that history itself, so only events after the replay pass through, led by
-// the server.connected the connection expects first.
+// the server.connected the connection expects first. The followed log also carries the
+// session's live permission requests, so a guest sees one as soon as the host model asks.
 async function* events(
   remote: ReturnType<typeof roomClient>,
   roomID: string,

@@ -1,4 +1,5 @@
 import { Instance } from "@opencode/core/instance/service"
+import { Bus } from "@opencode/core/bus"
 import { NoteStore } from "@opencode/core/note"
 import { Permission } from "@opencode/core/permission"
 import { Room } from "@opencode/core/room"
@@ -24,7 +25,7 @@ import {
 } from "@opencode/protocol/errors"
 import { hostname } from "node:os"
 import { randomBytes } from "node:crypto"
-import { DateTime, Effect, Option, Predicate, Stream } from "effect"
+import { DateTime, Effect, Option, Predicate, Queue, Schema, Stream } from "effect"
 import type { SessionMessage } from "@opencode/core/session/message"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
@@ -72,6 +73,10 @@ const MEMBER_LIMIT = 100
 // Requests that run a command on the host for a guest. Only the host answers them, so a
 // cohost or helper cannot approve its own command.
 const HOST_ONLY = new Set(["room.run", "room.check"])
+
+// The live events a following guest log adds to the durable ones.
+const PermissionEvent = Schema.Union([Permission.Event.Asked, Permission.Event.Replied])
+const decodePermissionEvent = Schema.decodeUnknownOption(PermissionEvent)
 
 // Control and format characters in a name would reach the host's terminal, notes and feed.
 const UNSAFE_NAME = /[\p{Cc}\p{Cf}\u2028\u2029]/u
@@ -124,6 +129,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
     const auth = yield* ServerAuth.Config
     const peers = yield* Peer.Service
     const plots = yield* Plot.Service
+    const bus = yield* Bus.Service
 
     // Guest routes skip the server credential; the room token is the only proof,
     // and it only opens the room it was issued for, while the host keeps its guest a member.
@@ -313,7 +319,10 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           if (name === "" || name.length > 64)
             return yield* new InvalidRequestError({ message: "Name must be 1 to 64 characters", field: "name" })
           if (UNSAFE_NAME.test(name))
-            return yield* new InvalidRequestError({ message: "Name has characters that cannot be shown", field: "name" })
+            return yield* new InvalidRequestError({
+              message: "Name has characters that cannot be shown",
+              field: "name",
+            })
           const address = remoteAddress(yield* HttpServerRequest.HttpServerRequest)
           // Without a password every route is open to anyone who reaches the server, so it
           // shares rooms only with this computer.
@@ -436,9 +445,32 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
         Effect.fn(function* (ctx) {
           const joined = yield* guestOf(ctx.params.roomID)
           const session = yield* inRoom(joined.room, ctx.query.sessionID)
-          return sessions
+          const durable = sessions
             .log({ sessionID: session.id, after: ctx.query.after, follow: ctx.query.follow })
             .pipe(Stream.orDie)
+          if (!ctx.query.follow) return durable
+          // Permission requests are not in the durable log; a following guest hears this session's
+          // live ones too, instead of polling for them.
+          const live = Stream.callback<typeof PermissionEvent.Type>((queue) =>
+            Effect.acquireRelease(
+              bus.listen((event) =>
+                Effect.sync(() =>
+                  // Only what the guest needs: the host's location stays on the host. The JSON round
+                  // trip drops optional fields held as undefined, as the event feed's frames do.
+                  Option.filter(
+                    decodePermissionEvent(
+                      JSON.parse(
+                        JSON.stringify({ id: event.id, created: event.created, type: event.type, data: event.data }),
+                      ),
+                    ),
+                    (item) => item.data.sessionID === session.id,
+                  ).pipe(Option.map((item) => Queue.offerUnsafe(queue, item))),
+                ),
+              ),
+              (unsubscribe) => unsubscribe,
+            ),
+          )
+          return durable.pipe(Stream.merge(live, { haltStrategy: "left" }))
         }),
       )
       .handle(
@@ -476,13 +508,20 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
             data: yield* sessions
               .prompt({
                 sessionID: session.id,
+                id: ctx.payload.id,
                 text: ctx.payload.text,
                 // The server stamps the author from the token, so a guest cannot speak as someone else.
                 metadata: {
                   room: { id: joined.room.id, guest: joined.guest, ...(ctx.payload.ai ? { ai: true } : {}) },
                 },
               })
-              .pipe(Effect.catchTag("Session.NotFoundError", missingSession), Effect.orDie),
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.PromptConflictError", () =>
+                  Effect.fail(new InvalidRequestError({ message: "This message ID is already taken", field: "id" })),
+                ),
+                Effect.orDie,
+              ),
           }
         }),
       )
@@ -609,8 +648,9 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           if (!ctx.payload.take) {
             const id = ctx.payload.id?.trim()
             if (!id) return yield* new InvalidRequestError({ message: "Name the item to give back", field: "id" })
-            if (ctx.payload.handover?.trim()) yield* writeHandover(joined.room, id, owner.name, ctx.payload.handover)
+            // Release first: it refuses an item the guest does not hold, and the handover is only the holder's to write.
             const dod = yield* Dod.release({ directory, id, owner }).pipe(Effect.mapError(invalidDod))
+            if (ctx.payload.handover?.trim()) yield* writeHandover(joined.room, id, owner.name, ctx.payload.handover)
             yield* freeDodPlots(directory, id)
             record("release", id)
             return forGuest(dod, joined.member)
@@ -737,7 +777,9 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
         Effect.fn(function* (ctx) {
           const joined = yield* guestOf(ctx.params.roomID)
           const directory = joined.room.directory
-          if (directory === undefined) return { data: [yield* sessions.get(joined.room.sessionID).pipe(Effect.orDie)] }
+          // A room whose session the host deleted lists nothing rather than failing the guest's screen.
+          if (directory === undefined)
+            return { data: Option.toArray(yield* sessions.get(joined.room.sessionID).pipe(Effect.option)) }
           const page = yield* sessions.list({ parentID: null, limit: SESSION_LIMIT })
           return {
             data: page.data.filter((session) => Orchestra.contains(directory, session.location.directory)),

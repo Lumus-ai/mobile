@@ -3707,6 +3707,45 @@ export type RoomGuestLogOutput =
         }
     )
   | EventLog.Synced
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "permission.asked"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: {
+        readonly id: Permission.ID
+        readonly sessionID: Session.ID
+        readonly action: string
+        readonly resources: ReadonlyArray<string>
+        readonly save?: ReadonlyArray<string> | undefined
+        readonly metadata?: { readonly [x: string]: unknown } | undefined
+        readonly source?: Permission.Source | undefined
+        readonly message?: string | undefined
+      }
+    }
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "permission.replied"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: {
+        readonly sessionID: Session.ID
+        readonly requestID: Permission.ID
+        readonly reply: Permission.Reply
+      }
+    }
 export type RoomGuestLogOperation<E = never> = (input: RoomGuestLogInput) => Stream.Stream<RoomGuestLogOutput, E>
 
 export type RoomGuestMessagesInput = { readonly roomID: Room.ID; readonly sessionID?: Session.ID | undefined }
@@ -3725,6 +3764,7 @@ export type RoomGuestNoteOperation<E = never> = (input: RoomGuestNoteInput) => E
 
 export type RoomGuestPromptInput = {
   readonly roomID: Room.ID
+  readonly id?: SessionMessage.ID | undefined
   readonly text: string
   readonly sessionID?: Session.ID | undefined
   readonly ai?: boolean | undefined

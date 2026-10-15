@@ -78,6 +78,7 @@ import { basicSymbolsNeeded, replaceMissingGlyphs } from "./ui/console-glyphs"
 import { DialogConnect, DialogHost } from "./component/dialog-rooms"
 import { sameRoom, useJoinedRooms } from "./util/room"
 import { linkRoom } from "./util/room-guest"
+import { useT } from "./util/i18n"
 import { openTeamEditor } from "./component/dialog-teams"
 import { ProjectsProvider } from "./context/projects"
 import { NotesProvider } from "./context/notes"
@@ -487,6 +488,7 @@ function App() {
   const app = useTuiApp()
   const startup = useTuiStartup()
   const config = useConfig()
+  const t = useT()
   const devtools = createMemo(() => config.data.debug?.devtools ?? app.channel === "local")
   const route = useRoute()
   const dimensions = useTerminalDimensions()
@@ -990,7 +992,7 @@ function App() {
         run: () => {
           dialog.replace(() => (
             <DialogModel
-              title="Default model for new sessions"
+              title={t("Default model for new sessions")}
               onPick={(model) =>
                 void client.api.config
                   .update({ model: `${model.providerID}/${model.modelID}` })

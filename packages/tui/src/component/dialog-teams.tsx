@@ -240,7 +240,7 @@ function RoleForm(props: {
           focus={props.focus}
           target="category"
           value={draft.category}
-          placeholder="Planning, Build, Quality"
+          placeholder={t("Planning, Build, Quality")}
           onInput={(value) => setDraft("category", value)}
           onSubmit={save}
         />

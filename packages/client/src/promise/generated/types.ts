@@ -2739,7 +2739,7 @@ export type V2Event =
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
-export type RoomLogItem = SessionEventDurable | EventLogSynced
+export type RoomLogItem = SessionEventDurable | EventLogSynced | PermissionAsked | PermissionReplied
 
 export type InvalidRequestError = {
   readonly _tag: "InvalidRequestError"
@@ -7663,17 +7663,26 @@ export type RoomGuestNoteOutput = { data: NoteInfo | null }["data"]
 
 export type RoomGuestPromptInput = {
   readonly roomID: { readonly roomID: string }["roomID"]
+  readonly id?: {
+    readonly id?: string | undefined
+    readonly text: string
+    readonly sessionID?: string | undefined
+    readonly ai?: boolean | undefined
+  }["id"]
   readonly text: {
+    readonly id?: string | undefined
     readonly text: string
     readonly sessionID?: string | undefined
     readonly ai?: boolean | undefined
   }["text"]
   readonly sessionID?: {
+    readonly id?: string | undefined
     readonly text: string
     readonly sessionID?: string | undefined
     readonly ai?: boolean | undefined
   }["sessionID"]
   readonly ai?: {
+    readonly id?: string | undefined
     readonly text: string
     readonly sessionID?: string | undefined
     readonly ai?: boolean | undefined

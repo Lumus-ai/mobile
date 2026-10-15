@@ -41,14 +41,28 @@ export async function run(command: string, directory: string, signal?: AbortSign
     env: { ...guestEnv(), [searchPath.key]: searchPath.value },
     // Runs inside the background service, which has no console: unhidden, each run flashes a window.
     windowsHide: true,
+    // Its own process group, so stopping it also stops what it started in the background; a
+    // leftover child would keep the output pipes open and the run would never finish.
+    detached: process.platform !== "win32",
   })
-  const timer = setTimeout(() => child.kill(), RUN_TIMEOUT_MS)
-  const stop = () => child.kill()
+  const stop = () => {
+    if (process.platform === "win32") {
+      Bun.spawn(["taskkill", "/pid", String(child.pid), "/t", "/f"], { stdout: "ignore", stderr: "ignore", windowsHide: true })
+      return
+    }
+    try {
+      process.kill(-child.pid, "SIGKILL")
+    } catch {
+      // The group already exited.
+    }
+  }
+  const timer = setTimeout(stop, RUN_TIMEOUT_MS)
   signal?.addEventListener("abort", stop, { once: true })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
-    child.exited,
+    // A guest's run leaves nothing behind on the host once its shell exits.
+    child.exited.finally(stop),
   ]).finally(() => {
     clearTimeout(timer)
     signal?.removeEventListener("abort", stop)

@@ -304,7 +304,8 @@ test("a joined room opens in the main area like a session and stays in the left 
     await setup.mockInput.typeText("next step please")
     setup.mockInput.pressEnter()
     await setup.waitFor(() => prompts.length > 0)
-    expect(prompts).toEqual([{ text: "next step please", sessionID: shared.id }])
+    // the client mints the message ID, so its message shows before the host answers
+    expect(prompts).toEqual([{ id: expect.stringMatching(/^msg_/), text: "next step please", sessionID: shared.id }])
 
     // a project room lists its sessions under the room; another one opens and takes the prompts
     const listed = await setup.waitForFrame((frame) => frame.includes("Second task") && frame.includes("+ New session"))
@@ -314,7 +315,7 @@ test("a joined room opens in the main area like a session and stays in the left 
     await setup.mockInput.typeText("over here")
     setup.mockInput.pressEnter()
     await setup.waitFor(() => prompts.length > 1)
-    expect(prompts[1]).toEqual({ text: "over here", sessionID: second.id })
+    expect(prompts[1]).toEqual({ id: expect.stringMatching(/^msg_/), text: "over here", sessionID: second.id })
 
     // the note the room writes into opens in place of the transcript
     const chip = await setup.waitForFrame((frame) => frame.includes("Note: Release"))

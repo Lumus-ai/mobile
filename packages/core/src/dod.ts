@@ -407,19 +407,35 @@ function change(
       const after = edited === undefined ? undefined : more(edited)
       if (after === undefined)
         return yield* new DodError({ message: `Could not find item ${id} in dod.yaml to edit it` })
-      const saved = yield* Effect.promise(async () => {
-        if ((await Bun.file(file).text()) !== before) return false
-        const temporary = path.join(path.dirname(file), ".dod.yaml.room.tmp")
-        await Bun.write(temporary, after)
-        await chmod(temporary, (await stat(file)).mode & 0o777)
-        await rename(temporary, file)
-        return true
-      })
+      const saved = yield* Effect.promise(() =>
+        exclusive(file, async () => {
+          if ((await Bun.file(file).text()) !== before) return false
+          const temporary = path.join(path.dirname(file), ".dod.yaml.room.tmp")
+          await Bun.write(temporary, after)
+          await chmod(temporary, (await stat(file)).mode & 0o777)
+          await rename(temporary, file)
+          return true
+        }),
+      )
       if (saved) return { items: yield* items(after), status: "ready" } satisfies Room.Dod
       if (left <= 1) return yield* new DodError({ message: "dod.yaml keeps changing; try again" })
       return yield* attempt(left - 1)
     })
   return attempt(ATTEMPTS)
+}
+
+// Two guests taking items at once would both pass the unchanged-file check before either
+// renames, and the later write would drop the earlier take, so writes to one file run in turn.
+const writing = new Map<string, Promise<unknown>>()
+
+function exclusive<A>(file: string, write: () => Promise<A>) {
+  const result = (writing.get(file) ?? Promise.resolve()).then(write)
+  const settled = result.catch(() => undefined)
+  writing.set(file, settled)
+  void settled.then(() => {
+    if (writing.get(file) === settled) writing.delete(file)
+  })
+  return result
 }
 
 // Sets or removes top-level scalar fields of one item, touching no other line. The item is

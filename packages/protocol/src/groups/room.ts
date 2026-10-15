@@ -2,6 +2,7 @@ import { Room } from "@opencode/schema/room"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { EventLog } from "@opencode/schema/event-log"
 import { Event } from "@opencode/schema/event"
 import { Note } from "@opencode/schema/note"
@@ -652,7 +653,14 @@ export const RoomGroup = HttpApiGroup.make("server.room")
         follow: BooleanFromString.pipe(Schema.optional),
       },
       success: HttpApiSchema.StreamSse({
-        data: Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({ identifier: "RoomLogItem" }),
+        // Permission requests are not durable, so a following log also carries the session's
+        // live ones; a guest then sees a request the moment the host model asks it.
+        data: Schema.Union([
+          SessionEvent.Durable,
+          EventLog.Synced,
+          Permission.Event.Asked,
+          Permission.Event.Replied,
+        ]).annotate({ identifier: "RoomLogItem" }),
       }),
       error: [UnauthorizedError, RoomNotFoundError, SessionNotFoundError],
     }).annotateMerge(
@@ -704,6 +712,9 @@ export const RoomGroup = HttpApiGroup.make("server.room")
     HttpApiEndpoint.post("room.guest.prompt", "/api/room/:roomID/guest/prompt", {
       params: { roomID: Room.ID },
       payload: Schema.Struct({
+        // A client-minted message ID, so the guest shows its message before the host answers
+        // and a retry with the same ID is admitted once.
+        id: SessionMessage.ID.pipe(Schema.optional),
         text: Schema.String,
         sessionID: Session.ID.pipe(Schema.optional),
         // Set when the guest's AI writes rather than the person, so the host shows it as such.

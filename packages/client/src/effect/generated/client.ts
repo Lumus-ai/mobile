@@ -2143,7 +2143,7 @@ const EndpointRoomGuestPrompt = (raw: RawClient["server.room"]) => (input: RoomG
   preserveEffect<RoomGuestPromptOutput>()(
     raw["room.guest.prompt"]({
       params: { roomID: input["roomID"] },
-      payload: { text: input["text"], sessionID: input["sessionID"], ai: input["ai"] },
+      payload: { id: input["id"], text: input["text"], sessionID: input["sessionID"], ai: input["ai"] },
     }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
