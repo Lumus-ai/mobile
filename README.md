@@ -4,8 +4,6 @@
 
 <p align="center"><a href="README.md">English</a> | <a href="README.ru.md">Русский</a></p>
 
-![Opencode++: project with an AI team, a LAN room and the DoD board](.github/readme/home.svg)
-
 ## Install
 
 One command; git, Bun and everything else is installed for you.
@@ -31,17 +29,8 @@ Then run `opencode-pp`. A regular opencode keeps the `opencode` command; setting
 - **Hub** — a registry of CLI tools to install and enable for the model; Nushell as the AI's shell.
 - **Mini skills** — editable buttons above the prompt: Analyze, Plan, Debug, Review, …
 - **Shared rate limits** — agents of one provider wait out a cooldown together instead of all hitting it.
+- **Phone layout** — `/mobile` folds the side panels to edge rails that open over the screen; on by default in Termux.
 - **English and Russian** interface (`/language`).
-
-## Screenshots
-
-![Idea Bank](.github/readme/ideas.svg)
-
-![Hub of CLI tools](.github/readme/hub.svg)
-
-![Notes](.github/readme/notes.svg)
-
-The screenshots are rendered from the real interface with demo data: `bun test/readme-screenshots.tsx` in `packages/tui`.
 
 ## Development
 
