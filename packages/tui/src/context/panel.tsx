@@ -14,7 +14,11 @@ export function createPanelState() {
   const canSplit = () => width() > 80
   // Side panels always remain in their own column. Automatically switching to
   // fullscreen on a narrower terminal made them cover the conversation.
-  const presentation = createMemo(() => (requested() === "fullscreen" ? "panel" : requested()))
+  // A fullscreen request is honored only when the terminal can actually split the layout.
+  // Keep the requested value so widening the terminal restores the user's choice.
+  const presentation = createMemo<PanelPresentation>(() =>
+    requested() === "fullscreen" && canSplit() ? "fullscreen" : "panel",
+  )
   return {
     current,
     width,

@@ -16,7 +16,7 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
   const t = useT()
   const layout = useCompactLayout()
   // The sidebar's side padding (2 + 2, or 1 + 1 when compact) plus the column reserved for the scrollbar.
-  const barWidth = () => layout.sidebarWidth() - (layout.compact() ? 3 : 5)
+  const barWidth = () => Math.max(0, layout.sidebarWidth() - (layout.compact() ? 3 : 5))
   const msg = createMemo(() => props.context.data.session.message.list(props.sessionID))
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const cost = createMemo(() => props.context.data.session.cost(props.sessionID))
@@ -46,7 +46,7 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
         </box>
         <Show when={state()?.percent}>
           {(percent) => {
-            const filled = () => Math.min(barWidth(), Math.round((percent() / 100) * barWidth()))
+            const filled = () => Math.max(0, Math.min(barWidth(), Math.round((percent() / 100) * barWidth())))
             return (
               <text wrapMode="none">
                 <span style={{ fg: level(percent()) }}>{"█".repeat(filled())}</span>

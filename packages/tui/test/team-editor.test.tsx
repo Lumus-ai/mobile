@@ -191,7 +191,11 @@ test("the new-project dialog reads built-in teams and a bad path in Russian", as
   await using setup = await render(state.path, [], "ru")
   await openNewProject(setup, "+ Проект")
   const frame = await setup.waitForFrame((frame) => frame.includes("Фича"))
-  expect(frame).toContain("Фича · Разработчик")
+  const lines = frame.split("\n")
+  const featureRow = lines.findIndex((line) => line.includes("Фича"))
+  expect(featureRow).toBeGreaterThanOrEqual(0)
+  // The role description intentionally wraps beneath the team name on a narrow panel.
+  expect(lines.slice(featureRow, featureRow + 3).join(" ")).toContain("Разработчик")
   setup.mockInput.pressTab()
   for (let i = 0; i < 80; i++) setup.mockInput.pressBackspace()
   setup.mockInput.typeText("/nope")
