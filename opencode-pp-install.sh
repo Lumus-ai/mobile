@@ -136,16 +136,48 @@ fi
 # branch with the patches is the fallback.
 TAG=$(git -C "$DIR" tag -l 'release/*' --sort=-v:refname | head -n 1)
 if [ -n "$TAG" ]; then
-  git -C "$DIR" checkout --quiet --detach "$TAG"
+  TARGET="$TAG"
   VERSION="${TAG#release/}"
 else
   echo "No release yet; installing branch $BRANCH."
   # Refresh the tracking ref explicitly; a short branch fetch can leave origin/$BRANCH stale
   # with a narrow/custom remote.origin.fetch refspec.
-  git -C "$DIR" fetch --quiet --force origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
-  git -C "$DIR" checkout --quiet --detach "origin/$BRANCH"
+  git -C "$DIR" fetch --quiet --force origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" ||
+    fail "could not fetch branch $BRANCH"
+  TARGET="origin/$BRANCH"
   VERSION="$BRANCH (no release yet)"
 fi
+
+# A previous run or a developer may have left tracked/untracked edits in this checkout.
+# Stash them before checkout; never discard the user's work to make an update succeed.
+LOCAL_CHANGES=$(git -C "$DIR" status --porcelain) || fail "could not inspect local changes in $DIR"
+STASHED_LOCAL_CHANGES=0
+if [ -n "$LOCAL_CHANGES" ]; then
+  echo "Preserving local changes before updating..."
+  git -C "$DIR" stash push --include-untracked --message "opencode-pp installer update $(date -u +%Y-%m-%dT%H:%M:%SZ)" ||
+    fail "could not save local changes; no checkout was attempted"
+  STASHED_LOCAL_CHANGES=1
+fi
+
+restore_local_changes() {
+  [ "$STASHED_LOCAL_CHANGES" -eq 1 ] || return 0
+  echo "Restoring local changes..."
+  if git -C "$DIR" stash pop; then
+    STASHED_LOCAL_CHANGES=0
+    return 0
+  fi
+  echo "WARNING: some local changes conflict with the updated source; the saved copy remains in Git stash." >&2
+  git -C "$DIR" reset --hard --quiet || echo "WARNING: Git could not clean the partially applied changes." >&2
+  echo "Inspect the saved work with: git -C \"$DIR\" stash list" >&2
+  echo "Resolve any conflict before reapplying the relevant stash." >&2
+  STASHED_LOCAL_CHANGES=0
+}
+
+if ! git -C "$DIR" checkout --quiet --detach "$TARGET"; then
+  restore_local_changes
+  fail "git checkout failed"
+fi
+restore_local_changes
 
 echo "Installing dependencies…"
 # Only what the terminal app needs; the web and desktop apps pull far more.
