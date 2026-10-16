@@ -20,7 +20,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, fetchModels, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import { ChatGPTPlugin, describeRequestFailure, fetchModels, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -249,6 +249,49 @@ describe("ChatGPTPlugin", () => {
       expect(snapshot.definitions.find((tool) => tool.name === "image_generation")?.native).toEqual({
         openai: { type: "image_generation", action: "auto" },
       })
+    }),
+  )
+
+  it.effect("explains OAuth 403 causes without exposing HTML challenge bodies", () =>
+    Effect.sync(() => {
+      const url = "https://auth.openai.com/api/accounts/oauth/token"
+      const regionError = describeRequestFailure(
+        url,
+        403,
+        new Headers({ "content-type": "application/json", "x-request-id": "req_region_test" }),
+        JSON.stringify({
+          error: {
+            code: "unsupported_country_region_territory",
+            message: "Country, region, or territory not supported",
+          },
+        }),
+      )
+      expect(regionError).toContain("country or region is not supported")
+      expect(regionError).toContain("req_region_test")
+
+      const challengeHTML = "<html><body>Just a moment. challenge-token=secret-value</body></html>"
+      const challengeError = describeRequestFailure(
+        url,
+        403,
+        new Headers({
+          "content-type": "text/html",
+          server: "cloudflare",
+          "cf-mitigated": "challenge",
+          "cf-ray": "ray_test",
+        }),
+        challengeHTML,
+      )
+      expect(challengeError).toContain("Cloudflare blocked the token request")
+      expect(challengeError).toContain("ray_test")
+      expect(challengeError).not.toContain("secret-value")
+
+      const plainError = describeRequestFailure(
+        url,
+        403,
+        new Headers({ "content-type": "text/plain" }),
+        "temporary policy rejection",
+      )
+      expect(plainError).toContain("temporary policy rejection")
     }),
   )
 

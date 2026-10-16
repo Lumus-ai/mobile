@@ -19,7 +19,7 @@ import type { PluginInternal } from "../internal.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
 const registrationClientID = "dynamic_agent_client"
-const agentName = "OpenCode"
+const agentName = "OpenCode++"
 const issuer = "https://auth.openai.com"
 const tokenURL = `${issuer}/api/accounts/oauth/token`
 const resource = "https://api.openai.com/v1"
@@ -587,35 +587,72 @@ export function verifyIDToken(
   })
 }
 
+export function describeRequestFailure(url: string, status: number, headers: Headers, body: string) {
+  const target = new URL(url)
+  const contentType = headers.get("content-type")?.split(";")[0]?.trim().toLowerCase()
+  const server = headers.get("server")?.toLowerCase() ?? ""
+  const mitigated = headers.get("cf-mitigated")?.toLowerCase()
+  const requestID = headers.get("x-request-id") ?? headers.get("cf-ray")
+  let code: string | undefined
+  let message: string | undefined
+
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: string | { code?: string; message?: string }
+      error_description?: string
+      detail?: string
+      message?: string
+      code?: string
+    }
+
+    if (typeof parsed.error === "string") code = parsed.error
+
+    if (typeof parsed.error === "object" && parsed.error) {
+      code = parsed.error.code
+      message = parsed.error.message
+    }
+
+    code ??= parsed.code
+    message ??= parsed.error_description ?? parsed.detail ?? parsed.message
+  } catch {
+    // Plain-text errors are handled below; never render untrusted HTML into the callback page.
+  }
+
+  const plainText = body
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240)
+  const isHTML = contentType === "text/html" || /^<!doctype html|<html\b/i.test(body.trim())
+  const combined = `${code ?? ""} ${message ?? ""} ${plainText}`.toLowerCase()
+  let reason: string
+
+  if (/unsupported_country_region_territory|country,? region,? or territory (is )?not supported|region is not supported/.test(combined)) {
+    reason = "OpenAI says this country or region is not supported. The OAuth client cannot override that restriction."
+  } else if (mitigated === "challenge" || (server.includes("cloudflare") && isHTML)) {
+    reason = "Cloudflare blocked the token request with a security challenge. Check the network or proxy used by OpenCode++."
+  } else if (isHTML) {
+    reason = "The server returned an HTML block page instead of an OAuth response. This can be caused by a network proxy or security challenge."
+  } else if (code || message) {
+    reason = [code, message].filter(Boolean).join(": ").slice(0, 400)
+  } else if (contentType?.startsWith("text/") && plainText) {
+    reason = plainText
+  } else {
+    reason = `the server returned ${contentType ?? "an unknown response type"} without an OAuth error message`
+  }
+
+  const id = requestID ? ` [request ID: ${requestID}]` : ""
+  return `Request failed: ${status} at ${target.hostname}${target.pathname} — ${reason}${id}`
+}
+
 function request<A>(url: string, init: RequestInit) {
   return Effect.tryPromise({
     try: async (signal) => {
       const response = await fetch(url, { ...init, signal })
       if (!response.ok) {
-        const requestID = response.headers.get("x-request-id")
         const body = await response.text().catch(() => "")
-        let code: string | undefined
-        let message: string | undefined
-        try {
-          const parsed = JSON.parse(body) as {
-            error?: string | { code?: string; message?: string }
-            error_description?: string
-            detail?: string
-            message?: string
-          }
-          if (typeof parsed.error === "string") code = parsed.error
-          if (typeof parsed.error === "object" && parsed.error) {
-            code = parsed.error.code
-            message = parsed.error.message
-          }
-          message ??= parsed.error_description ?? parsed.detail ?? parsed.message
-        } catch {
-          // Non-JSON error bodies are deliberately not surfaced to avoid showing arbitrary HTML.
-        }
-        const reason = [code, message].filter(Boolean).join(": ")
-        const diagnostic = reason ? ` (${reason.slice(0, 400)})` : ""
-        const id = requestID ? ` [request ID: ${requestID}]` : ""
-        throw new Error(`Request failed: ${response.status}${diagnostic}${id}`)
+        throw new Error(describeRequestFailure(url, response.status, response.headers, body))
       }
       return response.json() as Promise<A>
     },
