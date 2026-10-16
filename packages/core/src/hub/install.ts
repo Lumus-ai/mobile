@@ -99,6 +99,8 @@ const PACKAGE: Record<string, Partial<Record<Manager, string>>> = {
   npx: { apt: "npm", dnf: "npm", pacman: "npm", zypper: "npm", apk: "npm", brew: "node", winget: "OpenJS.NodeJS.LTS", scoop: "nodejs-lts", choco: "nodejs-lts" },
   dotnet: { apt: "dotnet-sdk-8.0", dnf: "dotnet-sdk-8.0", pacman: "dotnet-sdk", brew: "dotnet", winget: "Microsoft.DotNet.SDK.8", scoop: "dotnet-sdk", choco: "dotnet-sdk" },
   cargo: { brew: "rust", winget: "Rustlang.Rustup", scoop: "rustup", choco: "rustup.install" },
+  // uv brings uvx, which runs the Python-based AI tools (MCP servers) of the Registry.
+  uv: { brew: "uv", winget: "astral-sh.uv", scoop: "uv", choco: "uv", pacman: "uv", apk: "uv" },
 }
 
 // Tools that only exist on some managers' systems: Debian's package tooling
@@ -115,6 +117,8 @@ const ONLY: Record<string, readonly Manager[]> = {
   semgrep: ["brew"],
   // Arch ships PowerShell only through the AUR, which pacman cannot install.
   pwsh: ["apt", "dnf", "brew", "winget", "choco", "scoop"],
+  // Debian, Fedora and openSUSE do not package uv; it comes from its own installer there.
+  uv: ["brew", "winget", "scoop", "choco", "pacman", "apk"],
 }
 
 // What to tell the operator when the manager cannot install a tool itself.
@@ -123,6 +127,11 @@ const MANUAL: Record<string, Partial<Record<Manager, string>>> = {
   flutter: { winget: "from https://docs.flutter.dev/get-started/install", scoop: "from https://docs.flutter.dev/get-started/install", choco: "from https://docs.flutter.dev/get-started/install", apt: "with snap: sudo snap install flutter --classic", brew: "with brew install --cask flutter" },
   emulator: { winget: "with Android Studio (SDK Manager → Android Emulator)", apt: "with Android Studio (SDK Manager → Android Emulator)", brew: "with Android Studio (SDK Manager → Android Emulator)" },
   xcrun: { brew: "with Xcode from the App Store" },
+  uv: {
+    apt: "with curl -LsSf https://astral.sh/uv/install.sh | sh",
+    dnf: "with curl -LsSf https://astral.sh/uv/install.sh | sh",
+    zypper: "with curl -LsSf https://astral.sh/uv/install.sh | sh",
+  },
 }
 
 export function manualInstall(tool: string, manager: Manager | undefined) {

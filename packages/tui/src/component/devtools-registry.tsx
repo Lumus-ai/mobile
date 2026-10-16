@@ -1,5 +1,5 @@
 import { TextAttributes, type InputRenderable } from "@opentui/core"
-import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
 import { Hub } from "@opencode/core/hub/index"
 import { HubState } from "@opencode/core/hub/state"
 import { McpCatalog } from "@opencode/core/mcp/catalog"
@@ -60,6 +60,15 @@ export function RegistryPanel(props: {
   const [query, setQuery] = createSignal("")
   const [terminal, setTerminal] = createSignal<Hub.Backend>()
   const [stale, setStale] = createSignal(false)
+  // AI tools, programs and the AI's terminal are separate jobs, so each gets its own tab.
+  const [tab, setTab] = createSignal<Tab>(props.aiTools ? "ai" : "programs")
+  const [aiCount, setAiCount] = createSignal<string>()
+  const tabs = (): readonly Tab[] => (props.aiTools ? ["ai", "programs", "terminal"] : ["programs", "terminal"])
+  const cycle = (delta: number) => {
+    setArmed()
+    const list = tabs()
+    setTab(list[(list.indexOf(tab()) + delta + list.length) % list.length] ?? "programs")
+  }
   const config = useConfig().data
 
   // A click that lands before the state file resolves is the operator's newest
@@ -189,17 +198,26 @@ export function RegistryPanel(props: {
     setCursor(0)
   }
 
+  const programs = () => tab() === "programs"
+  const ai = () => tab() === "ai"
+  let aiKeys: AiToolsKeys | undefined
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "up", title: "Previous tool", group: "Registry", run: () => move(-1) },
-      { bind: "down", title: "Next tool", group: "Registry", run: () => move(1) },
-      { bind: "left", title: "Previous page", group: "Registry", run: () => turn(-1) },
-      { bind: "right", title: "Next page", group: "Registry", run: () => turn(1) },
+      { bind: "tab", title: "Next tab", group: "Registry", run: () => cycle(1) },
+      { bind: "shift+tab", title: "Previous tab", group: "Registry", run: () => cycle(-1) },
+      { bind: "up", title: "Previous AI tool", group: "Registry", enabled: ai, run: () => aiKeys?.move(-1) },
+      { bind: "down", title: "Next AI tool", group: "Registry", enabled: ai, run: () => aiKeys?.move(1) },
+      { bind: "return", title: "Install or remove AI tool", group: "Registry", enabled: ai, run: () => aiKeys?.activate() },
+      { bind: "up", title: "Previous tool", group: "Registry", enabled: programs, run: () => move(-1) },
+      { bind: "down", title: "Next tool", group: "Registry", enabled: programs, run: () => move(1) },
+      { bind: "left", title: "Previous page", group: "Registry", enabled: programs, run: () => turn(-1) },
+      { bind: "right", title: "Next page", group: "Registry", enabled: programs, run: () => turn(1) },
       {
         bind: "return",
         title: "Install or remove tool",
         group: "Registry",
+        enabled: programs,
         run: () => {
           const row = selected()
           if (!row || !row.manageable) return
@@ -208,6 +226,11 @@ export function RegistryPanel(props: {
         },
       },
     ],
+  }))
+
+  const counts = createMemo(() => ({
+    programs: `${status().installed.length}/${status().tools.length}`,
+    terminal: aiTerminal() ?? "—",
   }))
 
   return (
@@ -221,126 +244,158 @@ export function RegistryPanel(props: {
         </text>
       </box>
 
-      <Show when={props.aiTools}>{(ai) => <AiTools tools={ai()} />}</Show>
-
-      <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
-        {t("Programs")}
-      </text>
-      <box flexDirection="row" gap={3}>
-        <Stat label={t("Ready")} value={`${status().ready}/${status().total}`} />
-        <Stat label={t("Installed")} value={`${status().installed.length}/${status().tools.length}`} />
-      </box>
-
-      <box flexDirection="row" gap={1}>
-        <text fg={theme.text.muted}>{t("AI terminal")}</text>
-        <For each={status().terminals}>
+      <box flexDirection="row" gap={1} flexWrap="wrap">
+        <For each={tabs()}>
           {(item) => (
-            <Switch>
-              <Match when={item.present}>
-                <Button
-                  variant={aiTerminal() === item.name ? "primary" : "secondary"}
-                  disabled={busy() !== undefined}
-                  onClick={() => chooseTerminal(item.name)}
-                >
-                  {`${aiTerminal() === item.name ? "●" : "○"} ${item.name}`}
-                </Button>
-              </Match>
-              <Match when={busy() === item.name}>
-                <text fg={theme.text.muted}>{`${item.name} …`}</text>
-              </Match>
-              <Match when={item.installable}>
-                <Button disabled={busy() !== undefined} onClick={() => onInstall(item.name)}>
-                  {t("Install {name}", { name: item.name })}
-                </Button>
-              </Match>
-              <Match when={true}>
-                <text fg={theme.text.muted}>{`${item.name}: ${t(item.manual ?? "no installer here")}`}</text>
-              </Match>
-            </Switch>
+            <Button variant={tab() === item ? "primary" : "secondary"} onClick={() => setTab(item)}>
+              {item === "ai"
+                ? `${t("AI tools (MCP)")}${aiCount() ? ` ${aiCount()}` : ""}`
+                : item === "programs"
+                  ? `${t("Programs")} ${counts().programs}`
+                  : `${t("AI terminal")}: ${counts().terminal}`}
+            </Button>
           )}
         </For>
       </box>
-      <Show when={aiTerminal() === "nu"}>
-        <text fg={theme.text.muted} wrapMode="word">
-          {t(
-            "The AI's shell commands and hub commands run in nu. Nushell has no grammar the permission check understands, so each nu command is approved as a whole; each command shows the shell that ran it.",
-          )}
-        </text>
-      </Show>
 
-      <text fg={theme.text.muted} wrapMode="word">
-        {status()
-          .categories.map((entry) => `${entry.name} ${entry.ready}/${entry.total}`)
-          .join("  ")}
-      </text>
-
-      <box flexDirection="row" gap={1}>
-        <text fg={theme.text.muted} flexShrink={0}>
-          {t("Search")}
-        </text>
-        <input
-          flexGrow={1}
-          flexShrink={1}
-          minWidth={0}
-          onInput={(value) => {
-            setQuery(value)
-            setPage(0)
-            setCursor(0)
-            setArmed()
-          }}
-          focusedBackgroundColor={theme.background.formfield.focused}
-          cursorColor={theme.text.formfield.focused}
-          cursorStyle={config.cursor}
-          focusedTextColor={theme.text.formfield.focused}
-          placeholder={t("tool, category or task: yaml, ports, docker logs")}
-          placeholderColor={theme.text.muted}
-          ref={(input: InputRenderable) => {
-            setTimeout(() => {
-              if (!input.isDestroyed) input.focus()
-            }, 1)
-          }}
-        />
-        <text fg={theme.text.muted} flexShrink={0}>{`${visible().length}/${status().tools.length}`}</text>
-        <Button onClick={() => turn(-1)}>‹</Button>
-        <text fg={theme.text.muted} flexShrink={0}>{`${current() + 1}/${pages()}`}</text>
-        <Button onClick={() => turn(1)}>›</Button>
-      </box>
-
-      <box flexDirection="row" flexWrap="wrap" columnGap={1}>
-        <Button
-          variant="primary"
-          disabled={busy() !== undefined || missing().length === 0}
-          onClick={() => void onInstallMissing()}
-        >
-          {t("Install missing ({count})", { count: missing().length })}
-        </Button>
-      </box>
-      <text fg={theme.text.muted} wrapMode="word">
-        {t("Installed programs are available to every session. Choose which ones each role may use in Teams → role → Registry programs.")}
-      </text>
-
-      <box>
-        <For each={rows()}>
-          {(row, index) => (
-            <ToolRow
-              tool={row}
-              active={index() === cursor()}
-              pending={busy() !== undefined}
-              working={busy() === row.tool}
-              armed={armed() === row.tool}
-              onHover={() => setCursor(index())}
-              onInstall={() => onInstall(row.tool)}
-              onRemove={() => onRemove(row.tool)}
-              onDisarm={() => setArmed()}
+      <Switch>
+        <Match when={tab() === "ai" && props.aiTools}>
+          {(_) => (
+            <AiTools
+              tools={props.aiTools!}
+              active={tab() === "ai"}
+              pending={busy()}
+              present={(runtime) => {
+                revision()
+                return (options.probe ?? ((tool: string) => Hub.HubHost.has(tool)))(runtime === "uvx" ? "uv" : runtime)
+              }}
+              onInstallRuntime={(tool) => onInstall(tool)}
+              onCount={setAiCount}
+              keys={(keys) => (aiKeys = keys)}
             />
           )}
-        </For>
-        <Show when={rows().length === 0}>
-          <text fg={theme.text.muted}>
-            {query() ? t('Nothing matches "{query}".', { query: query() }) : t("No catalog tools on this platform.")}
+        </Match>
+
+        <Match when={tab() === "terminal"}>
+          <text fg={theme.text.muted} wrapMode="word">
+            {t("The shell the AI runs its commands and hub commands in.")}
           </text>
-        </Show>
-      </box>
+          <box flexDirection="row" gap={1} flexWrap="wrap">
+            <For each={status().terminals}>
+              {(item) => (
+                <Switch>
+                  <Match when={item.present}>
+                    <Button
+                      variant={aiTerminal() === item.name ? "primary" : "secondary"}
+                      disabled={busy() !== undefined}
+                      onClick={() => chooseTerminal(item.name)}
+                    >
+                      {`${aiTerminal() === item.name ? "●" : "○"} ${item.name}`}
+                    </Button>
+                  </Match>
+                  <Match when={busy() === item.name}>
+                    <text fg={theme.text.muted}>{`${item.name} …`}</text>
+                  </Match>
+                  <Match when={item.installable}>
+                    <Button disabled={busy() !== undefined} onClick={() => onInstall(item.name)}>
+                      {t("Install {name}", { name: item.name })}
+                    </Button>
+                  </Match>
+                  <Match when={true}>
+                    <text fg={theme.text.muted}>{`${item.name}: ${t(item.manual ?? "no installer here")}`}</text>
+                  </Match>
+                </Switch>
+              )}
+            </For>
+          </box>
+          <Show when={aiTerminal() === "nu"}>
+            <text fg={theme.text.muted} wrapMode="word">
+              {t(
+                "The AI's shell commands and hub commands run in nu. Nushell has no grammar the permission check understands, so each nu command is approved as a whole; each command shows the shell that ran it.",
+              )}
+            </text>
+          </Show>
+        </Match>
+
+        <Match when={tab() === "programs"}>
+          <text fg={theme.text.muted} wrapMode="word">
+            {t("Command-line programs the AI runs through the hub tool. Installed ones are available to every session; Teams → role → Programs narrows them per role.")}
+          </text>
+          <box flexDirection="row" gap={3}>
+            <Stat label={t("Ready")} value={`${status().ready}/${status().total}`} />
+            <Stat label={t("Installed")} value={counts().programs} />
+            <box flexGrow={1} />
+            <Button
+              variant="primary"
+              disabled={busy() !== undefined || missing().length === 0}
+              onClick={() => void onInstallMissing()}
+            >
+              {t("Install missing ({count})", { count: missing().length })}
+            </Button>
+          </box>
+
+          <text fg={theme.text.muted} wrapMode="word">
+            {status()
+              .categories.map((entry) => `${entry.name} ${entry.ready}/${entry.total}`)
+              .join("  ")}
+          </text>
+
+          <box flexDirection="row" gap={1}>
+            <text fg={theme.text.muted} flexShrink={0}>
+              {t("Search")}
+            </text>
+            <input
+              flexGrow={1}
+              flexShrink={1}
+              minWidth={0}
+              onInput={(value) => {
+                setQuery(value)
+                setPage(0)
+                setCursor(0)
+                setArmed()
+              }}
+              focusedBackgroundColor={theme.background.formfield.focused}
+              cursorColor={theme.text.formfield.focused}
+              cursorStyle={config.cursor}
+              focusedTextColor={theme.text.formfield.focused}
+              placeholder={t("tool, category or task: yaml, ports, docker logs")}
+              placeholderColor={theme.text.muted}
+              ref={(input: InputRenderable) => {
+                setTimeout(() => {
+                  if (!input.isDestroyed) input.focus()
+                }, 1)
+              }}
+            />
+            <text fg={theme.text.muted} flexShrink={0}>{`${visible().length}/${status().tools.length}`}</text>
+            <Button onClick={() => turn(-1)}>‹</Button>
+            <text fg={theme.text.muted} flexShrink={0}>{`${current() + 1}/${pages()}`}</text>
+            <Button onClick={() => turn(1)}>›</Button>
+          </box>
+
+          <box>
+            <For each={rows()}>
+              {(row, index) => (
+                <ToolRow
+                  tool={row}
+                  active={index() === cursor()}
+                  pending={busy() !== undefined}
+                  working={busy() === row.tool}
+                  armed={armed() === row.tool}
+                  onHover={() => setCursor(index())}
+                  onInstall={() => onInstall(row.tool)}
+                  onRemove={() => onRemove(row.tool)}
+                  onDisarm={() => setArmed()}
+                />
+              )}
+            </For>
+            <Show when={rows().length === 0}>
+              <text fg={theme.text.muted}>
+                {query() ? t('Nothing matches "{query}".', { query: query() }) : t("No catalog tools on this platform.")}
+              </text>
+            </Show>
+          </box>
+        </Match>
+      </Switch>
 
       <Show when={stale()}>
         <text fg={theme.text.feedback.warning.base} wrapMode="word">
@@ -364,11 +419,17 @@ export function RegistryPanel(props: {
         )}
       </Show>
       <text fg={theme.text.muted}>
-        {t("↑↓ select · enter install/remove · ←→ page · esc close")}
+        {tab() === "programs"
+          ? t("tab next tab · ↑↓ select · enter install/remove · ←→ page · esc close")
+          : t("tab next tab · ↑↓ select · enter install/remove · esc close")}
       </text>
     </box>
   )
 }
+
+type Tab = "ai" | "programs" | "terminal"
+
+type AiToolsKeys = { move: (delta: number) => void; activate: () => void }
 
 // Searchable text per tool: its name plus every catalog entry that requires it.
 const haystack = Hub.all.reduce((map, entry) => {
@@ -383,24 +444,33 @@ export type AiToolsAccess = {
 }
 
 // Catalog MCP servers the operator installs for the AI. Installing writes the server into the
-// global config, which connects it; every session is then told how to use it.
-function AiTools(props: { tools: AiToolsAccess }) {
+// global config, which connects it; every session is then told how to use it. Each row takes two
+// lines so the description is read in full instead of being cut in the middle.
+function AiTools(props: {
+  tools: AiToolsAccess
+  active: boolean
+  // The panel's own package-manager action, when it is installing a runtime such as uv.
+  pending: string | undefined
+  present: (runtime: NonNullable<McpCatalog.Entry["runtime"]>) => boolean
+  onInstallRuntime: (tool: string) => void
+  onCount: (count: string) => void
+  // Gives the panel this tab's keyboard actions: one modal key layer serves the whole panel.
+  keys: (keys: AiToolsKeys) => void
+}) {
   const theme = useTheme().surface("dialog")
   const t = useT()
   const toast = useToast()
   const [busy, setBusy] = createSignal<string>()
+  const [cursor, setCursor] = createSignal(0)
   // Optimistic until the server list catches up with the config change.
   const [local, setLocal] = createSignal<Record<string, boolean>>({})
   const entries = McpCatalog.forPlatform()
-  const runtimes = new Map(
-    [...new Set(entries.flatMap((entry) => (entry.runtime ? [entry.runtime] : [])))].map((runtime) => [
-      runtime,
-      Hub.HubHost.has(runtime),
-    ]),
-  )
   const isInstalled = (id: string) => local()[id] ?? props.tools.installed().includes(id)
+  const blocked = (entry: McpCatalog.Entry) => entry.runtime !== undefined && !props.present(entry.runtime)
+  const runtimeTool = (entry: McpCatalog.Entry) => (entry.runtime === "uvx" ? "uv" : "npx")
+  createEffect(() => props.onCount(`${entries.filter((entry) => isInstalled(entry.id)).length}/${entries.length}`))
   const change = async (entry: McpCatalog.Entry, install: boolean) => {
-    if (busy() !== undefined) return
+    if (busy() !== undefined || props.pending !== undefined) return
     setBusy(entry.id)
     await props.tools
       .set(entry.id, install ? entry.config : null)
@@ -413,47 +483,71 @@ function AiTools(props: { tools: AiToolsAccess }) {
       )
     setBusy()
   }
+  const activate = (entry: McpCatalog.Entry | undefined) => {
+    if (!entry) return
+    if (isInstalled(entry.id)) return void change(entry, false)
+    if (blocked(entry)) return props.onInstallRuntime(runtimeTool(entry))
+    void change(entry, true)
+  }
+
+  props.keys({
+    move: (delta) => setCursor((value) => Math.max(0, Math.min(entries.length - 1, value + delta))),
+    activate: () => activate(entries[cursor()]),
+  })
+
   return (
     <box gap={0}>
-      <box flexDirection="row" gap={2}>
-        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
-          {t("AI tools")}
-        </text>
-        <text fg={theme.text.muted}>{`${entries.filter((entry) => isInstalled(entry.id)).length}/${entries.length}`}</text>
-      </box>
+      <text fg={theme.text.muted} wrapMode="word">
+        {t("MCP servers that give the AI new abilities. Installed ones reach every session, which is told how to use them; Teams → role → Tools narrows them per role.")}
+      </text>
+      <box height={1} />
       <For each={entries}>
-        {(entry) => (
-          <box flexDirection="row" gap={1}>
-            <box width={TOOL_COLUMN + 4} flexShrink={0}>
-              <text fg={isInstalled(entry.id) ? theme.text.base : theme.text.muted} wrapMode="none" truncate>
+        {(entry, index) => (
+          <box
+            gap={0}
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={index() === cursor() ? theme.background.action.primary.focused : undefined}
+            onMouseOver={() => setCursor(index())}
+          >
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.text.base} attributes={TextAttributes.BOLD} flexShrink={0}>
                 {entry.name}
               </text>
+              <Show when={entry.runtime}>
+                {(runtime) => <text fg={theme.text.muted} flexShrink={0}>{runtime()}</text>}
+              </Show>
+              <box flexGrow={1} />
+              <Switch>
+                <Match when={busy() === entry.id || props.pending === runtimeTool(entry)}>
+                  <text fg={theme.text.muted}>…</text>
+                </Match>
+                <Match when={isInstalled(entry.id)}>
+                  <text fg={theme.text.feedback.success.base} flexShrink={0}>
+                    {t("installed")}
+                  </text>
+                  <Button disabled={busy() !== undefined} onClick={() => void change(entry, false)}>
+                    {t("Remove")}
+                  </Button>
+                </Match>
+                <Match when={blocked(entry)}>
+                  <text fg={theme.text.feedback.warning.base} flexShrink={0}>
+                    {t("needs {runtime}", { runtime: entry.runtime === "uvx" ? "uv" : "Node.js" })}
+                  </text>
+                  <Button disabled={props.pending !== undefined} onClick={() => props.onInstallRuntime(runtimeTool(entry))}>
+                    {t("Install {name}", { name: entry.runtime === "uvx" ? "uv" : "Node.js" })}
+                  </Button>
+                </Match>
+                <Match when={true}>
+                  <Button variant="primary" disabled={busy() !== undefined} onClick={() => void change(entry, true)}>
+                    {t("Install")}
+                  </Button>
+                </Match>
+              </Switch>
             </box>
-            <box flexGrow={1} flexShrink={1} minWidth={0}>
-              <text fg={theme.text.muted} wrapMode="none" truncate>
-                {t(entry.description)}
-              </text>
-            </box>
-            <Switch>
-              <Match when={busy() === entry.id}>
-                <text fg={theme.text.muted}>…</text>
-              </Match>
-              <Match when={isInstalled(entry.id)}>
-                <Button disabled={busy() !== undefined} onClick={() => void change(entry, false)}>
-                  {t("Remove")}
-                </Button>
-              </Match>
-              <Match when={entry.runtime && !runtimes.get(entry.runtime)}>
-                <text fg={theme.text.feedback.warning.base}>
-                  {t("needs {runtime}", { runtime: entry.runtime === "uvx" ? "uv" : "Node.js" })}
-                </text>
-              </Match>
-              <Match when={true}>
-                <Button disabled={busy() !== undefined} onClick={() => void change(entry, true)}>
-                  {t("Install")}
-                </Button>
-              </Match>
-            </Switch>
+            <text fg={theme.text.muted} wrapMode="word">
+              {t(entry.description)}
+            </text>
           </box>
         )}
       </For>

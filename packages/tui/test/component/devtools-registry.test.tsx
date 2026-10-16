@@ -3,7 +3,7 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Hub } from "@opencode/core/hub/index"
 import { HubState } from "@opencode/core/hub/state"
-import { RegistryPanel, type RegistryPanelOptions } from "../../src/component/devtools-registry"
+import { RegistryPanel, type AiToolsAccess, type RegistryPanelOptions } from "../../src/component/devtools-registry"
 import { ConfigProvider } from "../../src/config"
 import { Keymap } from "../../src/context/keymap"
 import { ThemeProvider } from "../../src/context/theme"
@@ -19,7 +19,9 @@ const probe = (tool: string) => tool !== "rg"
 const registryManager: Hub.Manager =
   process.platform === "win32" ? "winget" : process.platform === "darwin" ? "brew" : "apt"
 
-async function render(options: RegistryPanelOptions & { onShell?: (shell: string) => void }) {
+async function render(
+  options: RegistryPanelOptions & { onShell?: (shell: string) => void; aiTools?: AiToolsAccess },
+) {
   const app = await testRender(
     () => (
       <TestTuiContexts>
@@ -27,7 +29,7 @@ async function render(options: RegistryPanelOptions & { onShell?: (shell: string
           <ThemeProvider mode="dark" source={emptyThemeSource}>
             <Keymap.Provider>
               <ToastProvider>
-                <RegistryPanel options={options} onShell={options.onShell} />
+                <RegistryPanel options={options} onShell={options.onShell} aiTools={options.aiTools} />
                 <Toast />
               </ToastProvider>
             </Keymap.Provider>
@@ -38,15 +40,9 @@ async function render(options: RegistryPanelOptions & { onShell?: (shell: string
     { width: 90, height: 44, kittyKeyboard: true },
   )
   app.renderer.start()
-  await app.waitForFrame((frame) => frame.includes("Registry") && frame.includes("Search"))
+  // The programs tab carries the search; the AI tools tab, first when offered, has none.
+  await app.waitForFrame((frame) => frame.includes("Registry") && (frame.includes("Search") || frame.includes("AI tools")))
   return app
-}
-
-// Value printed right after a summary label. Read the rendered row so varying
-// terminal spacing doesn't make the test depend on a fixed number of spaces.
-function rowValue(frame: string, label: string) {
-  const row = frame.split("\n").find((line) => line.includes(label))
-  return row?.slice(row.indexOf(label) + label.length).trim().split(/\s+/)[0]
 }
 
 // Cell of `needle` on the row naming `tool`: the tool's own row carries both —
@@ -69,12 +65,12 @@ test("registry panel shows readiness, terminals and a paged tool list", async ()
     expect(frame).toContain("Registry")
     expect(frame).toContain("Ready")
     expect(frame).toContain(`${status.ready}/${status.total}`)
-    expect(frame).toContain("AI terminal")
-    expect(frame).toContain("bash")
+    // the AI's terminal has its own tab, named after the shell in use
+    expect(frame).toContain("AI terminal: nu")
     expect(frame).toContain(`${status.categories[0].name} `)
     expect(frame).toContain("Search")
     // installed programs are there for the model; no per-tool switch remains
-    expect(rowValue(frame, "Installed")).toBe(`${status.installed.length}/${status.tools.length}`)
+    expect(frame).toContain(`Programs ${status.installed.length}/${status.tools.length}`)
     expect(frame).not.toContain("[off]")
     expect(frame).not.toContain("All off")
     expect(status.tools.length).toBeGreaterThan(10)
@@ -278,6 +274,7 @@ test("the AI terminal can be installed and chosen", async () => {
     onShell: (shell) => shells.push(shell),
   })
   try {
+    await openTab(app, "AI terminal")
     const frame = await app.waitForFrame((frame) => frame.includes("Install nu"))
     expect(frame).toContain("● pwsh")
 
@@ -296,6 +293,52 @@ test("the AI terminal can be installed and chosen", async () => {
     app.renderer.destroy()
   }
 })
+
+test("AI tools open first, read in full and install through the config", async () => {
+  await using tmp = await tmpdir()
+  const configured: string[] = []
+  const calls: [string, unknown][] = []
+  const app = await render({
+    probe: (tool) => tool !== "uv",
+    terminalProbe: () => true,
+    manager: "winget",
+    directory: tmp.path,
+    aiTools: {
+      installed: () => configured,
+      set: async (id, config) => {
+        calls.push([id, config])
+      },
+    },
+  })
+  try {
+    const frame = await app.waitForFrame((frame) => frame.includes("Context7"))
+    // the AI tools tab is the first one and shows each description on its own line, uncut
+    expect(frame).toContain("Up-to-date documentation and code examples for libraries and frameworks.")
+    expect(frame).not.toContain("Search")
+    // a Python-based tool says what it needs and offers to install it
+    expect(frame).toContain("needs uv")
+    expect(frame).toContain("Install uv")
+
+    const install = cell(app, "Context7", "Install")
+    await app.mockMouse.click(install.x + 2, install.y)
+    await app.waitFor(() => calls.length === 1)
+    expect(calls[0]?.[0]).toBe("context7")
+    await app.waitForFrame((frame) => frame.split("\n").some((line) => line.includes("Context7") && line.includes("Remove")))
+
+    // the programs tab holds the search
+    await openTab(app, "Programs")
+    await app.waitForFrame((frame) => frame.includes("Search"))
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+async function openTab(app: Awaited<ReturnType<typeof render>>, label: string) {
+  const lines = app.captureCharFrame().split("\n")
+  const row = lines.findIndex((line) => line.includes(label))
+  if (row < 0) throw new Error(`no ${label} tab`)
+  await app.mockMouse.click(lines[row]!.indexOf(label) + 1, row)
+}
 
 test("a mirror 404 offers a system update that clears the warning", async () => {
   await using tmp = await tmpdir()
