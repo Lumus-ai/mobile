@@ -37,6 +37,8 @@ export function RoomChat(props: { room: JoinedRoom; sessionID?: string }) {
   const [note, setNote] = createSignal<{ name: string; title: string }>()
   // The poll replaces the answer every few seconds; only a different session remounts the view.
   const sessionID = createMemo(() => joined()?.session.id)
+  // Set by the view inside the data provider; the room log calls it once it has caught up.
+  let live: (() => void) | undefined
 
   onMount(() => {
     const poll = () => {
@@ -64,7 +66,7 @@ export function RoomChat(props: { room: JoinedRoom; sessionID?: string }) {
   return (
     <Show when={sessionID()} fallback={<RoomProblem room={props.room} error={error()} />} keyed>
       {(id) => (
-        <ClientProvider api={guestApi(props.room, id)}>
+        <ClientProvider api={guestApi(props.room, id, () => live?.())}>
           <DataProvider directory={joined()?.session.location.directory ?? ""} onError={ignoreGuestUnavailable}>
             <RoomView
               room={props.room}
@@ -73,6 +75,7 @@ export function RoomChat(props: { room: JoinedRoom; sessionID?: string }) {
               host={new URL(props.room.url).host}
               error={error() ? errorMessage(error()) : undefined}
               note={note()}
+              onLive={(reload) => (live = reload)}
             />
           </DataProvider>
         </ClientProvider>
@@ -94,6 +97,7 @@ function RoomView(props: {
   host: string
   error?: string
   note?: { name: string; title: string }
+  onLive: (reload: () => void) => void
 }) {
   const theme = useTheme()
   const data = useData()
@@ -109,6 +113,14 @@ function RoomView(props: {
   let input: TextareaRenderable | undefined
 
   onMount(() => setTimeout(() => input?.focus(), 1))
+  // The transcript loads while the room log replays the host's history, and events in between
+  // are skipped; once the log is live, reload the transcript so nothing from that gap is missing.
+  props.onLive(() => {
+    data.session.message.invalidate(props.sessionID)
+    void data.session.message.sync(props.sessionID).catch(ignoreGuestUnavailable)
+  })
+  onCleanup(() => props.onLive(() => undefined))
+
   // Requests asked before this view opened; later ones arrive on the room log as they are asked.
   onMount(() => void data.session.permission.sync(props.sessionID).catch(ignoreGuestUnavailable))
 
