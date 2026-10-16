@@ -1,6 +1,6 @@
 export * as Plot from "./plot.js"
 
-import { mkdir, readdir, rm } from "node:fs/promises"
+import {  mkdir, readFile, readdir, rm , writeFile } from "node:fs/promises"
 import { hostname } from "node:os"
 import path from "node:path"
 import { randomBytes } from "node:crypto"
@@ -120,9 +120,7 @@ const layer: Layer.Layer<Service, never, Session.Service | Orchestra.Service> = 
               const file = path.join(folder, name)
               const plot = Option.getOrUndefined(
                 decode(
-                  await Bun.file(file)
-                    .text()
-                    .catch(() => ""),
+                  await readFile(file, "utf8").catch(() => ""),
                 ),
               )
               // A plot past its time or unreadable is left over from a crash; it goes.
@@ -143,8 +141,8 @@ const layer: Layer.Layer<Service, never, Session.Service | Orchestra.Service> = 
       Effect.promise(async () => {
         await mkdir(folder, { recursive: true })
         // Plots are working state, never history.
-        await Bun.write(path.join(folder, ".gitignore"), "*\n")
-        await Bun.write(path.join(folder, `${plot.id}.json`), JSON.stringify(plot, null, 2) + "\n")
+        await writeFile(path.join(folder, ".gitignore"), "*\n")
+        await writeFile(path.join(folder, `${plot.id}.json`), JSON.stringify(plot, null, 2) + "\n")
       })
 
     const taken = (plot: Info) =>

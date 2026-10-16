@@ -1,7 +1,8 @@
 export * as Dod from "./dod.js"
 
 import { randomUUID } from "node:crypto"
-import { chmod, link, mkdir, open, rename, stat, unlink, writeFile } from "node:fs/promises"
+import { chmod, link, mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises"
+import YAML from "yaml"
 import path from "node:path"
 import { Effect, Option, Schema } from "effect"
 import type { Room } from "@opencode/schema/room"
@@ -338,9 +339,15 @@ function finishedWord(item: Room.DodItem) {
 
 function load(directory: string) {
   const filePath = path.join(directory, FILE)
-  const file = Bun.file(filePath)
   return Effect.tryPromise({
-    try: async () => ((await file.exists()) ? await file.text() : undefined),
+    try: async () => {
+      try {
+        return await readFile(filePath, "utf8")
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+        throw error
+      }
+    },
     catch: (cause) =>
       new DodError({
         message: `Could not read ${filePath}: ${cause instanceof Error ? cause.message : String(cause)}`,
@@ -350,7 +357,7 @@ function load(directory: string) {
 
 function items(text: string, live?: Live) {
   return Effect.try({
-    try: () => Bun.YAML.parse(text),
+    try: () => YAML.parse(text),
     catch: (error) => new DodError({ message: `dod.yaml does not parse: ${String(error)}` }),
   }).pipe(
     Effect.map((data) => {
@@ -409,9 +416,9 @@ function change(
         return yield* new DodError({ message: `Could not find item ${id} in dod.yaml to edit it` })
       const saved = yield* Effect.promise(() =>
         exclusive(file, async () => {
-          if ((await Bun.file(file).text()) !== before) return false
+          if ((await readFile(file, "utf8")) !== before) return false
           const temporary = path.join(path.dirname(file), ".dod.yaml.room.tmp")
-          await Bun.write(temporary, after)
+          await writeFile(temporary, after)
           await chmod(temporary, (await stat(file)).mode & 0o777)
           await rename(temporary, file)
           return true
