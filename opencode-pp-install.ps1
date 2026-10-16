@@ -75,17 +75,18 @@ if ($Tag) {
   $Version = "$Branch (no release yet)"
 }
 
-# A previous run or a developer may have left tracked/untracked edits in this checkout.
-# Stash them before checkout; never discard the user's work to make an update succeed.
-$LocalChanges = git -C $Source status --porcelain
-if ($LASTEXITCODE -ne 0) { throw "Could not inspect local changes in $Source." }
-$StashedLocalChanges = $false
-if ($LocalChanges) {
-  Write-Host "Preserving local changes before updating..."
-  git -C $Source stash push --include-untracked --message "opencode-pp installer update $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
-  if ($LASTEXITCODE -ne 0) { throw "Could not save local changes; no checkout was attempted." }
-  $StashedLocalChanges = $true
-}
+# Save local changes before checkout. Run stash unconditionally so PowerShell output
+# handling cannot accidentally make a dirty checkout look clean.
+$PreviousStash = (git -C $Source stash list --format=%H -1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect the Git stash in $Source." }
+
+Write-Host "Saving local changes before updating (safe when there are none)..."
+git -C $Source stash push --include-untracked --message "opencode-pp installer update $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
+if ($LASTEXITCODE -ne 0) { throw "Could not save local changes; no checkout was attempted." }
+
+$CurrentStash = (git -C $Source stash list --format=%H -1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Could not verify the saved Git stash in $Source." }
+$StashedLocalChanges = [bool]($CurrentStash -and $CurrentStash -ne $PreviousStash)
 
 try {
   git -C $Source checkout --quiet --detach $Target
