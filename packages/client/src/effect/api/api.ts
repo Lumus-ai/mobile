@@ -3706,6 +3706,24 @@ export type RoomGuestLogOutput =
           }
         }
     )
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.text.delta"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: {
+        readonly sessionID: Session.ID
+        readonly assistantMessageID: SessionMessage.ID
+        readonly ordinal: number
+        readonly delta: string
+      }
+    }
   | EventLog.Synced
   | {
       readonly id: Event.ID
