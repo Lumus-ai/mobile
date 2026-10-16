@@ -20,7 +20,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, describeRequestFailure, fetchModels, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import { ChatGPTPlugin, describeRequestFailure, fetchModels, isAvailableModel, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -158,6 +158,25 @@ describe("ChatGPTPlugin", () => {
       ])
       expect(yield* Effect.flip(fetchModels("test-token", App.make(), `${baseURL}/empty`))).toBeInstanceOf(Error)
       expect(yield* Effect.flip(fetchModels("test-token", App.make(), `${baseURL}/error`))).toBeInstanceOf(Error)
+    }),
+  )
+
+  it.effect("filters ChatGPT models against the account-specific model catalog", () =>
+    Effect.sync(() => {
+      const available = [
+        {
+          slug: "gpt-6-luna",
+          display_name: "GPT-6 Luna",
+          visibility: "list",
+          supported_in_api: true,
+          context_window: 272_000,
+          input_modalities: ["text"],
+        },
+      ]
+
+      expect(isAvailableModel("gpt-6-luna", available)).toBe(true)
+      expect(isAvailableModel("gpt-6.1-sol", available)).toBe(false)
+      expect(isAvailableModel("gpt-6-astra", undefined)).toBe(true)
     }),
   )
 

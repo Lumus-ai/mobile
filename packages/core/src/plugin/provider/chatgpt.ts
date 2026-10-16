@@ -294,11 +294,10 @@ export const ChatGPTPlugin = define({
     const credentials = yield* Credential.Service
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
-    // let available: ReadonlyArray<RemoteModel> | undefined
+    let available: ReadonlyArray<RemoteModel> | undefined
     let source: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
 
     const load = Effect.fn("ChatGPTPlugin.load")(function* () {
-      // const previous = IntegrationConnection.key(source)
       const connection = yield* ctx.integration.connection.active(integrationID)
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
@@ -308,11 +307,27 @@ export const ChatGPTPlugin = define({
           ? credential
           : undefined
       source = chatgpt ? connection : undefined
-      // if (previous !== IntegrationConnection.key(source)) {
-      //   const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
-      //   const stored = metadata ? yield* ctx.storage.get(modelCacheKey(metadata.clientID)) : undefined
-      //   available = Option.getOrUndefined(decodeCachedModels(stored))
-      // }
+
+      const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
+      if (!chatgpt || !metadata) {
+        available = undefined
+        return
+      }
+
+      const cached = yield* ctx.storage.get(modelCacheKey(metadata.clientID))
+      available = Option.getOrUndefined(decodeCachedModels(cached)) ?? metadata.models
+
+      // Token-sharing's model catalog is account-specific. Ask OpenAI which model slugs this
+      // ChatGPT account can actually use instead of treating the bundled model list as permission.
+      if (chatgpt.expires <= Date.now() + 60_000) return
+      const fetched = yield* fetchModels(chatgpt.access, ctx.app).pipe(
+        Effect.timeout(15_000),
+        Effect.catch(() => Effect.logWarning("failed to refresh ChatGPT models").pipe(Effect.as(undefined))),
+      )
+      if (!fetched) return
+
+      available = fetched
+      yield* ctx.storage.set(modelCacheKey(metadata.clientID), fetched)
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -408,10 +423,9 @@ export const ChatGPTPlugin = define({
       if (!updated) return
       providers.add({
         info: updated.provider,
-        // models: available
-        //   ? deriveModels(available, Array.from(item.models.values()))
-        //   : Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
-        models: Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
+        models: available
+          ? deriveModels(available, Array.from(item.models.values()))
+          : Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
         sourceConnection: source,
       })
     })
@@ -425,10 +439,11 @@ export const ChatGPTPlugin = define({
             draft.enabled = false
             return
           }
-          // if (available && !available.some((remote) => remote.slug === (draft.modelID ?? draft.id))) {
-          //   draft.enabled = false
-          //   return
-          // }
+          if (!isAvailableModel(draft.modelID ?? draft.id, available)) {
+            draft.enabled = false
+            return
+          }
+
           draft.cost = []
         })
       }
@@ -527,6 +542,10 @@ export function fetchModels(token: string, app: App.Info, baseURL = resource) {
     if (!models.length) return yield* Effect.fail(new Error("No ChatGPT models are available for this account."))
     return models
   })
+}
+
+export function isAvailableModel(modelID: string, available: ReadonlyArray<RemoteModel> | undefined) {
+  return available === undefined || available.some((model) => model.slug === modelID)
 }
 
 export function deriveModels(remote: ReadonlyArray<RemoteModel>, existing: ReadonlyArray<Model.Info>) {
