@@ -28,7 +28,7 @@ const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
 const webMethodID = Integration.MethodID.make("chatgpt-token-sharing-web")
-const webRedirect = "http://localhost:1455/auth/callback"
+const webRedirect = "http://127.0.0.1:1455/auth/callback"
 const modelCacheKey = (clientID: string) => `models:${clientID}`
 const fallbackModels = new Set([
   "gpt-5.5",
@@ -591,7 +591,32 @@ function request<A>(url: string, init: RequestInit) {
   return Effect.tryPromise({
     try: async (signal) => {
       const response = await fetch(url, { ...init, signal })
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+      if (!response.ok) {
+        const requestID = response.headers.get("x-request-id")
+        const body = await response.text().catch(() => "")
+        let code: string | undefined
+        let message: string | undefined
+        try {
+          const parsed = JSON.parse(body) as {
+            error?: string | { code?: string; message?: string }
+            error_description?: string
+            detail?: string
+            message?: string
+          }
+          if (typeof parsed.error === "string") code = parsed.error
+          if (typeof parsed.error === "object" && parsed.error) {
+            code = parsed.error.code
+            message = parsed.error.message
+          }
+          message ??= parsed.error_description ?? parsed.detail ?? parsed.message
+        } catch {
+          // Non-JSON error bodies are deliberately not surfaced to avoid showing arbitrary HTML.
+        }
+        const reason = [code, message].filter(Boolean).join(": ")
+        const diagnostic = reason ? ` (${reason.slice(0, 400)})` : ""
+        const id = requestID ? ` [request ID: ${requestID}]` : ""
+        throw new Error(`Request failed: ${response.status}${diagnostic}${id}`)
+      }
       return response.json() as Promise<A>
     },
     catch: (cause) => cause,
