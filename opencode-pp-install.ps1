@@ -65,16 +65,45 @@ if ($LASTEXITCODE -ne 0) { throw "git failed." }
 # with the patches is the fallback.
 $Tag = git -C $Source tag -l "release/*" --sort=-v:refname | Select-Object -First 1
 if ($Tag) {
-  git -C $Source checkout --quiet --detach $Tag
-  if ($LASTEXITCODE -ne 0) { throw "git checkout failed." }
+  $Target = $Tag
   $Version = $Tag -replace "^release/", ""
 } else {
   Write-Host "No release is published yet; installing branch $Branch."
   git -C $Source fetch --force origin $Branch
   if ($LASTEXITCODE -ne 0) { throw "git fetch failed." }
-  git -C $Source checkout --quiet --detach "origin/$Branch"
-  if ($LASTEXITCODE -ne 0) { throw "git checkout failed." }
+  $Target = "origin/$Branch"
   $Version = "$Branch (no release yet)"
+}
+
+# A previous run or a developer may have left tracked/untracked edits in this checkout.
+# Stash them before checkout; never discard the user's work to make an update succeed.
+$LocalChanges = git -C $Source status --porcelain
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect local changes in $Source." }
+$StashedLocalChanges = $false
+if ($LocalChanges) {
+  Write-Host "Preserving local changes before updating..."
+  git -C $Source stash push --include-untracked --message "opencode-pp installer update $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
+  if ($LASTEXITCODE -ne 0) { throw "Could not save local changes; no checkout was attempted." }
+  $StashedLocalChanges = $true
+}
+
+try {
+  git -C $Source checkout --quiet --detach $Target
+  if ($LASTEXITCODE -ne 0) { throw "git checkout failed." }
+} finally {
+  if ($StashedLocalChanges) {
+    Write-Host "Restoring local changes..."
+    git -C $Source stash pop
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Some local changes conflict with the updated source. The saved copy will remain in Git stash."
+      git -C $Source reset --hard --quiet
+      if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Git could not clean the partially applied changes. Inspect the checkout before running the installer again."
+      }
+      Write-Host "Recover the saved work with: git -C `"$Source`" stash list"
+      Write-Host "Then inspect/apply the relevant stash after resolving the conflict."
+    }
+  }
 }
 
 Write-Host "Installing dependencies..."
