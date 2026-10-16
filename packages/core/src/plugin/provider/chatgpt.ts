@@ -377,9 +377,9 @@ export const ChatGPTPlugin = define({
       "context",
       (event) =>
         Effect.sync(() => {
-          // Never advertise OpenAI's native tool to unrelated providers or to models for which
-          // this account integration doesn't expose a supported hosted-tool route.
-          if (event.model.providerID === providerID && fallbackModels.has(event.model.id)) return
+          // ChatGPT token sharing does not allow hosted image generation. It must not be
+          // advertised on every text request or the entire request can be rejected.
+          if (canUseHostedImageGeneration(event.model.providerID, event.model.id, !!chatgpt)) return
           delete event.tools.image_generation
         }),
     )
@@ -433,6 +433,9 @@ export const ChatGPTPlugin = define({
       for (const model of models.list(providerID)) {
         models.update(model.providerID, model.id, (draft) => {
           if (!chatgpt) return
+          // Token sharing rejects configuration_update input items when reasoning effort changes.
+          draft.compatibility = { ...draft.compatibility, supportsEffortUpdates: false }
+
           // Token sharing does not support native /responses/compact.
           draft.settings = { ...draft.settings, compaction: { type: "summary" } }
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
@@ -546,6 +549,10 @@ export function fetchModels(token: string, app: App.Info, baseURL = resource) {
 
 export function isAvailableModel(modelID: string, available: ReadonlyArray<RemoteModel> | undefined) {
   return available === undefined || available.some((model) => model.slug === modelID)
+}
+
+export function canUseHostedImageGeneration(provider: string, modelID: string, tokenSharing: boolean) {
+  return !tokenSharing && provider === providerID && fallbackModels.has(modelID)
 }
 
 export function deriveModels(remote: ReadonlyArray<RemoteModel>, existing: ReadonlyArray<Model.Info>) {

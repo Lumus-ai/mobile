@@ -20,7 +20,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, describeRequestFailure, fetchModels, isAvailableModel, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import { ChatGPTPlugin, canUseHostedImageGeneration, describeRequestFailure, fetchModels, isAvailableModel, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -158,6 +158,15 @@ describe("ChatGPTPlugin", () => {
       ])
       expect(yield* Effect.flip(fetchModels("test-token", App.make(), `${baseURL}/empty`))).toBeInstanceOf(Error)
       expect(yield* Effect.flip(fetchModels("test-token", App.make(), `${baseURL}/error`))).toBeInstanceOf(Error)
+    }),
+  )
+
+  it.effect("disables hosted image generation for ChatGPT token sharing", () =>
+    Effect.sync(() => {
+      expect(canUseHostedImageGeneration("openai", "gpt-6-luna", true)).toBe(false)
+      expect(canUseHostedImageGeneration("openai", "gpt-6-luna", false)).toBe(true)
+      expect(canUseHostedImageGeneration("anthropic", "gpt-6-luna", false)).toBe(false)
+      expect(canUseHostedImageGeneration("openai", "not-supported", false)).toBe(false)
     }),
   )
 
