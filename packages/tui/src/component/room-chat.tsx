@@ -112,6 +112,26 @@ function RoomView(props: {
   // Requests asked before this view opened; later ones arrive on the room log as they are asked.
   onMount(() => void data.session.permission.sync(props.sessionID).catch(ignoreGuestUnavailable))
 
+  // The room log carries durable events, but not every live message-part change.
+  // Reconcile the projected transcript so messages appear without reopening the session.
+  onMount(() => {
+    let syncing = false
+    const syncMessages = () => {
+      if (syncing) return
+      syncing = true
+      data.session.message.invalidate(props.sessionID)
+      void data.session.message
+        .sync(props.sessionID)
+        .catch(ignoreGuestUnavailable)
+        .finally(() => {
+          syncing = false
+        })
+    }
+    syncMessages()
+    const timer = setInterval(syncMessages, POLL_MS)
+    onCleanup(() => clearInterval(timer))
+  })
+
   // A clicked answer hides its request at once; one the host refuses comes back with the reason.
   const [answered, setAnswered] = createSignal<ReadonlySet<string>>(new Set())
   const permissions = () =>
