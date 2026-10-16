@@ -69,7 +69,7 @@ if ($Tag) {
   $Version = $Tag -replace "^release/", ""
 } else {
   Write-Host "No release is published yet; installing branch $Branch."
-  git -C $Source fetch --force origin $Branch
+  git -C $Source fetch --force origin "+refs/heads/$Branch:refs/remotes/origin/$Branch"
   if ($LASTEXITCODE -ne 0) { throw "git fetch failed." }
   $Target = "origin/$Branch"
   $Version = "$Branch (no release yet)"
@@ -93,11 +93,19 @@ try {
 } finally {
   if ($StashedLocalChanges) {
     Write-Host "Restoring local changes..."
-    git -C $Source stash pop
-    if ($LASTEXITCODE -ne 0) {
+    $RestoreSucceeded = $false
+    try {
+      git -C $Source stash pop
+      $RestoreSucceeded = $LASTEXITCODE -eq 0
+    } catch {
+      $RestoreSucceeded = $false
+    }
+    if (-not $RestoreSucceeded) {
       Write-Warning "Some local changes conflict with the updated source. The saved copy will remain in Git stash."
-      git -C $Source reset --hard --quiet
-      if ($LASTEXITCODE -ne 0) {
+      try {
+        git -C $Source reset --hard --quiet
+        if ($LASTEXITCODE -ne 0) { Write-Warning "Git could not clean the partially applied changes." }
+      } catch {
         Write-Warning "Git could not clean the partially applied changes. Inspect the checkout before running the installer again."
       }
       Write-Host "Recover the saved work with: git -C `"$Source`" stash list"
