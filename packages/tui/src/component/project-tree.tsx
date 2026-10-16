@@ -477,7 +477,11 @@ export function ProjectTree(props: { width: number; collapsed?: boolean; onHide?
                       onClick={() => stopHosting(room.id)}
                     >
                       <text
-                        fg={theme.text.feedback.error.base}
+                        fg={
+                          armed() === `hosted:${room.id}`
+                            ? theme.text.action.destructive.focused
+                            : theme.text.action.destructive.base
+                        }
                       >
                         {armed() === `hosted:${room.id}` ? ` ${t("close?")}` : " ×"}
                       </text>
@@ -520,7 +524,11 @@ export function ProjectTree(props: { width: number; collapsed?: boolean; onHide?
                       onClick={() => leave(room)}
                     >
                       <text
-                        fg={theme.text.feedback.error.base}
+                        fg={
+                          armed() === roomKey(room)
+                            ? theme.text.action.destructive.focused
+                            : theme.text.action.destructive.base
+                        }
                       >
                         {armed() === roomKey(room) ? ` ${t("leave?")}` : " ×"}
                       </text>
@@ -800,9 +808,8 @@ function RoomPeople(props: {
     }))
     act(() => client.api.room.member.update({ roomID: room.id, guestID: member.id, role }))
   }
-  // Destructive action tokens can resolve to a dark foreground in some custom themes.
-  // Use the semantic error color for reliable contrast on the sidebar's dark background.
-  const destructive = () => theme.text.feedback.error.base
+  const destructive = (key: string) =>
+    armed() === key ? theme.text.action.destructive.focused : theme.text.action.destructive.base
 
   return (
     <Show when={props.rooms.length > 0}>
@@ -883,7 +890,7 @@ function RoomPeople(props: {
         <For each={banned()}>
           {(item) => (
             <box flexDirection="row" paddingLeft={5} paddingRight={1}>
-              <text fg={theme.text.feedback.error.base}>{"⊘ "}</text>
+              <text fg={theme.text.action.destructive.base}>{"⊘ "}</text>
               <box flexGrow={1} minWidth={0}>
                 <text fg={theme.text.muted} wrapMode="none" truncate>
                   {named(item.ban.name, item.room)}
