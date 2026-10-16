@@ -69,7 +69,7 @@ if ($Tag) {
   $Version = $Tag -replace "^release/", ""
 } else {
   Write-Host "No release is published yet; installing branch $Branch."
-  git -C $Source fetch --force origin "+refs/heads/$Branch:refs/remotes/origin/$Branch"
+  git -C $Source fetch --force origin "+refs/heads/${Branch}:refs/remotes/origin/${Branch}"
   if ($LASTEXITCODE -ne 0) { throw "git fetch failed." }
   $Target = "origin/$Branch"
   $Version = "$Branch (no release yet)"
