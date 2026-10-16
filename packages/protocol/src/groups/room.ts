@@ -653,10 +653,11 @@ export const RoomGroup = HttpApiGroup.make("server.room")
         follow: BooleanFromString.pipe(Schema.optional),
       },
       success: HttpApiSchema.StreamSse({
-        // Permission requests are not durable, so a following log also carries the session's
-        // live ones; a guest then sees a request the moment the host model asks it.
+        // Permission requests and text deltas are not durable, so a following log also carries
+        // these live events; guests can see permissions and host responses without reopening the room.
         data: Schema.Union([
           SessionEvent.Durable,
+          SessionEvent.Text.Delta,
           EventLog.Synced,
           Permission.Event.Asked,
           Permission.Event.Replied,
