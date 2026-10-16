@@ -76,8 +76,8 @@ export function guestApi(room: JoinedRoom, sessionID?: string): OpenCodeClient {
 
 // The room log replays the session's history before following it. The data layer
 // loads that history itself, so only events after the replay pass through, led by
-// the server.connected the connection expects first. The followed log also carries the
-// session's live permission requests, so a guest sees one as soon as the host model asks.
+// the server.connected the connection expects first. The followed log also carries live
+// permission requests and ephemeral assistant text deltas for the shared session.
 async function* events(
   remote: ReturnType<typeof roomClient>,
   roomID: string,
