@@ -1870,6 +1870,7 @@ export type NoteFrontmatter = {
 }
 
 export type ConfigCompatibility = {
+  enabled?: boolean
   ecosystems?: ConfigCompatibilityChoices
   order?: Array<ConfigCompatibilityEcosystem>
 }
@@ -1884,6 +1885,7 @@ export type ConfigCompatibilityFound = {
   markers: Array<string>
   loaded?: ConfigCompatibilityLoaded
   skipped?: Array<ConfigCompatibilitySkipped>
+  awaitingTrust?: number
 }
 
 export type RoomDod = {
@@ -1925,6 +1927,7 @@ export type OrchestraRole = {
   tools?: Array<string> | undefined
   autoTools?: boolean | undefined
   hub?: Array<string> | undefined
+  registry?: Array<string> | undefined
   id: string
   agent: string
   origin: OrchestraOrigin
@@ -2195,6 +2198,7 @@ export type NoteInfo = {
 
 export type ConfigCompatibilityReport = {
   root: string
+  enabled: boolean
   order: Array<ConfigCompatibilityEcosystem>
   ecosystems: Array<ConfigCompatibilityFound>
 }
@@ -7198,8 +7202,158 @@ export type ConfigGetOutput = Array<ConfigEntry>
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
 export type ConfigUpdateInput = {
-  readonly shell?: { readonly shell?: string | null; readonly model?: string | null }["shell"]
-  readonly model?: { readonly shell?: string | null; readonly model?: string | null }["model"]
+  readonly shell?: {
+    readonly shell?: string | null
+    readonly model?: string | null
+    readonly mcpServers?: {
+      readonly [x: string]:
+        | {
+            readonly type: "local"
+            readonly command: ReadonlyArray<string>
+            readonly cwd?: string
+            readonly environment?: { readonly [x: string]: string }
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | {
+            readonly type: "remote"
+            readonly url: string
+            readonly headers?: { readonly [x: string]: string }
+            readonly oauth?:
+              | {
+                  readonly client_id?: string
+                  readonly client_secret?: string
+                  readonly scope?: string
+                  readonly callback_port?: number
+                  readonly redirect_uri?: string
+                  readonly auth_server_metadata_url?: string
+                }
+              | false
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | null
+    }
+    readonly compatibilityEnabled?: boolean | null
+  }["shell"]
+  readonly model?: {
+    readonly shell?: string | null
+    readonly model?: string | null
+    readonly mcpServers?: {
+      readonly [x: string]:
+        | {
+            readonly type: "local"
+            readonly command: ReadonlyArray<string>
+            readonly cwd?: string
+            readonly environment?: { readonly [x: string]: string }
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | {
+            readonly type: "remote"
+            readonly url: string
+            readonly headers?: { readonly [x: string]: string }
+            readonly oauth?:
+              | {
+                  readonly client_id?: string
+                  readonly client_secret?: string
+                  readonly scope?: string
+                  readonly callback_port?: number
+                  readonly redirect_uri?: string
+                  readonly auth_server_metadata_url?: string
+                }
+              | false
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | null
+    }
+    readonly compatibilityEnabled?: boolean | null
+  }["model"]
+  readonly mcpServers?: {
+    readonly shell?: string | null
+    readonly model?: string | null
+    readonly mcpServers?: {
+      readonly [x: string]:
+        | {
+            readonly type: "local"
+            readonly command: ReadonlyArray<string>
+            readonly cwd?: string
+            readonly environment?: { readonly [x: string]: string }
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | {
+            readonly type: "remote"
+            readonly url: string
+            readonly headers?: { readonly [x: string]: string }
+            readonly oauth?:
+              | {
+                  readonly client_id?: string
+                  readonly client_secret?: string
+                  readonly scope?: string
+                  readonly callback_port?: number
+                  readonly redirect_uri?: string
+                  readonly auth_server_metadata_url?: string
+                }
+              | false
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | null
+    }
+    readonly compatibilityEnabled?: boolean | null
+  }["mcpServers"]
+  readonly compatibilityEnabled?: {
+    readonly shell?: string | null
+    readonly model?: string | null
+    readonly mcpServers?: {
+      readonly [x: string]:
+        | {
+            readonly type: "local"
+            readonly command: ReadonlyArray<string>
+            readonly cwd?: string
+            readonly environment?: { readonly [x: string]: string }
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | {
+            readonly type: "remote"
+            readonly url: string
+            readonly headers?: { readonly [x: string]: string }
+            readonly oauth?:
+              | {
+                  readonly client_id?: string
+                  readonly client_secret?: string
+                  readonly scope?: string
+                  readonly callback_port?: number
+                  readonly redirect_uri?: string
+                  readonly auth_server_metadata_url?: string
+                }
+              | false
+            readonly disabled?: boolean
+            readonly codemode?: boolean
+            readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+            readonly protocol?: "legacy" | "auto" | "2026-07-28"
+          }
+        | null
+    }
+    readonly compatibilityEnabled?: boolean | null
+  }["compatibilityEnabled"]
 }
 
 export type ConfigUpdateOutput = void
@@ -7916,6 +8070,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["name"]
   readonly description: {
     readonly name: string
@@ -7928,6 +8083,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["description"]
   readonly rules: {
     readonly name: string
@@ -7940,6 +8096,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["rules"]
   readonly category: {
     readonly name: string
@@ -7952,6 +8109,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["category"]
   readonly readOnly: {
     readonly name: string
@@ -7964,6 +8122,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["readOnly"]
   readonly model?: {
     readonly name: string
@@ -7976,6 +8135,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["model"]
   readonly models?: {
     readonly name: string
@@ -7988,6 +8148,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["models"]
   readonly tools?: {
     readonly name: string
@@ -8000,6 +8161,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["tools"]
   readonly autoTools?: {
     readonly name: string
@@ -8012,6 +8174,7 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["autoTools"]
   readonly hub?: {
     readonly name: string
@@ -8024,7 +8187,21 @@ export type OrchestraRoleCreateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["hub"]
+  readonly registry?: {
+    readonly name: string
+    readonly description: string
+    readonly rules: string
+    readonly category: string
+    readonly readOnly: boolean
+    readonly model?: string | undefined
+    readonly models?: ReadonlyArray<string> | undefined
+    readonly tools?: ReadonlyArray<string> | undefined
+    readonly autoTools?: boolean | undefined
+    readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
+  }["registry"]
 }
 
 export type OrchestraRoleCreateOutput = OrchestraRole
@@ -8042,6 +8219,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["name"]
   readonly description: {
     readonly name: string
@@ -8054,6 +8232,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["description"]
   readonly rules: {
     readonly name: string
@@ -8066,6 +8245,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["rules"]
   readonly category: {
     readonly name: string
@@ -8078,6 +8258,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["category"]
   readonly readOnly: {
     readonly name: string
@@ -8090,6 +8271,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["readOnly"]
   readonly model?: {
     readonly name: string
@@ -8102,6 +8284,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["model"]
   readonly models?: {
     readonly name: string
@@ -8114,6 +8297,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["models"]
   readonly tools?: {
     readonly name: string
@@ -8126,6 +8310,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["tools"]
   readonly autoTools?: {
     readonly name: string
@@ -8138,6 +8323,7 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["autoTools"]
   readonly hub?: {
     readonly name: string
@@ -8150,7 +8336,21 @@ export type OrchestraRoleUpdateInput = {
     readonly tools?: ReadonlyArray<string> | undefined
     readonly autoTools?: boolean | undefined
     readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
   }["hub"]
+  readonly registry?: {
+    readonly name: string
+    readonly description: string
+    readonly rules: string
+    readonly category: string
+    readonly readOnly: boolean
+    readonly model?: string | undefined
+    readonly models?: ReadonlyArray<string> | undefined
+    readonly tools?: ReadonlyArray<string> | undefined
+    readonly autoTools?: boolean | undefined
+    readonly hub?: ReadonlyArray<string> | undefined
+    readonly registry?: ReadonlyArray<string> | undefined
+  }["registry"]
 }
 
 export type OrchestraRoleUpdateOutput = OrchestraRole
