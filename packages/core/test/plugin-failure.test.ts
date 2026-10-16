@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { Bus } from "@opencode/core/bus"
 import { Command } from "@opencode/core/command"
 import { Plugin } from "@opencode/core/plugin"
@@ -9,6 +10,25 @@ import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
+
+it.effect("fails a plugin whose setup never settles instead of holding readiness forever", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const activation = yield* plugins
+      .activate([
+        { id: "stuck", revision: "1", effect: () => Effect.never },
+        { id: "healthy", revision: "1", effect: () => Effect.void },
+      ])
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* TestClock.adjust("30 seconds")
+    yield* Fiber.join(activation)
+    yield* plugins.awaitActivation
+    const [stuck, healthy] = yield* plugins.list()
+    expect(stuck?.state.status).toBe("failed")
+    expect(JSON.stringify(stuck?.state)).toContain("did not finish within 30 seconds")
+    expect(healthy?.state.status).toBe("active")
+  }),
+)
 
 it.live("removes a failed plugin's hooks and RPC handlers without affecting healthy plugins", () =>
   Effect.gen(function* () {

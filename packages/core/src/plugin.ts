@@ -14,6 +14,8 @@ import { State } from "./state.js"
 
 export { awaitActivation, type Generation, type Interface, Service } from "./plugin/service.js"
 
+const LOAD_TIMEOUT = "30 seconds"
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -73,6 +75,13 @@ const layer = Layer.effect(
           ),
         ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
+        // Activation holds readiness, which every prompt and drain awaits, so a setup that never
+        // settles would stall all live sessions. A setup that blocks the thread cannot be interrupted.
+        // Applied outside the replaced context above so the caller's clock times it.
+        Effect.timeoutOrElse({
+          duration: LOAD_TIMEOUT,
+          orElse: () => Effect.fail(new Error(`Plugin setup did not finish within ${LOAD_TIMEOUT}`)),
+        }),
         Effect.onExit((exit) =>
           Exit.isFailure(exit) && !activation.failure ? Scope.close(activation.scope, exit) : Effect.void,
         ),
