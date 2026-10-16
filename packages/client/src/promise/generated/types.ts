@@ -2756,7 +2756,7 @@ export type V2Event =
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
-export type RoomLogItem = SessionEventDurable | EventLogSynced | PermissionAsked | PermissionReplied
+export type RoomLogItem = SessionEventDurable | SessionTextDelta | EventLogSynced | PermissionAsked | PermissionReplied
 
 export type InvalidRequestError = {
   readonly _tag: "InvalidRequestError"
