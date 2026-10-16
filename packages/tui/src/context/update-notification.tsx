@@ -11,8 +11,11 @@ import { DialogUpdate } from "../component/dialog-update"
 
 type ClientNotice = { readonly type: "available" | "installed"; readonly version: string }
 type Notice = ClientNotice & ({ readonly source: "client" } | { readonly source: "server"; readonly remote: boolean })
+// What became of local edits a source install had when it updated.
+export type KeptEdits = { readonly type: "restored" } | { readonly type: "stashed"; readonly files: readonly string[] }
 export type UpdateState =
   | ClientNotice
+  | { readonly type: "installed"; readonly version: string; readonly kept?: KeptEdits }
   | { readonly type: "installing"; readonly version: string }
   | { readonly type: "failed"; readonly message: string }
 
@@ -23,7 +26,7 @@ export type UpdateSource = {
     signal: AbortSignal,
     onInstall: (version: string) => void,
   ) => Promise<ClientNotice | { readonly type: "unavailable"; readonly message: string } | undefined>
-  readonly apply: (version: string) => Promise<void>
+  readonly apply: (version: string) => Promise<KeptEdits | undefined>
   /** Asks the CLI to start the client again once this one has exited. */
   readonly relaunch?: () => void
 }
@@ -71,7 +74,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       if (!updater || !current || current.type !== "available") return
       setState({ type: "installing", version: current.version })
       await updater.apply(current.version).then(
-        () => setState({ type: "installed", version: current.version }),
+        (kept) => setState({ type: "installed", version: current.version, kept }),
         (error) => setState({ type: "failed", message: errorMessage(error) }),
       )
     }

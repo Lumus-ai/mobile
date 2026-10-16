@@ -637,6 +637,10 @@ const ru: Record<string, string> = {
   "Version {version} is available. After installing, you'll be prompted to restart Opencode++.": "Доступна версия {version}. После установки Opencode++ предложит перезапуск.",
   "Installing Opencode++ {version}…": "Устанавливаю Opencode++ {version}…",
   "Update successful! A restart is required. Any active sessions will be resumed automatically.": "Обновлено. Нужен перезапуск; активные сессии продолжатся сами.",
+  "Local edits to {files} clash with the update, so they were set aside. Bring them back in the install folder with: git stash pop":
+    "Локальные правки в {files} конфликтуют с обновлением, поэтому их отложили. Вернуть их можно в папке установки командой: git stash pop",
+  "Local edits in the install were put back on top of the update.":
+    "Локальные правки в установке возвращены поверх обновления.",
   "Opencode++ is already up to date.": "Opencode++ уже последней версии.",
   "This build runs from a source checkout. Use an installed Opencode++ release to check for updates.": "Эта сборка запущена из исходников без ветки. Обновления проверяет только установленный релиз Opencode++.",
   "This branch and its copy on GitHub both have new commits. Merge them by hand with git pull.": "И в этой ветке, и в её копии на GitHub есть новые коммиты. Объедини их вручную через git pull.",

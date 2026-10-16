@@ -51,10 +51,45 @@ export async function apply(release: string, root = checkout) {
   // Without --force a release tag that moved on origin fails the fetch instead of
   // silently replacing the code this checkout already trusts.
   await $`git -C ${root} fetch --tags origin`.quiet()
-  await $`git -C ${root} checkout --detach ${"refs/tags/" + PREFIX + release}`.quiet()
-  // The running Bun, so the update works even when bun is not on PATH.
-  // Only what the terminal app needs, as the installer does.
-  await $`${process.execPath} install --frozen-lockfile --filter ./packages/cli`.cwd(root).quiet()
+  return keepingEdits(root, async () => {
+    await $`git -C ${root} checkout --detach ${"refs/tags/" + PREFIX + release}`.quiet()
+    // The running Bun, so the update works even when bun is not on PATH.
+    // Only what the terminal app needs, as the installer does.
+    await $`${process.execPath} install --frozen-lockfile --filter ./packages/cli`.cwd(root).quiet()
+  })
+}
+
+// What became of the edits an install had when it updated: put back on top of the new code,
+// or kept in the stash because they clash with it.
+export type Kept = { readonly type: "restored" } | { readonly type: "stashed"; readonly files: readonly string[] }
+
+// An install is not a workspace, yet an AI session or a hand edit may leave changes in it, and
+// git then refuses every checkout that touches those files, so updates stop for good. The edits
+// are set aside for the move and put back after it; when they clash with the new code the
+// install stays on the clean update and the edits wait in the stash. A move that fails puts
+// the edits back where they were.
+export async function keepingEdits(root: string, move: () => Promise<void>): Promise<Kept | undefined> {
+  if (!(await $`git -C ${root} status --porcelain`.quiet().text()).trim()) {
+    await move()
+    return undefined
+  }
+  const label = `opencode-pp update ${new Date().toISOString()}`
+  await $`git -C ${root} stash push --include-untracked --message ${label}`.quiet()
+  await move().catch(async (error) => {
+    await $`git -C ${root} stash pop`.quiet().nothrow()
+    throw error
+  })
+  if ((await $`git -C ${root} stash pop`.quiet().nothrow()).exitCode === 0) return { type: "restored" }
+  // A clashing pop leaves conflict markers in the code that is about to run and keeps the
+  // stash, so the half-applied edits are dropped and the stash still holds all of them.
+  const files = (
+    await $`git -C ${root} stash show --include-untracked --name-only ${"stash@{0}"}`.quiet().nothrow().text()
+  )
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+  await $`git -C ${root} reset --hard --quiet`.quiet()
+  return { type: "stashed", files }
 }
 
 export function newest(versions: readonly string[]) {
@@ -116,11 +151,12 @@ export async function install(root = checkout): Promise<Install> {
 }
 
 // What the installer does without a release: the branch's newest commit, detached, and the
-// dependencies the terminal app needs. Uncommitted edits stay; git refuses the checkout if
-// the incoming commits touch them.
+// dependencies the terminal app needs. Local edits are set aside for the move (see keepingEdits).
 export async function follow(root = checkout) {
-  await $`git -C ${root} checkout --quiet --detach ${"origin/" + INSTALL_BRANCH}`.quiet()
-  await $`${process.execPath} install --frozen-lockfile --filter ./packages/cli`.cwd(root).quiet()
+  return keepingEdits(root, async () => {
+    await $`git -C ${root} checkout --quiet --detach ${"origin/" + INSTALL_BRANCH}`.quiet()
+    await $`${process.execPath} install --frozen-lockfile --filter ./packages/cli`.cwd(root).quiet()
+  })
 }
 
 // Fast-forwards the branch to its upstream and installs what the new code needs.

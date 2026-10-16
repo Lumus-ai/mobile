@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import type { UpdateState } from "../context/update-notification"
+import type { KeptEdits, UpdateState } from "../context/update-notification"
 import { useDialog } from "../ui/dialog"
 import { errorMessage } from "../util/error"
 import { useT } from "../util/i18n"
@@ -33,6 +33,11 @@ export function DialogUpdate(props: {
         return undefined
       }),
   )
+  // What became of the install's local edits, once a source update put them aside.
+  const keptEdits = (): KeptEdits | undefined => {
+    const current = props.state()
+    return current?.type === "installed" && "kept" in current ? current.kept : undefined
+  }
   const state = createMemo(() => {
     const message = error()
     if (message) return { type: "check-failed" as const, message }
@@ -119,13 +124,33 @@ export function DialogUpdate(props: {
               </Match>
               <Match when={current.type === "installing"}>
                 <Spinner shimmer={theme.text.base}>
-                  {current.type === "installing" ? t("Installing Opencode++ {version}…", { version: current.version }) : ""}
+                  {current.type === "installing"
+                    ? t("Installing Opencode++ {version}…", { version: current.version })
+                    : ""}
                 </Spinner>
               </Match>
               <Match when={current.type === "installed"}>
                 <text fg={theme.text.muted} wrapMode="word">
                   {t("Update successful! A restart is required. Any active sessions will be resumed automatically.")}
                 </text>
+                <Show when={keptEdits()}>
+                  {(kept) => (
+                    <text
+                      fg={kept().type === "stashed" ? theme.text.feedback.warning.base : theme.text.muted}
+                      wrapMode="word"
+                    >
+                      {(() => {
+                        const value = kept()
+                        return value.type === "stashed"
+                          ? t(
+                              "Local edits to {files} clash with the update, so they were set aside. Bring them back in the install folder with: git stash pop",
+                              { files: value.files.join(", ") },
+                            )
+                          : t("Local edits in the install were put back on top of the update.")
+                      })()}
+                    </text>
+                  )}
+                </Show>
               </Match>
               <Match when={current.type === "current"}>
                 <text fg={theme.text.muted}>{t("Opencode++ is already up to date.")}</text>

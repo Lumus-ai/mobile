@@ -31,6 +31,8 @@ test("/update opens the manual update dialog and checks for a newer version", as
       },
       apply: async () => {
         installs++
+        // the install had a local edit that clashes with the update
+        return { type: "stashed" as const, files: ["packages/tui/src/util/i18n.ts"] }
       },
     },
     fetch: async (url) => {
@@ -78,4 +80,12 @@ test("/update opens the manual update dialog and checks for a newer version", as
   expect(checks).toBe(1)
   expect(installs).toBe(0)
   expect(setup.captureCharFrame()).toContain("Update")
+
+  // installing says where a clashing local edit went instead of failing the update
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Update successful"))
+  expect(installs).toBe(1)
+  const done = setup.captureCharFrame().replace(/\s+/g, " ")
+  expect(done).toContain("i18n.ts")
+  expect(done).toContain("git stash pop")
 })

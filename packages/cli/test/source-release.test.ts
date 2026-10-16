@@ -60,7 +60,12 @@ test("a detached install without releases follows the installer's branch", async
   try {
     const origin = path.join(root, "origin")
     const install = path.join(root, "install")
-    const identity = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" }
+    const identity = {
+      GIT_AUTHOR_NAME: "t",
+      GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@t",
+    }
     const git = (args: string[]) => $`git -C ${origin} ${args}`.env({ ...process.env, ...identity }).quiet()
     await $`git init -q -b lan-rooms ${origin}`.quiet()
     await writeFile(path.join(origin, "package.json"), JSON.stringify({ name: "fixture", version: "1.0.0" }))
@@ -87,4 +92,73 @@ test("a detached install without releases follows the installer's branch", async
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+// An install with a stray edit (an AI session, a hand fix) is moved to the newer commit
+// `two`, where notes.txt changed upstream; only the move itself is stubbed out.
+async function edited() {
+  const repo = await setup()
+  const move = () => $`git -C ${repo.install} checkout -q --detach release/1.2.0`.quiet().then(() => undefined)
+  return { ...repo, move }
+}
+
+test("a clean install updates without touching the stash", async () => {
+  await using repo = await edited()
+  expect(await SourceRelease.keepingEdits(repo.install, repo.move)).toBeUndefined()
+  expect((await $`git -C ${repo.install} stash list`.quiet().text()).trim()).toBe("")
+})
+
+test("an edit the update does not touch is put back on top of it", async () => {
+  await using repo = await edited()
+  await writeFile(path.join(repo.install, "package.json"), JSON.stringify({ name: "fixture", version: "9.9.9" }))
+  await writeFile(path.join(repo.install, "scratch.txt"), "mine")
+  expect(await SourceRelease.keepingEdits(repo.install, repo.move)).toEqual({ type: "restored" })
+  expect(await SourceRelease.current(repo.install)).toBe("1.2.0")
+  expect(await Bun.file(path.join(repo.install, "package.json")).text()).toContain("9.9.9")
+  expect(await Bun.file(path.join(repo.install, "scratch.txt")).text()).toBe("mine")
+  expect((await $`git -C ${repo.install} stash list`.quiet().text()).trim()).toBe("")
+})
+
+test("an edit that clashes with the update waits in the stash and the install stays clean", async () => {
+  await using repo = await edited()
+  await writeFile(path.join(repo.install, "notes.txt"), "my own notes")
+  const kept = await SourceRelease.keepingEdits(repo.install, repo.move)
+  expect(kept).toEqual({ type: "stashed", files: ["notes.txt"] })
+  expect(await SourceRelease.current(repo.install)).toBe("1.2.0")
+  expect(await Bun.file(path.join(repo.install, "notes.txt")).text()).toBe("two")
+  expect((await $`git -C ${repo.install} status --porcelain`.quiet().text()).trim()).toBe("")
+  // the edit is not lost: the stash brings it back
+  expect(await $`git -C ${repo.install} stash show -p --include-untracked`.quiet().text()).toContain("my own notes")
+})
+
+test("an edit to a file the update also changes waits in the stash too", async () => {
+  await using repo = await setup()
+  const identity = {
+    GIT_AUTHOR_NAME: "t",
+    GIT_AUTHOR_EMAIL: "t@t",
+    GIT_COMMITTER_NAME: "t",
+    GIT_COMMITTER_EMAIL: "t@t",
+  }
+  await writeFile(path.join(repo.origin, "notes.txt"), "three")
+  await $`git -C ${repo.origin} commit -qam three`.env({ ...process.env, ...identity }).quiet()
+  await $`git -C ${repo.origin} tag release/1.3.0`.quiet()
+  await $`git -C ${repo.install} fetch -q --tags origin`.quiet()
+  await $`git -C ${repo.install} checkout -q --detach release/1.2.0`.quiet()
+  await writeFile(path.join(repo.install, "notes.txt"), "my own notes")
+  const move = () => $`git -C ${repo.install} checkout -q --detach release/1.3.0`.quiet().then(() => undefined)
+  expect(await SourceRelease.keepingEdits(repo.install, move)).toEqual({ type: "stashed", files: ["notes.txt"] })
+  expect(await SourceRelease.current(repo.install)).toBe("1.3.0")
+  expect(await Bun.file(path.join(repo.install, "notes.txt")).text()).toBe("three")
+  expect((await $`git -C ${repo.install} status --porcelain`.quiet().text()).trim()).toBe("")
+  expect(await $`git -C ${repo.install} stash show -p`.quiet().text()).toContain("my own notes")
+})
+
+test("an update that fails puts the edits back where they were", async () => {
+  await using repo = await edited()
+  await writeFile(path.join(repo.install, "notes.txt"), "my own notes")
+  const failed = SourceRelease.keepingEdits(repo.install, () => Promise.reject(new Error("offline")))
+  await expect(failed).rejects.toThrow("offline")
+  expect(await SourceRelease.current(repo.install)).toBe("1.0.0")
+  expect(await Bun.file(path.join(repo.install, "notes.txt")).text()).toBe("my own notes")
+  expect((await $`git -C ${repo.install} stash list`.quiet().text()).trim()).toBe("")
 })

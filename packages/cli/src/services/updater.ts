@@ -55,8 +55,6 @@ const installNames: Record<Method, string> = {
   brew: "Homebrew",
 }
 
-
-
 function resultDetail(result: { code: number; stdout: string; stderr: string }) {
   return (
     conciseDetail(result.stderr) ??
@@ -68,7 +66,8 @@ function resultDetail(result: { code: number; stdout: string; stderr: string }) 
 export interface Interface {
   readonly run: (onInstall?: (version: string) => void) => Effect.Effect<RunResult | undefined>
   readonly check: () => Effect.Effect<CheckResult | undefined, Error>
-  readonly apply: (version: string) => Effect.Effect<void, Error>
+  // For a source install, what became of local edits it had (see SourceRelease.keepingEdits).
+  readonly apply: (version: string) => Effect.Effect<SourceRelease.Kept | undefined, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: (method?: Method) => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
@@ -478,7 +477,8 @@ const make = Effect.gen(function* () {
         try: async () => {
           if (parseReleaseVersion(version)) return SourceRelease.apply(version)
           if (await SourceRelease.detached()) return SourceRelease.follow()
-          return SourceRelease.pull()
+          await SourceRelease.pull()
+          return undefined
         },
         catch: (cause) =>
           new UpgradeError(
@@ -491,6 +491,7 @@ const make = Effect.gen(function* () {
           ),
       })
     if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
+    return undefined
   })
 
   const check = Effect.fn("cli.updater.check")(function* () {
