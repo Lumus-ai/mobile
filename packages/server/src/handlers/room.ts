@@ -74,9 +74,11 @@ const MEMBER_LIMIT = 100
 // cohost or helper cannot approve its own command.
 const HOST_ONLY = new Set(["room.run", "room.check"])
 
-// The live events a following guest log adds to the durable ones.
-const PermissionEvent = Schema.Union([Permission.Event.Asked, Permission.Event.Replied])
-const decodePermissionEvent = Schema.decodeUnknownOption(PermissionEvent)
+// The live events a following guest log adds to the durable ones. Text deltas are
+// ephemeral, so they never appear in the durable replay even though the UI needs them to
+// render a host response while it is being generated.
+const RoomLiveEvent = Schema.Union([Permission.Event.Asked, Permission.Event.Replied, SessionEvent.Text.Delta])
+const decodeRoomLiveEvent = Schema.decodeUnknownOption(RoomLiveEvent)
 
 // Control and format characters in a name would reach the host's terminal, notes and feed.
 const UNSAFE_NAME = /[\p{Cc}\p{Cf}\u2028\u2029]/u
@@ -451,14 +453,14 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           if (!ctx.query.follow) return durable
           // Permission requests are not in the durable log; a following guest hears this session's
           // live ones too, instead of polling for them.
-          const live = Stream.callback<typeof PermissionEvent.Type>((queue) =>
+          const live = Stream.callback<typeof RoomLiveEvent.Type>((queue) =>
             Effect.acquireRelease(
               bus.listen((event) =>
                 Effect.sync(() =>
-                  // Only what the guest needs: the host's location stays on the host. The JSON round
-                  // trip drops optional fields held as undefined, as the event feed's frames do.
+                  // Only transcript/permission events for this room's session leave the host.
+                  // The JSON round trip omits optional fields and keeps the host's location private.
                   Option.filter(
-                    decodePermissionEvent(
+                    decodeRoomLiveEvent(
                       JSON.parse(
                         JSON.stringify({ id: event.id, created: event.created, type: event.type, data: event.data }),
                       ),
