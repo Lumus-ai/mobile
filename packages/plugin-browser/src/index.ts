@@ -2,7 +2,6 @@ import { Plugin } from "@opencode/plugin/effect"
 import { Effect } from "effect"
 import { BrowserConnection } from "./connection.js"
 import { BrowserTools } from "./tools.js"
-import { ChatGPTWeb } from "./webchat.js"
 
 export default Plugin.define({
   id: "opencode.browser",
@@ -10,6 +9,5 @@ export default Plugin.define({
     Effect.gen(function* () {
       const connection = yield* BrowserConnection.make(ctx)
       yield* BrowserTools.register(ctx, connection)
-      yield* ChatGPTWeb.register(ctx, connection)
     }),
 })
