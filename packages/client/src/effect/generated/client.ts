@@ -2287,7 +2287,12 @@ const EndpointOrchestraRoleRemove = (raw: RawClient["server.orchestra"]) => (inp
 const EndpointOrchestraProjectCreate = (raw: RawClient["server.orchestra"]) => (input: OrchestraProjectCreateInput) =>
   preserveEffect<OrchestraProjectCreateOutput>()(
     raw["orchestra.project.create"]({
-      payload: { name: input["name"], directory: input["directory"], template: input["template"] },
+      payload: {
+        name: input["name"],
+        directory: input["directory"],
+        template: input["template"],
+        isolation: input["isolation"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

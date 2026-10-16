@@ -173,7 +173,12 @@ export type SessionActive = { type: "running" }
 
 export type SessionInboxDelivery = "steer" | "queue"
 
-export type SessionInboxSyntheticPayload = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
+export type SessionInboxSyntheticPayload = {
+  text: string
+  description?: string
+  resumeOnStart?: boolean
+  metadata?: { [x: string]: JsonValue }
+}
 
 export type SessionInboxCompactionPayload = {}
 
@@ -183,7 +188,12 @@ export type SessionGenerateResponse = { data: { text: string } }
 
 export type LocationRef = { directory: string; workspaceID?: string }
 
-export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
+export type SessionInboxSyntheticPayload1 = {
+  text: string
+  description?: string
+  resumeOnStart?: boolean
+  metadata?: { [x: string]: any }
+}
 
 export type ShellInfo = {
   id: string
@@ -562,13 +572,7 @@ export type RoomMessage = {
   created: number | "Infinity" | "-Infinity" | "NaN"
 }
 
-export type OrchestraProject = {
-  id: string
-  name: string
-  directory: string
-  main?: string | undefined
-  created: number
-}
+export type OrchestraSandboxIsolation = "environment" | "strict"
 
 export type OrchestraMember = { agent: string; title: string; category: string }
 
@@ -1859,6 +1863,8 @@ export type RoomJoined = {
   room: RoomInfo
 }
 
+export type OrchestraSandbox = { source: string; home: string; isolation: OrchestraSandboxIsolation }
+
 export type OrchestraTemplate = {
   name: string
   description: string
@@ -1956,6 +1962,7 @@ export type SessionInboxUserPayload = {
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
   skills?: Array<PromptSkillAttachment>
+  resumeOnStart?: boolean
   metadata?: { [x: string]: JsonValue }
 }
 
@@ -1964,6 +1971,7 @@ export type SessionInboxUserPayload1 = {
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
   skills?: Array<PromptSkillAttachment>
+  resumeOnStart?: boolean
   metadata?: { [x: string]: any }
 }
 
@@ -2138,6 +2146,15 @@ export type NoteInfo = {
   frontmatter: NoteFrontmatter
   body: string
   mtime: number | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type OrchestraProject = {
+  id: string
+  name: string
+  directory: string
+  main?: string | undefined
+  created: number
+  sandbox?: OrchestraSandbox | undefined
 }
 
 export type ModelInfo = {
@@ -7883,17 +7900,30 @@ export type OrchestraRoleRemoveInput = { readonly roleID: { readonly roleID: str
 export type OrchestraRoleRemoveOutput = void
 
 export type OrchestraProjectCreateInput = {
-  readonly name: { readonly name: string; readonly directory: string; readonly template?: string | undefined }["name"]
+  readonly name: {
+    readonly name: string
+    readonly directory: string
+    readonly template?: string | undefined
+    readonly isolation?: ("environment" | "strict") | undefined
+  }["name"]
   readonly directory: {
     readonly name: string
     readonly directory: string
     readonly template?: string | undefined
+    readonly isolation?: ("environment" | "strict") | undefined
   }["directory"]
   readonly template?: {
     readonly name: string
     readonly directory: string
     readonly template?: string | undefined
+    readonly isolation?: ("environment" | "strict") | undefined
   }["template"]
+  readonly isolation?: {
+    readonly name: string
+    readonly directory: string
+    readonly template?: string | undefined
+    readonly isolation?: ("environment" | "strict") | undefined
+  }["isolation"]
 }
 
 export type OrchestraProjectCreateOutput = OrchestraProject

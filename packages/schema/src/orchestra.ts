@@ -52,6 +52,24 @@ export function sessionOwner(metadata?: SessionMetadata) {
   return Option.getOrUndefined(decodeSessionOwner(metadata[SessionOwnerMetadataKey]))?.projectID
 }
 
+// How strictly a sandbox project's shell commands are confined. "environment" gives them their
+// own opencode data, config, state and cache; "strict" also runs them under bubblewrap, which
+// hides the home directory and allows writes only inside the sandbox.
+export const SandboxIsolation = Schema.Literals(["environment", "strict"]).annotate({
+  identifier: "Orchestra.SandboxIsolation",
+})
+export type SandboxIsolation = typeof SandboxIsolation.Type
+
+// A sandbox project works in a detached git worktree of `source`, so experiments never touch
+// the original checkout or the live opencode service. `home` holds the worktree and the
+// sandbox's own opencode directories.
+export const Sandbox = Schema.Struct({
+  source: Schema.String,
+  home: Schema.String,
+  isolation: SandboxIsolation,
+}).annotate({ identifier: "Orchestra.Sandbox" })
+export interface Sandbox extends Schema.Schema.Type<typeof Sandbox> {}
+
 // A project the operator created: a name and a directory. Its sessions are the
 // ones it opened and the others in that directory or below it (see ownerOf);
 // `main` is its stable orchestrator session. Optional only for legacy records, which
@@ -62,6 +80,7 @@ export const Project = Schema.Struct({
   directory: Schema.String,
   main: SessionID.pipe(Schema.optional),
   created: Schema.Number,
+  sandbox: Sandbox.pipe(Schema.optional),
 }).annotate({ identifier: "Orchestra.Project" })
 export interface Project extends Schema.Schema.Type<typeof Project> {}
 

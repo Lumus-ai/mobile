@@ -513,8 +513,25 @@ const ru: Record<string, string> = {
   "Remove? Sessions stay": "Удалить? Сессии останутся",
   "Remove project": "Удалить проект",
   "tab next field · enter save": "tab следующее поле · enter сохранить",
-  "tab next field · ↑↓ team · ctrl+e edit teams · enter create":
-    "tab следующее поле · ↑↓ команда · ctrl+e изменить команды · enter создать",
+  "tab next field · ↑↓ team · ←→ type · ctrl+e edit teams · enter create":
+    "tab следующее поле · ↑↓ команда · ←→ тип · ctrl+e изменить команды · enter создать",
+  Type: "Тип",
+  Source: "Источник",
+  Regular: "Обычный",
+  Sandbox: "Песочница",
+  "Strict sandbox": "Строгая песочница",
+  "works in the directory itself": "работает прямо в этом каталоге",
+  "a new git worktree of the repository with its own opencode data; the live service is out of reach":
+    "новая копия репозитория (git worktree) со своими данными opencode; рабочий сервис недоступен",
+  "also hides your home directory and allows writes only inside the sandbox; needs bwrap":
+    "ещё скрывает домашний каталог и разрешает запись только внутри песочницы; нужен bwrap",
+  "Strict sandbox needs bubblewrap (bwrap) on the server": "Строгой песочнице нужен bubblewrap (bwrap) на сервере",
+  "Not a git repository: {directory}": "Это не git-репозиторий: {directory}",
+  "Could not create the sandbox worktree: {reason}": "Не удалось создать копию для песочницы: {reason}",
+  "Previous team": "Предыдущая команда",
+  "Next team": "Следующая команда",
+  "Previous type": "Предыдущий тип",
+  "Next type": "Следующий тип",
   "Team editor": "Редактор команд",
   Teams: "Команды",
   Roles: "Роли",

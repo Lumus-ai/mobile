@@ -50,16 +50,43 @@ export function DialogProject(props: {
   // 0 is "No team"; n picks templates()[n - 1].
   const [team, setTeam] = createSignal(0)
   const [teamFocused, setTeamFocused] = createSignal(false)
-  const focusTeam = () => {
-    if (templatesFailed()) loadTemplates()
+  // 0 is a regular project; a sandbox works in a new worktree of the repository at Path.
+  const [kind, setKind] = createSignal(0)
+  const [kindFocused, setKindFocused] = createSignal(false)
+  const kinds = () => [
+    { name: t("Regular"), detail: t("works in the directory itself"), isolation: undefined },
+    {
+      name: t("Sandbox"),
+      detail: t("a new git worktree of the repository with its own opencode data; the live service is out of reach"),
+      isolation: "environment" as const,
+    },
+    {
+      name: t("Strict sandbox"),
+      detail: t("also hides your home directory and allows writes only inside the sandbox; needs bwrap"),
+      isolation: "strict" as const,
+    },
+  ]
+  const blurFields = () => {
     fields.name?.blur()
     fields.directory?.blur()
+  }
+  const focusTeam = () => {
+    if (templatesFailed()) loadTemplates()
+    blurFields()
+    setKindFocused(false)
     setTeamFocused(true)
+  }
+  const focusKind = () => {
+    blurFields()
+    setTeamFocused(false)
+    setKindFocused(true)
   }
   const focusField = (field: InputRenderable | undefined) => {
     setTeamFocused(false)
+    setKindFocused(false)
     field?.focus()
   }
+  const moveKind = (direction: 1 | -1) => setKind((kind() + direction + kinds().length) % kinds().length)
   const teamOptions = () => [
     { name: t("No team"), detail: t("only the Orchestrator") },
     ...(templates() ?? []).map((template) => ({
@@ -103,14 +130,17 @@ export function DialogProject(props: {
         await onSuccess?.(result)
         props.onDone()
       })
-      .catch((cause: unknown) =>
+      .catch((cause: unknown) => {
         // The server names the field it rejected; its own text is English.
-        setError(
-          isRecord(cause) && cause.field === "directory"
-            ? t("Not an existing directory: {directory}", { directory: fields.directory?.value.trim() ?? "" })
-            : errorMessage(cause),
-        ),
-      )
+        const field = isRecord(cause) ? cause.field : undefined
+        const directory = fields.directory?.value.trim() ?? ""
+        if (field === "directory") return setError(t("Not an existing directory: {directory}", { directory }))
+        if (field === "isolation") return setError(t("Strict sandbox needs bubblewrap (bwrap) on the server"))
+        if (field === "repository") return setError(t("Not a git repository: {directory}", { directory }))
+        if (field === "worktree")
+          return setError(t("Could not create the sandbox worktree: {reason}", { reason: errorMessage(cause) }))
+        setError(errorMessage(cause))
+      })
     setBusy(false)
   }
 
@@ -127,7 +157,13 @@ export function DialogProject(props: {
     // The project owns the orchestrator from the moment creation succeeds. Open that
     // main session immediately so the user lands in the project's control surface.
     void run(
-      () => client.api.orchestra.project.create({ name, directory, template: templates()?.[team() - 1]?.id }),
+      () =>
+        client.api.orchestra.project.create({
+          name,
+          directory,
+          template: templates()?.[team() - 1]?.id,
+          isolation: kinds()[kind()]?.isolation,
+        }),
       (created) => props.onCreated?.(created),
     )
   }
@@ -142,7 +178,7 @@ export function DialogProject(props: {
   const editTeams = () =>
     props.onEditTeams?.({ name: fields.name?.value ?? "", directory: fields.directory?.value ?? "" })
 
-  // Tab moves between the fields (and the team list of a new project); enter saves.
+  // Tab moves between the fields (and the team list and type of a new project); enter saves.
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
@@ -153,12 +189,21 @@ export function DialogProject(props: {
         run: () => {
           if (fields.name?.focused) return focusField(fields.directory)
           if (fields.directory?.focused && !props.project) return focusTeam()
+          if (teamFocused()) return focusKind()
           focusField(fields.name)
         },
       },
       { bind: "up", title: "Previous team", group: "Project", enabled: teamFocused, run: () => moveTeam(-1) },
       { bind: "down", title: "Next team", group: "Project", enabled: teamFocused, run: () => moveTeam(1) },
-      { bind: "return", title: "Create", group: "Project", enabled: teamFocused, run: save },
+      { bind: "left", title: "Previous type", group: "Project", enabled: kindFocused, run: () => moveKind(-1) },
+      { bind: "right", title: "Next type", group: "Project", enabled: kindFocused, run: () => moveKind(1) },
+      {
+        bind: "return",
+        title: "Create",
+        group: "Project",
+        enabled: () => teamFocused() || kindFocused(),
+        run: save,
+      },
       {
         bind: "ctrl+e",
         title: "Edit teams",
@@ -206,7 +251,7 @@ export function DialogProject(props: {
       </box>
       <box flexDirection="row" gap={1} onMouseDown={() => focusField(fields.directory)}>
         <box width={9}>
-          <text fg={theme.text.muted}>{t("Path")}</text>
+          <text fg={theme.text.muted}>{t(kind() === 0 ? "Path" : "Source")}</text>
         </box>
         {input(
           "directory",
@@ -264,6 +309,39 @@ export function DialogProject(props: {
             </Show>
           </box>
         </box>
+        <box flexDirection="row" gap={1}>
+          <box width={9} onMouseUp={focusKind}>
+            <text fg={kindFocused() ? theme.text.formfield.focused : theme.text.muted}>{t("Type")}</text>
+          </box>
+          <box flexGrow={1} minWidth={0}>
+            <box flexDirection="row" gap={2}>
+              <For each={kinds()}>
+                {(option, index) => (
+                  <text
+                    fg={
+                      kind() === index()
+                        ? kindFocused()
+                          ? theme.text.formfield.focused
+                          : theme.text.formfield.base
+                        : theme.text.muted
+                    }
+                    onMouseUp={() => {
+                      setKind(index())
+                      focusKind()
+                    }}
+                  >
+                    {kind() === index() ? "●" : "○"} {option.name}
+                  </text>
+                )}
+              </For>
+            </box>
+            <box paddingLeft={2}>
+              <text fg={theme.text.muted} wrapMode="word">
+                {kinds()[kind()]?.detail}
+              </text>
+            </box>
+          </box>
+        </box>
       </Show>
       <Show when={error()}>
         {(message) => (
@@ -285,7 +363,7 @@ export function DialogProject(props: {
         <text fg={theme.text.muted}>
           {props.project
             ? t("tab next field · enter save")
-            : t("tab next field · ↑↓ team · ctrl+e edit teams · enter create")}
+            : t("tab next field · ↑↓ team · ←→ type · ctrl+e edit teams · enter create")}
         </text>
       </box>
     </box>

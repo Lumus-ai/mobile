@@ -307,6 +307,27 @@ test("a new project can start with an AI team from a template", async () => {
   expect(calls.find((call) => call.method === "POST")?.body).toEqual({ name: "Team", directory, template: "feature" })
 })
 
+test("a new project can be created as a sandbox of its repository", async () => {
+  await using state = await tmpdir()
+  const calls: Call[] = []
+  await using setup = await render(state.path, calls, [])
+
+  const add = cell(await setup.waitForFrame((frame) => frame.includes("+ New")), "+ New")
+  await setup.mockMouse.click(add.x, add.y)
+  await setup.waitForFrame((frame) => frame.includes("● Regular") && frame.includes("works in the directory itself"))
+
+  await setup.mockInput.typeText("Lab")
+  await setup.mockInput.pressTab()
+  await setup.mockInput.pressTab()
+  await setup.mockInput.pressTab()
+  await setup.mockInput.pressArrow("right")
+  // The path now names the repository the sandbox is copied from.
+  await setup.waitForFrame((frame) => frame.includes("● Sandbox") && frame.includes("Source"))
+  await setup.mockInput.pressEnter()
+  await setup.waitFor(() => calls.some((call) => call.method === "POST" && call.path === "/api/orchestra/project"))
+  expect(calls.find((call) => call.method === "POST")?.body).toEqual({ name: "Lab", directory, isolation: "environment" })
+})
+
 test("the team is picked with the mouse and a click on a field takes the keyboard back", async () => {
   await using state = await tmpdir()
   const calls: Call[] = []

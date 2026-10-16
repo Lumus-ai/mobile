@@ -32,6 +32,8 @@ import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./fixture/location"
 import { TeamPlugin } from "@opencode/core/plugin/team"
+import { SandboxPlugin } from "@opencode/core/plugin/sandbox"
+import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import { agentHost, host } from "./plugin/host"
 import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 
@@ -186,6 +188,77 @@ const reports = (sessionID: Session.ID) =>
       item.type === "synthetic" && item.payload.text.startsWith("<team-report") ? [item.payload.text] : [],
     )
   })
+
+describe("Orchestra sandbox project", () => {
+  it.live("works in a new worktree of the repository and leaves the source checkout untouched", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-sandbox-")))
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(tmp.path, "README.md"), "source\n")
+        await Bun.$`git init -q && git add . && git -c user.name=t -c user.email=t@t commit -qm init`.cwd(tmp.path)
+      })
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "Sandbox", directory: tmp.path, isolation: "environment" })
+
+      expect(project.sandbox).toMatchObject({ source: tmp.path, isolation: "environment" })
+      expect(project.directory).toBe(path.join(project.sandbox!.home, "repo"))
+      expect(yield* Effect.promise(() => Bun.file(path.join(project.directory, "README.md")).text())).toBe("source\n")
+      expect(yield* Effect.promise(() => Bun.file(path.join(project.directory, Dod.FILE)).exists())).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, Dod.FILE)).exists())).toBe(false)
+      expect((yield* orchestra.projects()).find((item) => item.id === project.id)?.sandbox).toEqual(project.sandbox)
+    }),
+  )
+
+  it.live("confines shell commands inside the sandbox and leaves other directories alone", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-sandbox-shell-")))
+      yield* Effect.promise(() =>
+        Bun.$`git init -q && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m init`.cwd(tmp.path),
+      )
+      const orchestra = yield* Orchestra.Service
+      const project = yield* orchestra.create({ name: "Shell", directory: tmp.path, isolation: "environment" })
+      const hooks: Array<(event: ShellCreateBefore) => Effect.Effect<void>> = []
+      yield* SandboxPlugin.Plugin.effect(
+        host({
+          shell: {
+            hook: (_, callback) => Effect.sync(() => hooks.push(callback)).pipe(Effect.as({ dispose: Effect.void })),
+          },
+        }),
+      )
+      const run = (cwd: string) =>
+        Effect.gen(function* () {
+          const event: ShellCreateBefore = {
+            command: "opencode",
+            cwd,
+            timeout: 0,
+            shell: "sh",
+            env: { HOME: "/home/user", OPENCODE_SERVER_PASSWORD: "secret" },
+          }
+          for (const hook of hooks) yield* hook(event)
+          return event
+        })
+
+      const inside = yield* run(path.join(project.directory, "packages"))
+      expect(inside.env.OPENCODE_SERVER_PASSWORD).toBeUndefined()
+      expect(inside.env.XDG_STATE_HOME).toBe(path.join(project.sandbox!.home, "state"))
+      expect(inside.command).toBe("opencode")
+      const source = yield* run(tmp.path)
+      expect(source.env).toEqual({ HOME: "/home/user", OPENCODE_SERVER_PASSWORD: "secret" })
+    }),
+  )
+
+  it.live("rejects a directory that is not a git repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-sandbox-plain-")))
+      const orchestra = yield* Orchestra.Service
+      const error = yield* orchestra
+        .create({ name: "Plain", directory: tmp.path, isolation: "environment" })
+        .pipe(Effect.flip)
+      expect(error).toMatchObject({ _tag: "Orchestra.SandboxError", reason: "repository" })
+      expect(yield* orchestra.projects()).toEqual([])
+    }),
+  )
+})
 
 describe("Orchestra team", () => {
   it.live("creates the project DoD and main orchestrator even when no team is selected", () =>

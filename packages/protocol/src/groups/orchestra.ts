@@ -127,6 +127,7 @@ export const OrchestraGroup = HttpApiGroup.make("server.orchestra")
         name: Schema.String,
         directory: Schema.String,
         template: Schema.String.pipe(Schema.optional),
+        isolation: Orchestra.SandboxIsolation.pipe(Schema.optional),
       }),
       success: Orchestra.Project,
       error: InvalidRequestError,
@@ -135,7 +136,7 @@ export const OrchestraGroup = HttpApiGroup.make("server.orchestra")
         identifier: "orchestra.project.create",
         summary: "Create project",
         description:
-          "Create a named project for an existing directory; its sessions are those opened in or below it. With a template, also open the main session and one session per team member.",
+          "Create a named project for an existing directory; its sessions are those opened in or below it. With a template, also open the main session and one session per team member. With an isolation, the directory must be a git repository and the project becomes a sandbox in a new detached worktree of it.",
       }),
     ),
   )

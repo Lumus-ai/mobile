@@ -3920,6 +3920,7 @@ export type OrchestraProjectCreateInput = {
   readonly name: string
   readonly directory: string
   readonly template?: string | undefined
+  readonly isolation?: Orchestra.SandboxIsolation | undefined
 }
 export type OrchestraProjectCreateOutput = Orchestra.Project
 export type OrchestraProjectCreateOperation<E = never> = (

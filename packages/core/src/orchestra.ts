@@ -19,6 +19,9 @@ import { SessionMessage } from "./session/message.js"
 import { SessionInbox } from "./session/inbox.js"
 import { Dod } from "./dod.js"
 import { Project as CoreProject } from "./project.js"
+import { Git } from "./git.js"
+import { Global } from "@opencode/util/global"
+import { which } from "./util/which.js"
 
 export const agent = Orchestra.agent
 export const role = Orchestra.role
@@ -32,6 +35,8 @@ export const Project = Orchestra.Project
 export type Project = Orchestra.Project
 export const ProjectID = Orchestra.ProjectID
 export type ProjectID = Orchestra.ProjectID
+export const Sandbox = Orchestra.Sandbox
+export type Sandbox = Orchestra.Sandbox
 export const Template = Orchestra.Template
 export type Template = Orchestra.Template
 export const TemplateSpec = Orchestra.TemplateSpec
@@ -72,14 +77,26 @@ export class ProjectMoveError extends Schema.TaggedError<ProjectMoveError>()("Or
   message: Schema.String,
 }) {}
 
+// `reason` lets clients explain the failure in their own language: bubblewrap is missing for
+// strict isolation, the directory is not a git repository, or git could not add the worktree.
+export class SandboxError extends Schema.TaggedError<SandboxError>()("Orchestra.SandboxError", {
+  reason: Schema.Literals(["isolation", "repository", "worktree"]),
+  message: Schema.String,
+}) {}
+
 export interface Interface {
   readonly projects: () => Effect.Effect<ReadonlyArray<Project>>
   // Always opens the project's main orchestrator; with a template, also opens one session per team member.
+  // With an isolation, `directory` is the git repository a new sandbox worktree is made from.
   readonly create: (input: {
     name: string
     directory: string
     template?: string
-  }) => Effect.Effect<Project, ProjectNotFoundError | DirectoryError | TemplateNotFoundError | Dod.DodError>
+    isolation?: Orchestra.SandboxIsolation
+  }) => Effect.Effect<
+    Project,
+    ProjectNotFoundError | DirectoryError | TemplateNotFoundError | SandboxError | Dod.DodError
+  >
   readonly update: (
     id: ProjectID,
     input: { name?: string; directory?: string },
@@ -241,7 +258,11 @@ const decodeProjectMovePlan = Schema.decodeUnknownOption(ProjectMovePlanSchema)
 
 // Annotated: the layer calls Session operations whose types reach back through the
 // instance graph that includes this node, so an inferred type would be circular.
-const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionStore.Service | FSUtil.Service | Bus.Service> = Layer.effect(
+const layer: Layer.Layer<
+  Service,
+  never,
+  KV.Service | Session.Service | SessionStore.Service | FSUtil.Service | Bus.Service | Git.Service | Global.Service
+> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const kv = yield* KV.Service
@@ -249,6 +270,8 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
     const sessionStore = yield* SessionStore.Service
     const fs = yield* FSUtil.Service
     const bus = yield* Bus.Service
+    const git = yield* Git.Service
+    const global = yield* Global.Service
     // Serialize task assignment per worker while allowing different workers to run in parallel.
     const dispatchLocks = KeyedMutex.makeUnsafe<SessionID>()
     // Concurrent UI/API opens must converge on one durable main session per project.
@@ -399,6 +422,28 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
       const resolved = path.resolve(input.trim().replace(/^~(?=$|[\\/])/, process.env.HOME ?? "~"))
       if (!(yield* fs.isDir(resolved))) return yield* new DirectoryError({ directory: resolved })
       return resolved
+    })
+
+    // Experiments must never touch the source checkout, so a sandbox project lives in a fresh
+    // detached worktree under its own home, next to the opencode roots its commands are given.
+    const sandbox = Effect.fnUntraced(function* (
+      source: string,
+      isolation: Orchestra.SandboxIsolation,
+      id: ProjectID,
+    ) {
+      if (isolation === "strict" && !which("bwrap"))
+        return yield* new SandboxError({
+          reason: "isolation",
+          message: "Strict isolation needs bubblewrap (bwrap), which is not installed on this machine.",
+        })
+      const repository = yield* git.repo.discover(AbsolutePath.make(source))
+      if (!repository)
+        return yield* new SandboxError({ reason: "repository", message: `${source} is not a git repository.` })
+      const home = path.join(global.state, "sandboxes", id)
+      const worktree = yield* git.worktree
+        .create({ repository, directory: AbsolutePath.make(path.join(home, "repo")) })
+        .pipe(Effect.mapError((error) => new SandboxError({ reason: "worktree", message: error.message })))
+      return { directory: worktree.worktree, info: { source: repository.worktree, home, isolation } }
     })
 
     // Use the same root as Location.project.directory so Dod.instructions() reads this board.
@@ -1345,12 +1390,15 @@ const layer: Layer.Layer<Service, never, KV.Service | Session.Service | SessionS
         const template = input.template ? (yield* templates()).find((item) => item.id === input.template) : undefined
         if (input.template && !template) return yield* new TemplateNotFoundError({ template: input.template })
         const resolved = yield* directory(input.directory)
-        yield* initializeDod(resolved)
+        const id = ProjectID.create()
+        const isolated = input.isolation ? yield* sandbox(resolved, input.isolation, id) : undefined
+        yield* initializeDod(isolated?.directory ?? resolved)
         const record = {
-          id: ProjectID.create(),
+          id,
           name: input.name.trim() || path.basename(resolved),
-          directory: resolved,
+          directory: isolated?.directory ?? resolved,
           created: Date.now(),
+          ...(isolated ? { sandbox: isolated.info } : {}),
         }
         if (template) {
           const team = yield* roles()
@@ -1889,5 +1937,5 @@ function finalText(message: SessionMessage.Info) {
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [KV.node, Session.node, SessionStore.node, FSUtil.node, Bus.node],
+  deps: [KV.node, Session.node, SessionStore.node, FSUtil.node, Bus.node, Git.node, Global.node],
 })

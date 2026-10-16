@@ -25,6 +25,10 @@ function badDirectory(error: Orchestra.DirectoryError) {
   )
 }
 
+function badSandbox(error: Orchestra.SandboxError) {
+  return Effect.fail(new InvalidRequestError({ message: error.message, field: error.reason }))
+}
+
 function badProjectMove(error: Orchestra.ProjectMoveError) {
   return Effect.fail(new InvalidRequestError({ message: error.message, field: "directory" }))
 }
@@ -89,6 +93,7 @@ export const OrchestraHandler = HttpApiBuilder.group(Api, "server.orchestra", (h
             ),
             Effect.catchTag("Orchestra.DirectoryError", badDirectory),
             Effect.catchTag("Orchestra.TemplateNotFoundError", badTemplate),
+            Effect.catchTag("Orchestra.SandboxError", badSandbox),
             Effect.catchTag("Dod.Error", badDod),
           ),
       )

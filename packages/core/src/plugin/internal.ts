@@ -99,6 +99,7 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import { TeamPlugin } from "./team.js"
+import { SandboxPlugin } from "./sandbox.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
@@ -242,6 +243,7 @@ const pre = [
   VcsGitPlugin.Plugin,
   AgentPlugin.Plugin,
   TeamPlugin.Plugin,
+  SandboxPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,

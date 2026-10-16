@@ -3026,7 +3026,12 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/orchestra/project`,
-              body: { name: input["name"], directory: input["directory"], template: input["template"] },
+              body: {
+                name: input["name"],
+                directory: input["directory"],
+                template: input["template"],
+                isolation: input["isolation"],
+              },
               successStatus: 200,
               declaredStatuses: [400, 401],
               empty: false,
