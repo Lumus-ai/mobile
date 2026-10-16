@@ -117,7 +117,7 @@ export async function branch(root = checkout): Promise<Branch | undefined> {
   let target: string
   if (upstream.exitCode === 0) {
     target = upstream.text().trim()
-    await $`git -C ${root} fetch --quiet ${target.split("/")[0]}`.quiet()
+    await $`git -C ${root} fetch --quiet ${target.split("/")[0]!}`.quiet()
   } else {
     // Some source installs have the right branch checked out but no upstream configured.
     // If origin carries the same branch, use it for update checks without requiring a reinstall.
