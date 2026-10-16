@@ -2756,7 +2756,17 @@ export type V2Event =
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
-export type RoomLogItem = SessionEventDurable | SessionTextDelta | EventLogSynced | PermissionAsked | PermissionReplied
+export type RoomLogItem =
+  | SessionEventDurable
+  | SessionUsageUpdated
+  | SessionTextDelta
+  | SessionReasoningDelta
+  | SessionToolInputDelta
+  | SessionToolProgress
+  | SessionCompactionDelta
+  | EventLogSynced
+  | PermissionAsked
+  | PermissionReplied
 
 export type InvalidRequestError = {
   readonly _tag: "InvalidRequestError"
@@ -7554,7 +7564,7 @@ export type RoomGuestLeaveOutput = void
 
 export type RoomGuestSessionListInput = { readonly roomID: { readonly roomID: string }["roomID"] }
 
-export type RoomGuestSessionListOutput = { data: Array<SessionInfo1> }["data"]
+export type RoomGuestSessionListOutput = { data: Array<SessionInfo1>; category?: { [x: string]: string } | null }
 
 export type RoomGuestSessionCreateInput = {
   readonly roomID: { readonly roomID: string }["roomID"]

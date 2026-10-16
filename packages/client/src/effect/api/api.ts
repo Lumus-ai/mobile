@@ -2669,7 +2669,10 @@ export type RoomGuestLeaveOutput = void
 export type RoomGuestLeaveOperation<E = never> = (input: RoomGuestLeaveInput) => Effect.Effect<RoomGuestLeaveOutput, E>
 
 export type RoomGuestSessionListInput = { readonly roomID: Room.ID }
-export type RoomGuestSessionListOutput = ReadonlyArray<Session.Info>
+export type RoomGuestSessionListOutput = {
+  readonly data: ReadonlyArray<Session.Info>
+  readonly category?: { readonly [x: string]: string } | undefined
+}
 export type RoomGuestSessionListOperation<E = never> = (
   input: RoomGuestSessionListInput,
 ) => Effect.Effect<RoomGuestSessionListOutput, E>
@@ -3710,6 +3713,28 @@ export type RoomGuestLogOutput =
       readonly id: Event.ID
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.usage.updated"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: {
+        readonly sessionID: Session.ID
+        readonly cost: number & Brand.Brand<"Money.USD">
+        readonly tokens: {
+          readonly input: number
+          readonly output: number
+          readonly reasoning: number
+          readonly cache: { readonly read: number; readonly write: number }
+        }
+      }
+    }
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
       readonly type: "session.text.delta"
       readonly location?:
         | {
@@ -3723,6 +3748,73 @@ export type RoomGuestLogOutput =
         readonly ordinal: number
         readonly delta: string
       }
+    }
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.reasoning.delta"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: {
+        readonly sessionID: Session.ID
+        readonly assistantMessageID: SessionMessage.ID
+        readonly ordinal: number
+        readonly delta: string
+      }
+    }
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.tool.input.delta"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: {
+        readonly sessionID: Session.ID
+        readonly assistantMessageID: SessionMessage.ID
+        readonly id: string
+        readonly delta: string
+      }
+    }
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.tool.progress"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: {
+        readonly sessionID: Session.ID
+        readonly assistantMessageID: SessionMessage.ID
+        readonly id: string
+        readonly metadata: { readonly [x: string]: Schema.Json }
+      }
+    }
+  | {
+      readonly id: Event.ID
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.compaction.delta"
+      readonly location?:
+        | {
+            readonly directory: AbsolutePath
+            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+          }
+        | undefined
+      readonly data: { readonly sessionID: Session.ID; readonly text: string }
     }
   | EventLog.Synced
   | {

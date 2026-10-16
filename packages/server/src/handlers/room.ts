@@ -15,6 +15,7 @@ import { Agent } from "@opencode/core/agent"
 import { Command } from "@opencode/core/command"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Orchestra } from "@opencode/schema/orchestra"
+import { Orchestra as OrchestraService } from "@opencode/core/orchestra"
 import {
   CommandExecutionError,
   CommandNotFoundError,
@@ -75,10 +76,14 @@ const MEMBER_LIMIT = 100
 // cohost or helper cannot approve its own command.
 const HOST_ONLY = new Set(["room.run", "room.check"])
 
-// The live events a following guest log adds to the durable ones. Text deltas are
-// ephemeral, so they never appear in the durable replay even though the UI needs them to
-// render a host response while it is being generated.
-const RoomLiveEvent = Schema.Union([Permission.Event.Asked, Permission.Event.Replied, SessionEvent.Text.Delta])
+// The live events a following guest log adds to the durable ones. Stream fragments (text,
+// reasoning, tool input, compaction) and tool progress are ephemeral, so they never appear in
+// the durable replay even though the UI needs them to show the host model working live.
+const RoomLiveEvent = Schema.Union([
+  Permission.Event.Asked,
+  Permission.Event.Replied,
+  ...SessionEvent.EphemeralDefinitions,
+])
 const decodeRoomLiveEvent = Schema.decodeUnknownOption(RoomLiveEvent)
 
 // Control and format characters in a name would reach the host's terminal, notes and feed.
@@ -133,6 +138,7 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
     const peers = yield* Peer.Service
     const plots = yield* Plot.Service
     const bus = yield* Bus.Service
+    const orchestra = yield* OrchestraService.Service
 
     // Guest routes skip the server credential; the room token is the only proof,
     // and it only opens the room it was issued for, while the host keeps its guest a member.
@@ -784,9 +790,9 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           if (directory === undefined)
             return { data: Option.toArray(yield* sessions.get(joined.room.sessionID).pipe(Effect.option)) }
           const page = yield* sessions.list({ parentID: null, limit: SESSION_LIMIT })
-          return {
-            data: page.data.filter((session) => Orchestra.contains(directory, session.location.directory)),
-          }
+          const data = page.data.filter((session) => Orchestra.contains(directory, session.location.directory))
+          // The host's grouping, so a guest's tree shows the same categories as the host's.
+          return { data, category: yield* orchestra.categories(data.map((session) => session.id)) }
         }),
       )
       .handle(

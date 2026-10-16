@@ -2000,10 +2000,7 @@ const EndpointRoomGuestLeave = (raw: RawClient["server.room"]) => (input: RoomGu
 
 const EndpointRoomGuestSessionList = (raw: RawClient["server.room"]) => (input: RoomGuestSessionListInput) =>
   preserveEffect<RoomGuestSessionListOutput>()(
-    raw["room.guest.session.list"]({ params: { roomID: input["roomID"] } }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
+    raw["room.guest.session.list"]({ params: { roomID: input["roomID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointRoomGuestSessionCreate = (raw: RawClient["server.room"]) => (input: RoomGuestSessionCreateInput) =>

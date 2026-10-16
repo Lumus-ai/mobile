@@ -2636,7 +2636,7 @@ export function make(options: ClientOptions) {
               requestOptions,
             ),
           list: (input: RoomGuestSessionListInput, requestOptions?: RequestOptions) =>
-            request<{ readonly data: RoomGuestSessionListOutput }>(
+            request<RoomGuestSessionListOutput>(
               {
                 method: "GET",
                 path: `/api/room/${encodeURIComponent(input.roomID)}/guest/session`,
@@ -2645,7 +2645,7 @@ export function make(options: ClientOptions) {
                 empty: false,
               },
               requestOptions,
-            ).then((value) => value.data),
+            ),
           create: (input: RoomGuestSessionCreateInput, requestOptions?: RequestOptions) =>
             request<{ readonly data: RoomGuestSessionCreateOutput }>(
               {

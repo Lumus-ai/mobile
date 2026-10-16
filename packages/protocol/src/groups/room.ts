@@ -452,7 +452,11 @@ export const RoomGroup = HttpApiGroup.make("server.room")
   .add(
     HttpApiEndpoint.get("room.guest.session.list", "/api/room/:roomID/guest/session", {
       params: { roomID: Room.ID },
-      success: Schema.Struct({ data: Schema.Array(Session.Info) }),
+      success: Schema.Struct({
+        data: Schema.Array(Session.Info),
+        // The host's categories by session ID; a shared-session room has none.
+        category: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+      }),
       error: [UnauthorizedError, RoomNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
@@ -653,11 +657,11 @@ export const RoomGroup = HttpApiGroup.make("server.room")
         follow: BooleanFromString.pipe(Schema.optional),
       },
       success: HttpApiSchema.StreamSse({
-        // Permission requests and text deltas are not durable, so a following log also carries
-        // these live events; guests can see permissions and host responses without reopening the room.
+        // Permission requests and stream fragments (text, reasoning, tool input and progress) are
+        // not durable, so a following log also carries them; guests watch the host model work live.
         data: Schema.Union([
           SessionEvent.Durable,
-          SessionEvent.Text.Delta,
+          ...SessionEvent.EphemeralDefinitions,
           EventLog.Synced,
           Permission.Event.Asked,
           Permission.Event.Replied,
