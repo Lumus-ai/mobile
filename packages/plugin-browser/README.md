@@ -15,6 +15,24 @@ Focus selects the visible Review tab, not an implicit command target. Discover
 current signatures with `search({ namespace: "browser" })`.
 Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 
+## ChatGPT Web command
+
+Use `/chatgpt-web <task>` from the OpenCode prompt to forward a task directly
+to the normal ChatGPT website. The command runs without asking the currently
+selected OpenCode model to process the task, so it can still be used when that
+model's quota is exhausted. It focuses an existing ChatGPT tab in this Session
+or opens one in the browser profile used by OpenCode++.
+
+On first use, sign in to ChatGPT in that browser profile. If you want a specific
+existing conversation, set `OPENCODE_CHATGPT_WEB_URL` to its
+`https://chatgpt.com/...` URL. For GitHub changes, connect and authorize the
+GitHub integration inside ChatGPT itself. The bridge submits the task through
+the visible website UI; it does not extract cookies, call private ChatGPT APIs,
+create API keys, or bypass usage limits. Sign-in, verification, usage-limit, and
+GitHub permission prompts remain under the user's control. ChatGPT's answer and
+GitHub activity stay in the browser tab; this command does not mirror the full
+response back into the OpenCode transcript.
+
 ## Tools
 
 - Tabs: `tabs.list`, `tabs.open`, `tabs.focus`, `tabs.close`.
