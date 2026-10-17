@@ -5,27 +5,16 @@ import { FSUtil } from "@opencode/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
 import type { ConfigDiscovery } from "./discovery.js"
 
-/**
- * `extra` carries ecosystem paths watched one by one: their folders hold churning state (`~/.claude` keeps
- * logs and todos), so only the files and existing subfolders that feed config are watched.
- */
-export function plan(
-  sources: ConfigDiscovery.Sources,
-  extra: { readonly files: readonly string[]; readonly directories: readonly string[] } = {
-    files: [],
-    directories: [],
-  },
-) {
+export function plan(sources: ConfigDiscovery.Sources) {
   const directories = [
     ...(sources.global ? [sources.global] : []),
     ...sources.project.filter((root) => root.present).map((root) => root.path),
-    ...extra.directories,
   ]
   const files = [
-    ...extra.files,
     ...sources.direct,
     ...sources.project.map((root) => root.path),
-    ...Object.values(sources.ecosystems).flat(),
+    ...sources.claude,
+    ...sources.agents,
     ...(sources.explicit ? [sources.explicit] : []),
   ]
   // Keep a parent watch for each root so deletion/recreation is observable.

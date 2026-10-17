@@ -50,3 +50,18 @@
     }
   }
 }
+
+/* Terminal wordmark palette: "open" dim, "code" bright, per theme (matches approved mockup tones). */
+[data-component="new-session-wordmark"] {
+  --wm-open: color-mix(in srgb, var(--v2-text-text-muted) 9%, transparent);
+  --wm-code: color-mix(in srgb, var(--v2-text-text-base) 31%, transparent);
+  --wm-open-shadow: color-mix(in srgb, var(--v2-text-text-muted) 5%, transparent);
+  --wm-code-shadow: color-mix(in srgb, var(--v2-text-text-base) 11%, transparent);
+}
+
+[data-color-scheme="dark"] [data-component="new-session-wordmark"] {
+  --wm-open: color-mix(in srgb, var(--v2-text-text-muted) 14%, transparent);
+  --wm-code: color-mix(in srgb, var(--v2-text-text-base) 33%, transparent);
+  --wm-open-shadow: color-mix(in srgb, var(--v2-text-text-muted) 8%, transparent);
+  --wm-code-shadow: color-mix(in srgb, var(--v2-text-text-base) 13%, transparent);
+}

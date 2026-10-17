@@ -31,7 +31,6 @@ import {
   SessionBusyError,
   SessionNotFoundError,
   SkillNotFoundError,
-  PromptRejectedError,
   UnknownError,
 } from "../errors.js"
 import { Agent } from "@opencode/schema/agent"
@@ -403,7 +402,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
-        error: [ConflictError, InvalidRequestError, SessionNotFoundError, PromptRejectedError],
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(

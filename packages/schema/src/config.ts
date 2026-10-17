@@ -7,7 +7,6 @@ import { AbsolutePath, optional } from "./schema.js"
 import { ConfigAgent } from "./config/agent.js"
 import { ConfigMedia } from "./config/media.js"
 import { ConfigCompaction } from "./config/compaction.js"
-import { ConfigCompatibility } from "./config/compatibility.js"
 import { ConfigCommand } from "./config/command.js"
 import { ConfigExperimental } from "./config/experimental.js"
 import { ConfigFormatter } from "./config/formatter.js"
@@ -106,9 +105,6 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",
   }),
-  compatibility: ConfigCompatibility.Info.pipe(optional).annotate({
-    description: "Which other agent tools' folders (.claude, .codex, .gemini, ...) to read and how to merge them",
-  }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(optional),
   experimental: ConfigExperimental.Info.pipe(optional),
 }) {}
@@ -118,12 +114,6 @@ export const Patch = Schema.Struct({
   shell: Schema.optionalKey(Schema.NullOr(Schema.String)),
   model: Schema.optionalKey(Schema.NullOr(Schema.String)).annotate({
     description: "Default model for new sessions, as provider/model",
-  }),
-  mcpServers: Schema.optionalKey(Schema.Record(Schema.String, Schema.NullOr(ConfigMCP.Server))).annotate({
-    description: "MCP servers to add or replace under mcp.servers by name; null removes one",
-  }),
-  compatibilityEnabled: Schema.optionalKey(Schema.NullOr(Schema.Boolean)).annotate({
-    description: "Turn reading other agent tools' folders on or off everywhere (compatibility.enabled); null clears it",
   }),
 }).annotate({ identifier: "Config.Patch" })
 export interface Patch extends Schema.Schema.Type<typeof Patch> {}

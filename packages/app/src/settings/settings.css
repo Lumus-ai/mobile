@@ -710,6 +710,9 @@
     justify-content: space-between;
     gap: 16px;
     padding: 8px var(--settings-mobile-inner-inset, 16px);
+    /* Edge-to-edge Android 15: the bar slid under the status bar and the back
+       button was untappable (v13.10). */
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
     border-bottom: 0.5px solid var(--v2-border-border-muted);
     background: var(--v2-background-bg-base);
   }

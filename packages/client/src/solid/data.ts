@@ -465,10 +465,8 @@ export function createData(config: CreateDataInput) {
         if (reasoning) fn(reasoning)
       })
     },
-    // A failed step is already completed when its retry is scheduled, so the pending retry lives on the latest
-    // assistant whether or not it completed.
-    latestAssistant(messages: SessionMessageInfo[]) {
-      const item = messages.findLast((item) => item.type === "assistant")
+    activeAssistant(messages: SessionMessageInfo[]) {
+      const item = messages.findLast((item) => item.type === "assistant" && !item.time.completed)
       return item?.type === "assistant" ? item : undefined
     },
     shell(messages: SessionMessageInfo[], shellID: string) {
@@ -855,10 +853,10 @@ export function createData(config: CreateDataInput) {
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
             return
           }
-          const latestAssistant = message.latestAssistant(draft)
-          if (latestAssistant) {
-            latestAssistant.retry = undefined
-            latestAssistant.time.completed ??= event.created
+          const currentAssistant = message.activeAssistant(draft)
+          if (currentAssistant) {
+            currentAssistant.retry = undefined
+            currentAssistant.time.completed = event.created
           }
           message.append(draft, index, {
             id: event.data.assistantMessageID,
@@ -1029,8 +1027,8 @@ export function createData(config: CreateDataInput) {
       case "session.execution.interrupted":
         setSessionActive(event.data.sessionID, "idle")
         message.update(event.data.sessionID, (draft) => {
-          const latestAssistant = message.latestAssistant(draft)
-          if (latestAssistant) latestAssistant.retry = undefined
+          const currentAssistant = message.activeAssistant(draft)
+          if (currentAssistant) currentAssistant.retry = undefined
         })
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
         // Mirror the projected idle marker so turn boundaries match before the next message read.

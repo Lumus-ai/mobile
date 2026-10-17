@@ -1,0 +1,11 @@
+buildscript { apply from: '../capacitor.build.gradle' }
+apply plugin: 'com.android.library'
+android {
+    namespace "com.opencode.plusplus.embedded"
+    compileSdk rootProject.ext.has('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36
+    defaultConfig { minSdkVersion rootProject.ext.has('minSdkVersion') ? rootProject.ext.minSdkVersion : 24 }
+}
+dependencies {
+    // nodejs-mobile shared library + bridge (arm64-v8a first per spec).
+    // implementation files('libs/nodejs-mobile.aar') // dropped in at integration time
+}

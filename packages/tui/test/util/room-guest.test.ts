@@ -22,18 +22,6 @@ function host() {
             type: "permission.asked",
             data: { id: "per_1", sessionID: "ses_1", action: "bash", resources: ["ls"] },
           },
-          {
-            id: "evt_2",
-            created: 2,
-            type: "session.text.delta",
-            data: { sessionID: "ses_1", assistantMessageID: "msg_assistant1", ordinal: 0, delta: "hello" },
-          },
-          {
-            id: "evt_3",
-            created: 3,
-            type: "session.reasoning.delta",
-            data: { sessionID: "ses_1", assistantMessageID: "msg_assistant1", ordinal: 0, delta: "thinking" },
-          },
         ]
         return new Response(frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join(""), {
           headers: { "content-type": "text/event-stream" },
@@ -64,6 +52,6 @@ describe("guestApi", () => {
     servers.push(fake.server)
     const seen: string[] = []
     for await (const event of guestApi(fake.room, "ses_1").event.subscribe()) seen.push(event.type)
-    expect(seen).toEqual(["server.connected", "permission.asked", "session.text.delta", "session.reasoning.delta"])
+    expect(seen).toEqual(["server.connected", "permission.asked"])
   })
 })

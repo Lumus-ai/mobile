@@ -2478,88 +2478,14 @@ export type ConfigShellsOutput = ReadonlyArray<{
 }>
 export type ConfigShellsOperation<E = never> = () => Effect.Effect<ConfigShellsOutput, E>
 
-export type ConfigUpdateInput = {
-  readonly shell?: string | null
-  readonly model?: string | null
-  readonly mcpServers?: { readonly [x: string]: Mcp.LocalConfig | Mcp.RemoteConfig | null }
-  readonly compatibilityEnabled?: boolean | null
-}
+export type ConfigUpdateInput = { readonly shell?: string | null; readonly model?: string | null }
 export type ConfigUpdateOutput = void
 export type ConfigUpdateOperation<E = never> = (input?: ConfigUpdateInput) => Effect.Effect<ConfigUpdateOutput, E>
-
-export type ConfigCompatibilityGetInput = {
-  readonly location?: { readonly directory?: string | undefined } | undefined
-}
-export type ConfigCompatibilityGetOutput = {
-  readonly root: string
-  readonly enabled: boolean
-  readonly order: ReadonlyArray<"agents" | "claude" | "codex" | "gemini" | "cursor">
-  readonly ecosystems: ReadonlyArray<{
-    readonly id: "agents" | "claude" | "codex" | "gemini" | "cursor"
-    readonly label: string
-    readonly enabled: boolean
-    readonly decidedBy: "project" | "config" | "default"
-    readonly trusted: boolean
-    readonly folders: ReadonlyArray<{ readonly path: string; readonly scope: "global" | "project" }>
-    readonly markers: ReadonlyArray<string>
-    readonly loaded?: {
-      readonly instructions: number
-      readonly commands: number
-      readonly agents: number
-      readonly mcp: number
-      readonly rules: number
-      readonly hooks: number
-    }
-    readonly skipped?: ReadonlyArray<{ readonly source: string; readonly reason: string }>
-    readonly awaitingTrust?: number
-  }>
-}
-export type ConfigCompatibilityGetOperation<E = never> = (
-  input?: ConfigCompatibilityGetInput,
-) => Effect.Effect<ConfigCompatibilityGetOutput, E>
-
-export type ConfigCompatibilityUpdateInput = {
-  readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly ecosystem: "agents" | "claude" | "codex" | "gemini" | "cursor"
-  readonly enabled?: boolean | null
-  readonly trusted?: boolean
-}
-export type ConfigCompatibilityUpdateOutput = {
-  readonly root: string
-  readonly enabled: boolean
-  readonly order: ReadonlyArray<"agents" | "claude" | "codex" | "gemini" | "cursor">
-  readonly ecosystems: ReadonlyArray<{
-    readonly id: "agents" | "claude" | "codex" | "gemini" | "cursor"
-    readonly label: string
-    readonly enabled: boolean
-    readonly decidedBy: "project" | "config" | "default"
-    readonly trusted: boolean
-    readonly folders: ReadonlyArray<{ readonly path: string; readonly scope: "global" | "project" }>
-    readonly markers: ReadonlyArray<string>
-    readonly loaded?: {
-      readonly instructions: number
-      readonly commands: number
-      readonly agents: number
-      readonly mcp: number
-      readonly rules: number
-      readonly hooks: number
-    }
-    readonly skipped?: ReadonlyArray<{ readonly source: string; readonly reason: string }>
-    readonly awaitingTrust?: number
-  }>
-}
-export type ConfigCompatibilityUpdateOperation<E = never> = (
-  input: ConfigCompatibilityUpdateInput,
-) => Effect.Effect<ConfigCompatibilityUpdateOutput, E>
 
 export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
   readonly shells: ConfigShellsOperation<E>
   readonly update: ConfigUpdateOperation<E>
-  readonly compatibility: {
-    readonly get: ConfigCompatibilityGetOperation<E>
-    readonly update: ConfigCompatibilityUpdateOperation<E>
-  }
 }
 
 export type RoomListOutput = ReadonlyArray<Room.Info>
@@ -2743,10 +2669,7 @@ export type RoomGuestLeaveOutput = void
 export type RoomGuestLeaveOperation<E = never> = (input: RoomGuestLeaveInput) => Effect.Effect<RoomGuestLeaveOutput, E>
 
 export type RoomGuestSessionListInput = { readonly roomID: Room.ID }
-export type RoomGuestSessionListOutput = {
-  readonly data: ReadonlyArray<Session.Info>
-  readonly category?: { readonly [x: string]: string } | undefined
-}
+export type RoomGuestSessionListOutput = ReadonlyArray<Session.Info>
 export type RoomGuestSessionListOperation<E = never> = (
   input: RoomGuestSessionListInput,
 ) => Effect.Effect<RoomGuestSessionListOutput, E>
@@ -3783,113 +3706,6 @@ export type RoomGuestLogOutput =
           }
         }
     )
-  | {
-      readonly id: Event.ID
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.usage.updated"
-      readonly location?:
-        | {
-            readonly directory: AbsolutePath
-            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
-          }
-        | undefined
-      readonly data: {
-        readonly sessionID: Session.ID
-        readonly cost: number & Brand.Brand<"Money.USD">
-        readonly tokens: {
-          readonly input: number
-          readonly output: number
-          readonly reasoning: number
-          readonly cache: { readonly read: number; readonly write: number }
-        }
-      }
-    }
-  | {
-      readonly id: Event.ID
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.text.delta"
-      readonly location?:
-        | {
-            readonly directory: AbsolutePath
-            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
-          }
-        | undefined
-      readonly data: {
-        readonly sessionID: Session.ID
-        readonly assistantMessageID: SessionMessage.ID
-        readonly ordinal: number
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: Event.ID
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.reasoning.delta"
-      readonly location?:
-        | {
-            readonly directory: AbsolutePath
-            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
-          }
-        | undefined
-      readonly data: {
-        readonly sessionID: Session.ID
-        readonly assistantMessageID: SessionMessage.ID
-        readonly ordinal: number
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: Event.ID
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.tool.input.delta"
-      readonly location?:
-        | {
-            readonly directory: AbsolutePath
-            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
-          }
-        | undefined
-      readonly data: {
-        readonly sessionID: Session.ID
-        readonly assistantMessageID: SessionMessage.ID
-        readonly id: string
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: Event.ID
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.tool.progress"
-      readonly location?:
-        | {
-            readonly directory: AbsolutePath
-            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
-          }
-        | undefined
-      readonly data: {
-        readonly sessionID: Session.ID
-        readonly assistantMessageID: SessionMessage.ID
-        readonly id: string
-        readonly metadata: { readonly [x: string]: Schema.Json }
-      }
-    }
-  | {
-      readonly id: Event.ID
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.compaction.delta"
-      readonly location?:
-        | {
-            readonly directory: AbsolutePath
-            readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
-          }
-        | undefined
-      readonly data: { readonly sessionID: Session.ID; readonly text: string }
-    }
   | EventLog.Synced
   | {
       readonly id: Event.ID
@@ -4041,7 +3857,6 @@ export type OrchestraTemplateCreateInput = {
   readonly name: string
   readonly description: string
   readonly members: ReadonlyArray<Orchestra.Member>
-  readonly playbook?: string | undefined
 }
 export type OrchestraTemplateCreateOutput = Orchestra.Template
 export type OrchestraTemplateCreateOperation<E = never> = (
@@ -4053,7 +3868,6 @@ export type OrchestraTemplateUpdateInput = {
   readonly name: string
   readonly description: string
   readonly members: ReadonlyArray<Orchestra.Member>
-  readonly playbook?: string | undefined
 }
 export type OrchestraTemplateUpdateOutput = Orchestra.Template
 export type OrchestraTemplateUpdateOperation<E = never> = (
@@ -4076,11 +3890,6 @@ export type OrchestraRoleCreateInput = {
   readonly category: string
   readonly readOnly: boolean
   readonly model?: string | undefined
-  readonly models?: ReadonlyArray<string> | undefined
-  readonly tools?: ReadonlyArray<string> | undefined
-  readonly autoTools?: boolean | undefined
-  readonly hub?: ReadonlyArray<string> | undefined
-  readonly registry?: ReadonlyArray<string> | undefined
 }
 export type OrchestraRoleCreateOutput = Orchestra.Role
 export type OrchestraRoleCreateOperation<E = never> = (
@@ -4095,11 +3904,6 @@ export type OrchestraRoleUpdateInput = {
   readonly category: string
   readonly readOnly: boolean
   readonly model?: string | undefined
-  readonly models?: ReadonlyArray<string> | undefined
-  readonly tools?: ReadonlyArray<string> | undefined
-  readonly autoTools?: boolean | undefined
-  readonly hub?: ReadonlyArray<string> | undefined
-  readonly registry?: ReadonlyArray<string> | undefined
 }
 export type OrchestraRoleUpdateOutput = Orchestra.Role
 export type OrchestraRoleUpdateOperation<E = never> = (

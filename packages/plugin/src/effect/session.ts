@@ -150,11 +150,6 @@ export interface SessionHooks {
   readonly retry: SessionRetry
 }
 
-// Only prompt may fail: a PromptInput.Rejected refuses the prompt before it is enqueued.
-export type SessionFailures = {
-  readonly [Name in keyof SessionHooks]: Name extends "prompt" ? PromptInput.Rejected : never
-}
-
 export type SessionDomain = Pick<
   SessionApi<unknown>,
   | "create"
@@ -173,5 +168,5 @@ export type SessionDomain = Pick<
   | "wait"
   | "context"
 > & {
-  readonly hook: ModelHooks<SessionHooks, SessionFailures>
+  readonly hook: ModelHooks<SessionHooks>
 }

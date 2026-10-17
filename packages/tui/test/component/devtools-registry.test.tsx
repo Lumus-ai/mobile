@@ -3,7 +3,7 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Hub } from "@opencode/core/hub/index"
 import { HubState } from "@opencode/core/hub/state"
-import { RegistryPanel, type AiToolsAccess, type RegistryPanelOptions } from "../../src/component/devtools-registry"
+import { RegistryPanel, type RegistryPanelOptions } from "../../src/component/devtools-registry"
 import { ConfigProvider } from "../../src/config"
 import { Keymap } from "../../src/context/keymap"
 import { ThemeProvider } from "../../src/context/theme"
@@ -19,9 +19,7 @@ const probe = (tool: string) => tool !== "rg"
 const registryManager: Hub.Manager =
   process.platform === "win32" ? "winget" : process.platform === "darwin" ? "brew" : "apt"
 
-async function render(
-  options: RegistryPanelOptions & { onShell?: (shell: string) => void; aiTools?: AiToolsAccess },
-) {
+async function render(options: RegistryPanelOptions & { onShell?: (shell: string) => void }) {
   const app = await testRender(
     () => (
       <TestTuiContexts>
@@ -29,7 +27,7 @@ async function render(
           <ThemeProvider mode="dark" source={emptyThemeSource}>
             <Keymap.Provider>
               <ToastProvider>
-                <RegistryPanel options={options} onShell={options.onShell} aiTools={options.aiTools} />
+                <RegistryPanel options={options} onShell={options.onShell} />
                 <Toast />
               </ToastProvider>
             </Keymap.Provider>
@@ -40,9 +38,25 @@ async function render(
     { width: 90, height: 44, kittyKeyboard: true },
   )
   app.renderer.start()
-  // The programs tab carries the search; the AI tools tab, first when offered, has none.
-  await app.waitForFrame((frame) => frame.includes("Registry") && (frame.includes("Search") || frame.includes("AI tools")))
+  await app.waitForFrame((frame) => frame.includes("Registry") && frame.includes("Search"))
   return app
+}
+
+// The click handler persists in the background while the switch updates
+// optimistically, so assertions wait for the durable value to catch up.
+async function untilEnabled(directory: string, tool: string, expected: boolean) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if ((await HubState.read({ directory })).enabled[tool] === expected) return true
+    await Bun.sleep(10)
+  }
+  return false
+}
+
+// Value printed right after a summary label. Read the rendered row so varying
+// terminal spacing doesn't make the test depend on a fixed number of spaces.
+function rowValue(frame: string, label: string) {
+  const row = frame.split("\n").find((line) => line.includes(label))
+  return row?.slice(row.indexOf(label) + label.length).trim().split(/\s+/)[0]
 }
 
 // Cell of `needle` on the row naming `tool`: the tool's own row carries both —
@@ -65,14 +79,12 @@ test("registry panel shows readiness, terminals and a paged tool list", async ()
     expect(frame).toContain("Registry")
     expect(frame).toContain("Ready")
     expect(frame).toContain(`${status.ready}/${status.total}`)
-    // the AI's terminal has its own tab, named after the shell in use
-    expect(frame).toContain("AI terminal: nu")
+    expect(frame).toContain("AI terminal")
+    expect(frame).toContain("bash")
     expect(frame).toContain(`${status.categories[0].name} `)
     expect(frame).toContain("Search")
-    // installed programs are there for the model; no per-tool switch remains
-    expect(frame).toContain(`Programs ${status.installed.length}/${status.tools.length}`)
-    expect(frame).not.toContain("[off]")
-    expect(frame).not.toContain("All off")
+    // the hint block is opt-in: a fresh state file advertises nothing
+    expect(rowValue(frame, "For the model")).toBe(`0/${status.tools.length}`)
     expect(status.tools.length).toBeGreaterThan(10)
     expect(frame).toContain("1/")
     // first page is the ten most actionable rows, absent tools first
@@ -205,6 +217,56 @@ test("a manually installed tool stays visible without an unsafe Remove action", 
   }
 })
 
+test("the switch turns a tool on for the model and writes it to hub.json", async () => {
+  await using tmp = await tmpdir()
+  const app = await render({ probe, manager: registryManager, directory: tmp.path })
+  try {
+    const tools = hubRegistryStatus({ probe, manager: registryManager }).tools
+    const first = tools[0].tool
+    const { x, y } = cell(app, first, "[off]")
+    await app.mockMouse.click(x, y)
+    await app.waitForFrame((frame) => rowValue(frame, "For the model") === `1/${tools.length}`)
+    expect(cell(app, first, "[on]").y).toBe(y)
+    expect(await untilEnabled(tmp.path, first, true)).toBe(true)
+
+    // switching it off again withdraws it from the hint block and the listing
+    const off = cell(app, first, "[on]")
+    await app.mockMouse.click(off.x, off.y)
+    await app.waitForFrame((frame) => rowValue(frame, "For the model") === `0/${tools.length}`)
+    expect(await untilEnabled(tmp.path, first, false)).toBe(true)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("All off also clears saved switches that are outside the current registry rows", async () => {
+  await using tmp = await tmpdir()
+  const stale = "orphanedLegacyTool"
+  const target = hubRegistryStatus({ probe }).tools.find((row) => row.installed)!.tool
+  await HubState.setEnabled(stale, true, { directory: tmp.path })
+  await HubState.setEnabled(target, true, { directory: tmp.path })
+
+  const app = await render({ probe, directory: tmp.path })
+  try {
+    const frame = await app.waitForFrame(
+      (frame) =>
+        frame.split("\n").some((line) => line.includes("[on]") && line.includes(target)) &&
+        frame.includes("All off"),
+    )
+    const lines = frame.split("\n")
+    const row = lines.findIndex((line) => line.includes("All off"))
+    const allOff = lines[row]!.indexOf("All off")
+    const x = allOff + Math.floor("All off".length / 2)
+    await app.mockMouse.click(x, row)
+
+    await app.waitForFrame((frame) => rowValue(frame, "For the model") === "0/" + hubRegistryStatus({ probe }).tools.length)
+    expect(await untilEnabled(tmp.path, target, false)).toBe(true)
+    expect(await untilEnabled(tmp.path, stale, false)).toBe(true)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("pager moves to the second page of tools", async () => {
   await using tmp = await tmpdir()
   const app = await render({ probe, manager: registryManager, directory: tmp.path })
@@ -246,11 +308,8 @@ test("search narrows the tool list by name or by what a recipe does", async () =
     await app.mockMouse.click(x, row)
     await Bun.sleep(10)
     await app.mockInput.typeText("yaml")
-    // Tool rows are the lines that count entries; category and header lines never do.
-    const listed = (frame: string, tool: string) =>
-      frame.split("\n").some((line) => / entr(y|ies)/.test(line) && line.trimStart().startsWith(`${tool} `))
-    await app.waitForFrame((frame) => listed(frame, "yq") && !listed(frame, "rg"))
-    expect(listed(app.captureCharFrame(), "git")).toBe(false)
+    await app.waitForFrame((frame) => frame.includes("[off] yq") && !frame.includes("[off] rg"))
+    expect(app.captureCharFrame()).not.toContain("[off] git")
   } finally {
     app.renderer.destroy()
   }
@@ -274,7 +333,6 @@ test("the AI terminal can be installed and chosen", async () => {
     onShell: (shell) => shells.push(shell),
   })
   try {
-    await openTab(app, "AI terminal")
     const frame = await app.waitForFrame((frame) => frame.includes("Install nu"))
     expect(frame).toContain("● pwsh")
 
@@ -293,52 +351,6 @@ test("the AI terminal can be installed and chosen", async () => {
     app.renderer.destroy()
   }
 })
-
-test("AI tools open first, read in full and install through the config", async () => {
-  await using tmp = await tmpdir()
-  const configured: string[] = []
-  const calls: [string, unknown][] = []
-  const app = await render({
-    probe: (tool) => tool !== "uv",
-    terminalProbe: () => true,
-    manager: "winget",
-    directory: tmp.path,
-    aiTools: {
-      installed: () => configured,
-      set: async (id, config) => {
-        calls.push([id, config])
-      },
-    },
-  })
-  try {
-    const frame = await app.waitForFrame((frame) => frame.includes("Context7"))
-    // the AI tools tab is the first one and shows each description on its own line, uncut
-    expect(frame).toContain("Up-to-date documentation and code examples for libraries and frameworks.")
-    expect(frame).not.toContain("Search")
-    // a Python-based tool says what it needs and offers to install it
-    expect(frame).toContain("needs uv")
-    expect(frame).toContain("Install uv")
-
-    const install = cell(app, "Context7", "Install")
-    await app.mockMouse.click(install.x + 2, install.y)
-    await app.waitFor(() => calls.length === 1)
-    expect(calls[0]?.[0]).toBe("context7")
-    await app.waitForFrame((frame) => frame.split("\n").some((line) => line.includes("Context7") && line.includes("Remove")))
-
-    // the programs tab holds the search
-    await openTab(app, "Programs")
-    await app.waitForFrame((frame) => frame.includes("Search"))
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-async function openTab(app: Awaited<ReturnType<typeof render>>, label: string) {
-  const lines = app.captureCharFrame().split("\n")
-  const row = lines.findIndex((line) => line.includes(label))
-  if (row < 0) throw new Error(`no ${label} tab`)
-  await app.mockMouse.click(lines[row]!.indexOf(label) + 1, row)
-}
 
 test("a mirror 404 offers a system update that clears the warning", async () => {
   await using tmp = await tmpdir()

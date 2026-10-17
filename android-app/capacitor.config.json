@@ -1,0 +1,6 @@
+{
+  "appId": "com.opencode.plusplus",
+  "appName": "OpenCode++",
+  "webDir": "../repo/packages/app/dist",
+  "server": { "androidScheme": "http" }
+}

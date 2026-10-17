@@ -1,0 +1,11 @@
+{
+  "name": "@opencode-plus-plus/embedded-server",
+  "version": "0.1.0",
+  "description": "Capacitor plugin that runs the bundled opencode server on-device (nodejs-mobile) inside a foreground service.",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "capacitor": { "android": { "src": "android" } },
+  "peerDependencies": { "@capacitor/core": ">=6.0.0" },
+  "private": true
+}

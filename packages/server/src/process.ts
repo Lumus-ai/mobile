@@ -50,7 +50,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
   transform?: Transform,
-  overrides?: LayerNode.Replacements,
 ) {
   const password = options.password
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
@@ -106,7 +105,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
           password,
         },
         urls,
-        overrides ?? [],
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )

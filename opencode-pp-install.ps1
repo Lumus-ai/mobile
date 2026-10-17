@@ -65,54 +65,16 @@ if ($LASTEXITCODE -ne 0) { throw "git failed." }
 # with the patches is the fallback.
 $Tag = git -C $Source tag -l "release/*" --sort=-v:refname | Select-Object -First 1
 if ($Tag) {
-  $Target = $Tag
+  git -C $Source checkout --quiet --detach $Tag
+  if ($LASTEXITCODE -ne 0) { throw "git checkout failed." }
   $Version = $Tag -replace "^release/", ""
 } else {
   Write-Host "No release is published yet; installing branch $Branch."
-  git -C $Source fetch --force origin "+refs/heads/${Branch}:refs/remotes/origin/${Branch}"
+  git -C $Source fetch --force origin $Branch
   if ($LASTEXITCODE -ne 0) { throw "git fetch failed." }
-  $Target = "origin/$Branch"
-  $Version = "$Branch (no release yet)"
-}
-
-# Save local changes before checkout. Run stash unconditionally so PowerShell output
-# handling cannot accidentally make a dirty checkout look clean.
-$PreviousStash = (git -C $Source stash list --format=%H -1 | Out-String).Trim()
-if ($LASTEXITCODE -ne 0) { throw "Could not inspect the Git stash in $Source." }
-
-Write-Host "Saving local changes before updating (safe when there are none)..."
-git -C $Source stash push --include-untracked --message "opencode-pp installer update $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
-if ($LASTEXITCODE -ne 0) { throw "Could not save local changes; no checkout was attempted." }
-
-$CurrentStash = (git -C $Source stash list --format=%H -1 | Out-String).Trim()
-if ($LASTEXITCODE -ne 0) { throw "Could not verify the saved Git stash in $Source." }
-$StashedLocalChanges = [bool]($CurrentStash -and $CurrentStash -ne $PreviousStash)
-
-try {
-  git -C $Source checkout --quiet --detach $Target
+  git -C $Source checkout --quiet --detach "origin/$Branch"
   if ($LASTEXITCODE -ne 0) { throw "git checkout failed." }
-} finally {
-  if ($StashedLocalChanges) {
-    Write-Host "Restoring local changes..."
-    $RestoreSucceeded = $false
-    try {
-      git -C $Source stash pop
-      $RestoreSucceeded = $LASTEXITCODE -eq 0
-    } catch {
-      $RestoreSucceeded = $false
-    }
-    if (-not $RestoreSucceeded) {
-      Write-Warning "Some local changes conflict with the updated source. The saved copy will remain in Git stash."
-      try {
-        git -C $Source reset --hard --quiet
-        if ($LASTEXITCODE -ne 0) { Write-Warning "Git could not clean the partially applied changes." }
-      } catch {
-        Write-Warning "Git could not clean the partially applied changes. Inspect the checkout before running the installer again."
-      }
-      Write-Host "Recover the saved work with: git -C `"$Source`" stash list"
-      Write-Host "Then inspect/apply the relevant stash after resolving the conflict."
-    }
-  }
+  $Version = "$Branch (no release yet)"
 }
 
 Write-Host "Installing dependencies..."

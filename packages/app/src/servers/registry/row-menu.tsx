@@ -9,7 +9,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 export const ServerRowMenu: Component<{
   server: ServerConnection.Any
   domain: ServerActionsController
-  onEdit: (server: ServerConnection.Http) => void
+  onEdit?: (server: ServerConnection.Http) => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }> = (props) => {
@@ -50,7 +50,7 @@ export const ServerRowMenuView: Component<{
   canRemove: boolean
   canHide?: boolean
   hidden?: boolean
-  onEdit: (server: ServerConnection.Http) => void
+  onEdit?: (server: ServerConnection.Http) => void
   onRemove: () => void
   onHide?: () => void
   onShow?: () => void
@@ -73,16 +73,20 @@ export const ServerRowMenuView: Component<{
         <Menu.Content>
           <Menu.Group>
             <Menu.GroupLabel>{props.labels.server}</Menu.GroupLabel>
-            <Menu.Item
-              disabled={builtin() || !httpServer()}
-              onSelect={() => {
-                const server = httpServer()
+            <Show when={props.onEdit}>
+              {(onEdit) => (
+                <Menu.Item
+                  disabled={builtin() || !httpServer()}
+                  onSelect={() => {
+                    const server = httpServer()
 
-                if (server) props.onEdit(server)
-              }}
-            >
-              {props.labels.edit}
-            </Menu.Item>
+                    if (server) onEdit()(server)
+                  }}
+                >
+                  {props.labels.edit}
+                </Menu.Item>
+              )}
+            </Show>
             <Show when={props.hidden}>
               <Menu.Item onSelect={props.onShow}>{props.labels.show}</Menu.Item>
             </Show>

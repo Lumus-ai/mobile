@@ -29,13 +29,9 @@ export function tellHostLeft(room: Pick<JoinedRoom, "url" | "token" | "roomID">)
 // session transcript and the data layer use, answered by the room's guest
 // routes. Everything else belongs to the host and rejects, so a component that
 // reaches past the slice fails loudly instead of touching this computer's server.
-// onLive runs once the first log connection has caught up with the host: events that came
-// while it replayed were skipped, so the view reloads what the host has now.
-export function guestApi(room: JoinedRoom, sessionID?: string, onLive?: () => void): OpenCodeClient {
+export function guestApi(room: JoinedRoom, sessionID?: string): OpenCodeClient {
   const remote = roomClient(room)
   const roomID = room.roomID
-  // Where this view's room log has read up to, so a reconnect only replays what it missed.
-  const cursor: { seq?: number } = {}
   const slice = {
     session: {
       get: () => remote.room.guest.get({ roomID, sessionID }).then((result) => result.session),
@@ -43,12 +39,6 @@ export function guestApi(room: JoinedRoom, sessionID?: string, onLive?: () => vo
       // same ID, so the row it echoes replaces the shown one instead of adding a second.
       prompt: (input: { id?: string; sessionID: string; text: string }) =>
         remote.room.guest.prompt({ roomID, sessionID: input.sessionID, id: input.id, text: input.text }),
-      // Whether the host model is working now, so a guest who opens a busy session sees it busy;
-      // later starts and ends arrive on the room log.
-      active: () =>
-        remote.room.guest
-          .messages({ roomID, sessionID })
-          .then((result) => (result.running && sessionID ? { [sessionID]: {} } : {})),
       inbox: { list: async () => [] },
       form: { list: async () => [] },
     },
@@ -77,7 +67,7 @@ export function guestApi(room: JoinedRoom, sessionID?: string, onLive?: () => vo
     form: { list: async () => [] },
     event: {
       subscribe: (options?: { signal?: AbortSignal; onActivity?: () => void }) =>
-        events(remote, roomID, sessionID, cursor, onLive, options),
+        events(remote, roomID, sessionID, options),
     },
   }
   // A typed client cannot be assembled from a slice; the proxy stands in for the rest of it.
@@ -85,39 +75,22 @@ export function guestApi(room: JoinedRoom, sessionID?: string, onLive?: () => vo
 }
 
 // The room log replays the session's history before following it. The data layer
-// loads that history itself, so only events after the replay pass through. The followed
-// log also carries live permission requests and the ephemeral stream fragments (text,
-// reasoning, tool input and progress), so a guest watches the host model work as it goes.
-//
-// server.connected goes out as soon as the log answers, not after the replay: the
-// connection gives up on a stream that has not connected within a couple of seconds, and
-// replaying a long session takes longer, so it kept reconnecting and never got live.
-// A reconnect resumes after the last durable event seen and passes the missed ones on.
+// loads that history itself, so only events after the replay pass through, led by
+// the server.connected the connection expects first. The followed log also carries the
+// session's live permission requests, so a guest sees one as soon as the host model asks.
 async function* events(
   remote: ReturnType<typeof roomClient>,
   roomID: string,
   sessionID: string | undefined,
-  cursor: { seq?: number },
-  onLive: (() => void) | undefined,
   options?: { signal?: AbortSignal; onActivity?: () => void },
 ) {
-  const resumed = cursor.seq !== undefined
-  const log = remote.room.guest
-    .log({ roomID, sessionID, follow: true, after: cursor.seq }, options)
-    [Symbol.asyncIterator]()
-  yield { id: "room", type: "server.connected" as const, data: {} }
-  let replaying = !resumed
+  const log = remote.room.guest.log({ roomID, sessionID, follow: true }, options)[Symbol.asyncIterator]()
   for (let item = await log.next(); !item.done; item = await log.next()) {
-    const value = item.value
-    if (value.type === "log.synced") {
-      if (value.seq !== undefined) cursor.seq = Math.max(cursor.seq ?? -1, value.seq)
-      if (replaying) onLive?.()
-      replaying = false
-      continue
-    }
-    if (replaying) continue
-    if ("durable" in value && value.durable) cursor.seq = Math.max(cursor.seq ?? -1, value.durable.seq)
-    yield value
+    if (item.value.type === "log.synced") break
+  }
+  yield { id: "room", type: "server.connected" as const, data: {} }
+  for (let item = await log.next(); !item.done; item = await log.next()) {
+    if (item.value.type !== "log.synced") yield item.value
   }
 }
 

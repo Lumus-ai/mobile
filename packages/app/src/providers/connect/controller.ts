@@ -478,7 +478,44 @@ export function createProviderConnectionController(options: {
     dispatch({ type: "method.reset" })
   }
 
+  // Cheap pre-save key validation against the provider itself (mobile ask:
+  // reject a wrong key in the dialog instead of failing later in chat).
+  // Only definitive auth rejections block the save; network/other errors
+  // fall through so an offline or unusual provider never locks the user out.
+  const KEY_CHECKS: Record<string, { url: string; headers: (key: string) => Record<string, string> }> = {
+    openrouter: { url: "https://openrouter.ai/api/v1/auth/key", headers: (key) => ({ authorization: `Bearer ${key}` }) },
+    openai: { url: "https://api.openai.com/v1/models", headers: (key) => ({ authorization: `Bearer ${key}` }) },
+    anthropic: {
+      url: "https://api.anthropic.com/v1/models",
+      headers: (key) => ({ "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }),
+    },
+    groq: { url: "https://api.groq.com/openai/v1/models", headers: (key) => ({ authorization: `Bearer ${key}` }) },
+    mistral: { url: "https://api.mistral.ai/v1/models", headers: (key) => ({ authorization: `Bearer ${key}` }) },
+  }
+
+  const checkKey = async (provider: string, key: string): Promise<string | undefined> => {
+    if (provider === "google") {
+      const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`)
+        .then((response) => response.status)
+        .catch(() => undefined)
+      if (result === undefined) return undefined
+      return result === 400 || result === 403 ? language.t("provider.connect.error.invalidKey") : undefined
+    }
+    const check = KEY_CHECKS[provider]
+    if (!check) return undefined
+    const status = await fetch(check.url, { headers: check.headers(key) })
+      .then((response) => response.status)
+      .catch(() => undefined)
+    if (status === undefined) return undefined
+    return status === 401 || status === 403 ? language.t("provider.connect.error.invalidKey") : undefined
+  }
+
   const connectKey = async (key: string) => {
+    const invalid = await checkKey(options.keyProvider?.() ?? options.provider(), key).catch(() => undefined)
+    if (invalid) {
+      dispatch({ type: "auth.error", error: invalid })
+      return
+    }
     await serverSDK.api.integration.connect.key({
       integrationID: options.keyProvider?.() ?? options.provider(),
       location: location(),

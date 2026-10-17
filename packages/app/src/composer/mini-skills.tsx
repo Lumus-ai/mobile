@@ -308,13 +308,28 @@ export function ComposerMiniSkills(props: ParentProps<{ model: ComposerModel }>)
       </Show>
 
       <Show when={ui.manageOpen}>
-        <section class="flex flex-col gap-3 rounded-lg border border-border-weak-base bg-background-base p-3">
-          <div class="flex items-center justify-between gap-3">
+        <section
+          class="flex max-h-[46vh] flex-col gap-3 overflow-y-auto rounded-lg border border-border-weak-base bg-background-base px-3 pb-3"
+          style={{ "-webkit-overflow-scrolling": "touch" }}
+        >
+          <div class="sticky top-0 z-10 -mx-3 mb-0 flex items-center justify-between gap-3 bg-background-base px-3 pb-1 pt-3">
             <h3 class="text-[13px] font-medium leading-4 text-text-base">{language.t("composer.miniSkills.manage")}</h3>
-            <Button type="button" size="small" variant="ghost-muted" onClick={beginCreate}>
-              <Icon name="plus" size="small" />
-              {language.t("composer.miniSkills.add")}
-            </Button>
+            <div class="flex items-center gap-1">
+              <Button type="button" size="small" variant="ghost-muted" onClick={beginCreate}>
+                <Icon name="plus" size="small" />
+                {language.t("composer.miniSkills.add")}
+              </Button>
+              <Button
+                type="button"
+                size="small"
+                variant="ghost-muted"
+                onClick={() => setUI("manageOpen", false)}
+                aria-label={language.t("common.close")}
+                title={language.t("common.close")}
+              >
+                <Icon name="close" size="small" />
+              </Button>
+            </div>
           </div>
 
           <Show when={settings.items.length === 0}>

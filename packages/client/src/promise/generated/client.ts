@@ -283,10 +283,6 @@ import type {
   ConfigShellsOutput,
   ConfigUpdateInput,
   ConfigUpdateOutput,
-  ConfigCompatibilityGetInput,
-  ConfigCompatibilityGetOutput,
-  ConfigCompatibilityUpdateInput,
-  ConfigCompatibilityUpdateOutput,
   RoomListOutput,
   RoomCreateInput,
   RoomCreateOutput,
@@ -861,7 +857,7 @@ export function make(options: ClientOptions) {
               resume: input["resume"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409, 422],
+            declaredStatuses: [400, 401, 404, 409],
             empty: false,
           },
           requestOptions,
@@ -2479,45 +2475,13 @@ export function make(options: ClientOptions) {
           {
             method: "PATCH",
             path: `/api/experimental/config`,
-            body: {
-              shell: input?.["shell"],
-              model: input?.["model"],
-              mcpServers: input?.["mcpServers"],
-              compatibilityEnabled: input?.["compatibilityEnabled"],
-            },
+            body: { shell: input?.["shell"], model: input?.["model"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
           },
           requestOptions,
         ),
-      compatibility: {
-        get: (input?: ConfigCompatibilityGetInput, requestOptions?: RequestOptions) =>
-          request<ConfigCompatibilityGetOutput>(
-            {
-              method: "GET",
-              path: `/api/config/compatibility`,
-              query: { location: input?.["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ),
-        update: (input: ConfigCompatibilityUpdateInput, requestOptions?: RequestOptions) =>
-          request<ConfigCompatibilityUpdateOutput>(
-            {
-              method: "POST",
-              path: `/api/config/compatibility`,
-              query: { location: input["location"] },
-              body: { ecosystem: input["ecosystem"], enabled: input["enabled"], trusted: input["trusted"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ),
-      },
     },
     room: {
       list: (requestOptions?: RequestOptions) =>
@@ -2672,7 +2636,7 @@ export function make(options: ClientOptions) {
               requestOptions,
             ),
           list: (input: RoomGuestSessionListInput, requestOptions?: RequestOptions) =>
-            request<RoomGuestSessionListOutput>(
+            request<{ readonly data: RoomGuestSessionListOutput }>(
               {
                 method: "GET",
                 path: `/api/room/${encodeURIComponent(input.roomID)}/guest/session`,
@@ -2681,7 +2645,7 @@ export function make(options: ClientOptions) {
                 empty: false,
               },
               requestOptions,
-            ),
+            ).then((value) => value.data),
           create: (input: RoomGuestSessionCreateInput, requestOptions?: RequestOptions) =>
             request<{ readonly data: RoomGuestSessionCreateOutput }>(
               {
@@ -3137,12 +3101,7 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/orchestra/template`,
-              body: {
-                name: input["name"],
-                description: input["description"],
-                members: input["members"],
-                playbook: input["playbook"],
-              },
+              body: { name: input["name"], description: input["description"], members: input["members"] },
               successStatus: 200,
               declaredStatuses: [400, 401],
               empty: false,
@@ -3154,12 +3113,7 @@ export function make(options: ClientOptions) {
             {
               method: "PUT",
               path: `/api/orchestra/template/${encodeURIComponent(input.templateID)}`,
-              body: {
-                name: input["name"],
-                description: input["description"],
-                members: input["members"],
-                playbook: input["playbook"],
-              },
+              body: { name: input["name"], description: input["description"], members: input["members"] },
               successStatus: 200,
               declaredStatuses: [400, 401],
               empty: false,
@@ -3202,11 +3156,6 @@ export function make(options: ClientOptions) {
                 category: input["category"],
                 readOnly: input["readOnly"],
                 model: input["model"],
-                models: input["models"],
-                tools: input["tools"],
-                autoTools: input["autoTools"],
-                hub: input["hub"],
-                registry: input["registry"],
               },
               successStatus: 200,
               declaredStatuses: [400, 401],
@@ -3226,11 +3175,6 @@ export function make(options: ClientOptions) {
                 category: input["category"],
                 readOnly: input["readOnly"],
                 model: input["model"],
-                models: input["models"],
-                tools: input["tools"],
-                autoTools: input["autoTools"],
-                hub: input["hub"],
-                registry: input["registry"],
               },
               successStatus: 200,
               declaredStatuses: [400, 401],

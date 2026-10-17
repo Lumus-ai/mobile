@@ -7,7 +7,7 @@ export interface Adapter {
   readonly getAgent: () => Effect.Effect<SessionMessage.AgentSelected["agent"] | undefined>
   readonly getModel: () => Effect.Effect<SessionMessage.ModelSelected["model"] | undefined>
   readonly getLocation: () => Effect.Effect<SessionMessage.LocationSwitched["previous"]>
-  readonly getLatestAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
+  readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getShell: (shellID: SessionMessage.Shell["shellID"]) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
@@ -50,10 +50,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       yield* adapter.updateAssistant(produce(assistant, recipe))
     })
 
-  // A failed step is already completed when its retry is scheduled, and a continuation retry runs as a new
-  // step, so the pending retry lives on the latest assistant whether or not it completed.
   const clearCurrentRetry = Effect.gen(function* () {
-    const assistant = yield* adapter.getLatestAssistant()
+    const assistant = yield* adapter.getCurrentAssistant()
     if (!assistant?.retry) return
     yield* adapter.updateAssistant(
       produce(assistant, (draft) => {
@@ -234,12 +232,12 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             )
             return
           }
-          const latestAssistant = yield* adapter.getLatestAssistant()
-          if (latestAssistant && (latestAssistant.retry || !latestAssistant.time.completed)) {
+          const currentAssistant = yield* adapter.getCurrentAssistant()
+          if (currentAssistant) {
             yield* adapter.updateAssistant(
-              produce(latestAssistant, (draft) => {
+              produce(currentAssistant, (draft) => {
                 draft.retry = undefined
-                draft.time.completed ??= created
+                draft.time.completed = created
               }),
             )
           }

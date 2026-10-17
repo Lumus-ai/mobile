@@ -22,8 +22,6 @@ import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { useServerCollectionController } from "@/servers/registry/controller"
-import { AddServerMenu } from "@/servers/registry/add-menu"
-import { DialogServer } from "@/servers/connect/dialog"
 import { LocationProvider } from "@/workspaces/location"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
@@ -94,6 +92,28 @@ const nestedProjectTabs = [
 
 export function SettingsScreen() {
   const surface = useSettingsSurface()
+  // Android system back button: MainActivity dispatches "app-back-button"
+  // into the page; close the settings surface instead of killing the app.
+  onMount(() => {
+    const onAppBack = () => {
+      if (!surface.active) return
+      ;(window as { __APP_BACK_HANDLED__?: boolean }).__APP_BACK_HANDLED__ = true
+      // An open dropdown/popover swallows taps behind it; system back should
+      // close the topmost overlay first, not the whole settings surface.
+      const open = document.querySelector(
+        '[data-scope="menu"][data-state="open"], [data-scope="popover"][data-state="open"], [data-scope="dialog"][data-state="open"], [role="dialog"], [role="menu"], [role="listbox"]',
+      )
+      if (open) {
+        const esc = { key: "Escape", code: "Escape", bubbles: true, cancelable: true } as const
+        open.dispatchEvent(new KeyboardEvent("keydown", esc))
+        document.dispatchEvent(new KeyboardEvent("keydown", esc))
+        return
+      }
+      surface.close()
+    }
+    window.addEventListener("app-back-button", onAppBack)
+    onCleanup(() => window.removeEventListener("app-back-button", onAppBack))
+  })
   const dialog = useDialog()
   const servers = useSettingsServers()
   const loaded = useSettingsServersLoaded()
@@ -276,12 +296,10 @@ function RootSettings() {
     if (view.tab === "experimental" && !experimentalSettingsAvailable) surface.open("general")
 
     if (view.tab === "gui-extensions" && !guiExtensions) surface.open("general")
+
+    if (view.tab === "servers" && import.meta.env.VITE_OPENCODE_SERVER_MODE === "none") surface.open("general")
   })
 
-  const addServer = () =>
-    void dialog.push(() => (
-      <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
-    ))
 
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
@@ -298,7 +316,6 @@ function RootSettings() {
       ? [
           {
             label: language.t("settings.tab.servers"),
-            action: <AddServerMenu compact onAddServer={addServer} />,
             items: ordered().map((server) => ({
               value: `server:${server.key}`,
               icon: "server" as const,
@@ -315,7 +332,9 @@ function RootSettings() {
                 disabled: !single(),
                 onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
               })),
-              { value: "servers", icon: "server" as const, label: language.t("settings.section.server") },
+              ...(import.meta.env.VITE_OPENCODE_SERVER_MODE === "none"
+                ? []
+                : [{ value: "servers", icon: "server" as const, label: language.t("settings.section.server") }]),
             ],
           },
         ]),
@@ -353,7 +372,6 @@ function RootSettings() {
       backLabel={language.t("settings.backToApp")}
       onBack={() => surface.close()}
       onChange={change}
-      mobileAction={multiple() ? <AddServerMenu compact onAddServer={addServer} /> : undefined}
     >
       <Tabs.Content value="general" class="settings-panel">
         <SettingsGeneral />
@@ -427,7 +445,7 @@ function RootSettings() {
       <Show when={singleEntry()}>
         {(entry) => (
           <Tabs.Content value="servers" class="settings-panel">
-            <SettingsServerGeneral entry={entry()} onAddServer={addServer} />
+            <SettingsServerGeneral entry={entry()}  />
           </Tabs.Content>
         )}
       </Show>

@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { batch, createMemo } from "solid-js"
+import { createEffect, batch, createMemo } from "solid-js"
 import { type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { pathKey } from "@/workspaces/path-key"
@@ -19,7 +19,9 @@ export function normalizeServerUrl(input: string) {
   if (!trimmed) return
   const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
 
-  return withProtocol.replace(/\/+$/, "")
+  // One loopback server: "localhost" and "127.0.0.1" are the same on-device
+  // server; keeping both creates duplicate server entries (v13.13).
+  return withProtocol.replace(/\/+$/, "").replace(/^http:\/\/localhost([:/]|$)/, "http://127.0.0.1$1")
 }
 
 export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = false) {
@@ -224,6 +226,25 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       serverState(() => props.canonicalLocalServer),
       { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} },
     )
+
+    // Built-in default: the on-phone server (Termux now, embedded later). No pairing UI exists
+    // in this build, so an empty server list always falls back to the local server address.
+    // The server fork always requires a password, so the app and the embedded server share a
+    // fixed one; a Termux server must run with OPENCODE_SERVER_PASSWORD=opencode-plus-plus.
+    createEffect(() => {
+      if (!hydrated()) return
+      if (props.servers?.length) return
+      // Embedded builds hand the real per-launch password through window; standalone
+      // mode and Termux keep the fixed one (see note above).
+      const embedded = (window as { __OPENCODE_EMBEDDED__?: { password: string } }).__OPENCODE_EMBEDDED__
+      const password = embedded?.password ?? "opencode-plus-plus"
+      const idx = store.list.findIndex((x) => x.type === "http" && x.http.url === "http://127.0.0.1:4096")
+      if (store.list.length === 0) {
+        setStore("list", [{ type: "http", http: { url: "http://127.0.0.1:4096", password } }])
+      } else if (idx !== -1 && store.list[idx].http.password !== password) {
+        setStore("list", idx, { type: "http", http: { url: "http://127.0.0.1:4096", password } })
+      }
+    })
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       return resolveServerList({ stored: store.list, props: props.servers })

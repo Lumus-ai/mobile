@@ -23,6 +23,52 @@
   >
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root" class="flex flex-col h-dvh bg-v2-background-bg-deep p-px"></div>
+    <div id="boot-splash" style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#121212;color:#e8e8e8;font-family:monospace;gap:12px">
+      <div style="font-size:18px;letter-spacing:2px">OPENCODE++</div>
+      <div id="boot-status" style="font-size:12px;opacity:0.7">Запуск сервера… / Starting server…</div>
+    </div>
+    <script>
+      window.__setBootStatus = function (t) {
+        var el = document.getElementById("boot-status");
+        if (el) el.textContent = t;
+      };
+      window.__removeBootSplash = function () {
+        var el = document.getElementById("boot-splash");
+        if (el) el.remove();
+      };
+      window.__setServerStatus = function (state, detail) {
+        var el = document.getElementById("server-status");
+        if (!el) {
+          el = document.createElement("div");
+          el.id = "server-status";
+          el.style.cssText =
+            "position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);left:50%;transform:translateX(-50%);z-index:9998;padding:3px 10px;border-radius:999px;font-family:monospace;font-size:11px;pointer-events:auto;max-width:90vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+          document.body.appendChild(el);
+          el.onclick = function () {
+            var d = el.getAttribute("data-detail");
+            if (d) {
+              if (navigator.clipboard) navigator.clipboard.writeText(d).catch(function () {});
+              el.textContent = "Скопировано";
+              setTimeout(function () { window.__setServerStatus(el.getAttribute("data-state"), d); }, 1200);
+            }
+          };
+        }
+        el.setAttribute("data-state", state || "");
+        el.setAttribute("data-detail", detail || "");
+        if (state === "running") {
+          el.style.background = "#123a1e"; el.style.color = "#7fd49a"; el.style.border = "1px solid #2a6b40";
+          el.textContent = "● Сервер запущен / Server running";
+          clearTimeout(window.__serverStatusTimer);
+          window.__serverStatusTimer = setTimeout(function () { el.remove(); }, 3000);
+        } else if (state === "error") {
+          el.style.background = "#3a1218"; el.style.color = "#f09aa2"; el.style.border = "1px solid #7a3038";
+          el.textContent = "● Ошибка сервера — нажми, чтобы скопировать";
+        } else {
+          el.style.background = "#3a3012"; el.style.color = "#e8cf7f"; el.style.border = "1px solid #6b5a2a";
+          el.textContent = "● Сервер запускается… / Server starting…";
+        }
+      };
+    </script>
     <script src="/src/entry.tsx" type="module"></script>
   </body>
 </html>

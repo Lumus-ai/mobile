@@ -9,13 +9,11 @@ import { Passport } from "@opencode/core/passport"
 import { Dod } from "@opencode/core/dod"
 import path from "node:path"
 import { Session } from "@opencode/core/session"
-import { SessionEvent } from "@opencode/schema/session-event"
 import { Model } from "@opencode/core/model"
 import { Agent } from "@opencode/core/agent"
 import { Command } from "@opencode/core/command"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Orchestra } from "@opencode/schema/orchestra"
-import { Orchestra as OrchestraService } from "@opencode/core/orchestra"
 import {
   CommandExecutionError,
   CommandNotFoundError,
@@ -76,15 +74,9 @@ const MEMBER_LIMIT = 100
 // cohost or helper cannot approve its own command.
 const HOST_ONLY = new Set(["room.run", "room.check"])
 
-// The live events a following guest log adds to the durable ones. Stream fragments (text,
-// reasoning, tool input, compaction) and tool progress are ephemeral, so they never appear in
-// the durable replay even though the UI needs them to show the host model working live.
-const RoomLiveEvent = Schema.Union([
-  Permission.Event.Asked,
-  Permission.Event.Replied,
-  ...SessionEvent.EphemeralDefinitions,
-])
-const decodeRoomLiveEvent = Schema.decodeUnknownOption(RoomLiveEvent)
+// The live events a following guest log adds to the durable ones.
+const PermissionEvent = Schema.Union([Permission.Event.Asked, Permission.Event.Replied])
+const decodePermissionEvent = Schema.decodeUnknownOption(PermissionEvent)
 
 // Control and format characters in a name would reach the host's terminal, notes and feed.
 const UNSAFE_NAME = /[\p{Cc}\p{Cf}\u2028\u2029]/u
@@ -138,7 +130,6 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
     const peers = yield* Peer.Service
     const plots = yield* Plot.Service
     const bus = yield* Bus.Service
-    const orchestra = yield* OrchestraService.Service
 
     // Guest routes skip the server credential; the room token is the only proof,
     // and it only opens the room it was issued for, while the host keeps its guest a member.
@@ -460,14 +451,14 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           if (!ctx.query.follow) return durable
           // Permission requests are not in the durable log; a following guest hears this session's
           // live ones too, instead of polling for them.
-          const live = Stream.callback<typeof RoomLiveEvent.Type>((queue) =>
+          const live = Stream.callback<typeof PermissionEvent.Type>((queue) =>
             Effect.acquireRelease(
               bus.listen((event) =>
                 Effect.sync(() =>
-                  // Only transcript/permission events for this room's session leave the host.
-                  // The JSON round trip omits optional fields and keeps the host's location private.
+                  // Only what the guest needs: the host's location stays on the host. The JSON round
+                  // trip drops optional fields held as undefined, as the event feed's frames do.
                   Option.filter(
-                    decodeRoomLiveEvent(
+                    decodePermissionEvent(
                       JSON.parse(
                         JSON.stringify({ id: event.id, created: event.created, type: event.type, data: event.data }),
                       ),
@@ -790,9 +781,9 @@ export const RoomHandler = HttpApiBuilder.group(Api, "server.room", (handlers) =
           if (directory === undefined)
             return { data: Option.toArray(yield* sessions.get(joined.room.sessionID).pipe(Effect.option)) }
           const page = yield* sessions.list({ parentID: null, limit: SESSION_LIMIT })
-          const data = page.data.filter((session) => Orchestra.contains(directory, session.location.directory))
-          // The host's grouping, so a guest's tree shows the same categories as the host's.
-          return { data, category: yield* orchestra.categories(data.map((session) => session.id)) }
+          return {
+            data: page.data.filter((session) => Orchestra.contains(directory, session.location.directory)),
+          }
         }),
       )
       .handle(

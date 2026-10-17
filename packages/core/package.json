@@ -115,7 +115,6 @@
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
     "@standard-schema/spec": "catalog:",
-    "@types/sql.js": "1.4.11",
     "@vscode/ripgrep": "1.18.0",
     "bun-pty": "0.4.9",
     "diff": "catalog:",
@@ -131,12 +130,10 @@
     "jose": "6.0.11",
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
-    "sql.js": "1.14.2",
     "tree-sitter-bash": "0.25.0",
     "tree-sitter-powershell": "0.25.10",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
-    "yaml": "2.9.1",
     "zod": "catalog:"
   }
 }

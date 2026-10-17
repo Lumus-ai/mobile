@@ -1,4 +1,4 @@
-import { Route, useParams } from "@solidjs/router"
+import { useLocation, Route, useParams } from "@solidjs/router"
 import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
@@ -19,8 +19,8 @@ const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ 
 
 const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 
-const ConnectServerScreen = lazy(() =>
-  import("@/servers/connect/screen").then((module) => ({ default: module.ConnectServerScreen })),
+const OfflineHomeScreen = lazy(() =>
+  import("@/servers/connect/offline-screen").then((module) => ({ default: module.OfflineHomeScreen })),
 )
 
 const TargetSessionRouteContent = lazy(() =>
@@ -86,6 +86,15 @@ function TargetServerRoute(props: ParentProps) {
 function AppLayout(props: ParentProps) {
   const servers = useServers()
   const global = useGlobal()
+  const location = useLocation()
+  // Settings must always open, even with no reachable server: the full settings stack
+  // renders on the launch-screen branch too (server-dependent sections just show empty).
+  const settingsPath = () => location.pathname === "/settings"
+
+  // The shell only mounts when every saved server answers; an unreachable (or not-yet-embedded)
+  // server leaves the app on the launch screen. Health polls every 10s, so the app flips on its own.
+  const reachable = () =>
+    servers.list.every((server) => global.servers.health[ServerConnection.key(server)]?.healthy !== false)
 
   // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show.
   const signedOut = () => {
@@ -97,7 +106,22 @@ function AppLayout(props: ParentProps) {
   }
 
   return (
-    <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
+    <Show
+      when={servers.list.length > 0 && !signedOut() && reachable()}
+      fallback={
+        // No pairing UI in this build: with no reachable server, stay on the launch screen quietly.
+        <Show
+          when={settingsPath()}
+          fallback={<OfflineHomeScreen />}
+        >
+          <LayoutProvider>
+            <SettingsSurfaceProvider>
+              <SettingsScreen />
+            </SettingsSurfaceProvider>
+          </LayoutProvider>
+        </Show>
+      }
+    >
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <ExtensionAttachment>

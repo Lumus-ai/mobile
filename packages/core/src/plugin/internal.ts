@@ -29,7 +29,6 @@ import { ConfigShellPlugin } from "../config/plugin/shell.js"
 import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
 import { ConfigSkillPlugin } from "../config/plugin/skill.js"
 import { ConfigCompatibilityPlugin } from "../config/plugin/compatibility.js"
-import { ClaudeHooksPlugin } from "../compat/claude/hooks/plugin.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
 import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
@@ -76,10 +75,6 @@ import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { HubTool } from "../tool/plugin/hub.js"
 import { OrchestraTool } from "../tool/plugin/orchestra.js"
-import { TeamForgeTool } from "../tool/plugin/team-forge.js"
-import { CommandForgeTool } from "../tool/plugin/command-forge.js"
-import { DesktopTool } from "../tool/plugin/desktop.js"
-import { McpCatalog } from "../mcp/catalog.js"
 import { Orchestra } from "../orchestra.js"
 import { PeerTool } from "../tool/plugin/peer.js"
 import { Peer } from "../peer.js"
@@ -271,10 +266,6 @@ const pre = [
   ReadTool.Plugin,
   HubTool.Plugin,
   OrchestraTool.Plugin,
-  TeamForgeTool.Plugin,
-  CommandForgeTool.Plugin,
-  DesktopTool.Plugin,
-  McpCatalog.Plugin,
   PeerTool.Plugin,
   PlotTool.Plugin,
   ShellTool.Plugin,
@@ -303,7 +294,6 @@ const post = [
   ConfigSnapshotPlugin.Plugin,
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,
-  ClaudeHooksPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   ConfigWebSearchPlugin.Plugin,

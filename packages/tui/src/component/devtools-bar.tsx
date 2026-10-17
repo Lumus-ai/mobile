@@ -536,13 +536,6 @@ export function DevToolsBar() {
               <RegistryPanel
                 onClose={() => dialog.clear()}
                 onShell={(shell) => void client.api.config.update({ shell }).catch(toast.error)}
-                aiTools={{
-                  installed: () =>
-                    (data.location.mcp.server.list(location.ref ?? data.location.default()) ?? []).map(
-                      (server) => server.name,
-                    ),
-                  set: (id, config) => client.api.config.update({ mcpServers: { [id]: config } }),
-                }}
               />
             ),
             undefined,

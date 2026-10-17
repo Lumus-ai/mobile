@@ -2,7 +2,6 @@ import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Schedule, Schema, Scope, Stream } from "effect"
 import { Money } from "@opencode/schema/money"
 import { Event } from "@opencode/schema/event"
-import { Form } from "@opencode/schema/form"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -37,7 +36,6 @@ import { SandboxPlugin } from "@opencode/core/plugin/sandbox"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import { agentHost, host } from "./plugin/host"
 import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
-import type { SessionContext } from "@opencode/plugin/effect/session"
 
 const model = Model.Ref.make({ id: Model.ID.make("member"), providerID: Provider.ID.make("test") })
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -204,9 +202,7 @@ describe("Orchestra sandbox project", () => {
 
       expect(project.sandbox).toMatchObject({ source: tmp.path, isolation: "environment" })
       expect(project.directory).toBe(path.join(project.sandbox!.home, "repo"))
-      // Git may check the file out with CRLF on Windows (core.autocrlf).
-      const readme = yield* Effect.promise(() => Bun.file(path.join(project.directory, "README.md")).text())
-      expect(readme.replaceAll("\r\n", "\n")).toBe("source\n")
+      expect(yield* Effect.promise(() => Bun.file(path.join(project.directory, "README.md")).text())).toBe("source\n")
       expect(yield* Effect.promise(() => Bun.file(path.join(project.directory, Dod.FILE)).exists())).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, Dod.FILE)).exists())).toBe(false)
       expect((yield* orchestra.projects()).find((item) => item.id === project.id)?.sandbox).toEqual(project.sandbox)
@@ -281,28 +277,6 @@ describe("Orchestra team", () => {
       expect(main.title).toBe("No team · Orchestrator")
       expect(main.agent).toBe(Orchestra.agent)
       expect(yield* orchestra.mainOf(main.id)).toMatchObject({ id: project.id })
-    }),
-  )
-
-  it.live("gives the orchestrator the playbook of the team the project was opened with", () =>
-    Effect.gen(function* () {
-      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-playbook-")))
-      const orchestra = yield* Orchestra.Service
-      const mobile = yield* orchestra.create({ name: "Phone", directory: tmp.path, template: "mobile-app" })
-      const plain = yield* orchestra.create({ name: "Plain", directory: tmp.path })
-
-      const playbook = yield* orchestra.playbook(mobile.id)
-      expect(playbook?.name).toBe("Mobile app")
-      expect(playbook?.text).toContain("mobile-developer")
-      expect(yield* orchestra.playbook(plain.id)).toBeUndefined()
-
-      // An edited template's own playbook replaces the built-in one for projects opened from it.
-      const template = (yield* orchestra.templates()).find((item) => item.id === "mobile-app")!
-      yield* orchestra.saveTemplate("mobile-app", { ...template, playbook: "Ship the Flutter app only." })
-      expect((yield* orchestra.playbook(mobile.id))?.text).toBe("Ship the Flutter app only.")
-
-      yield* orchestra.remove(mobile.id)
-      expect(yield* orchestra.playbook(mobile.id)).toBeUndefined()
     }),
   )
 
@@ -803,68 +777,6 @@ describe("Orchestra team", () => {
       yield* sessions.prompt({ sessionID: developer.id, text: "operator's own question" })
       yield* Effect.sleep("50 millis")
       expect(yield* reports(main)).toHaveLength(1)
-    }).pipe(Effect.scoped),
-  )
-
-  it.live("forwards a worker's question during a dispatched task to the orchestrator", () =>
-    Effect.gen(function* () {
-      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-team-")))
-      const orchestra = yield* Orchestra.Service
-      const bus = yield* Bus.Service
-      const sessions = yield* Session.Service
-      const project = yield* orchestra.create({ name: "Team", directory: tmp.path, template: "bugfix" })
-      const members = yield* orchestra.sessions(project.id)
-      const developer = members.find((session) => session.title === "Developer")!
-      const tester = members.find((session) => session.title === "Tester")!
-      // Keep the task outstanding, as it is while the worker waits for an answer.
-      deferTaskDelivery.add(developer.id)
-      yield* Effect.addFinalizer(() => Effect.sync(() => deferTaskDelivery.delete(developer.id)))
-      yield* orchestra.dispatch({ project, sessionID: developer.id, text: "Fix the bug" })
-      const ask = (sessionID: Session.ID) =>
-        bus.publish(Form.Event.Created, {
-          form: {
-            id: Form.ID.create(),
-            sessionID,
-            title: "Questions",
-            metadata: { kind: "question" },
-            fields: [
-              {
-                key: "q0",
-                type: "string",
-                title: "Database",
-                description: "Which database should the fix target?",
-                options: [
-                  { value: "Postgres", label: "Postgres", description: "Production" },
-                  { value: "SQLite", label: "SQLite" },
-                ],
-                custom: true,
-              },
-            ],
-          },
-        })
-      // A session without an outstanding task is the operator's own conversation.
-      yield* ask(tester.id)
-      yield* ask(developer.id)
-      const questions = (sessionID: Session.ID) =>
-        sessions
-          .inbox(sessionID)
-          .pipe(
-            Effect.map((inbox) =>
-              inbox.flatMap((item) =>
-                item.type === "synthetic" && item.payload.text.startsWith("<team-question") ? [item.payload.text] : [],
-              ),
-            ),
-          )
-      const [question] = yield* questions(project.main!).pipe(
-        Effect.filterOrFail((found) => found.length > 0),
-        Effect.retry(Schedule.spaced("10 millis")),
-        Effect.timeout("2 seconds"),
-      )
-      expect(question).toContain(`session="${developer.id}"`)
-      expect(question).toContain("Which database should the fix target?")
-      expect(question).toContain("- Postgres: Production")
-      expect(question).toContain("- SQLite")
-      expect(yield* questions(project.main!)).toHaveLength(1)
     }).pipe(Effect.scoped),
   )
 
@@ -1591,16 +1503,9 @@ describe("Orchestra team", () => {
       const orchestra = yield* Orchestra.Service
       const agents = yield* Agent.Service
       const hooks: Array<(event: PermissionEvaluation) => Effect.Effect<void>> = []
-      const contexts: Array<(event: SessionContext) => Effect.Effect<void>> = []
       yield* TeamPlugin.Plugin.effect(
         host({
           agent: agentHost(agents),
-          session: {
-            hook: ((name: string, callback: (event: SessionContext) => Effect.Effect<void>) =>
-              Effect.sync(() => {
-                if (name === "context") contexts.push(callback)
-              }).pipe(Effect.as({ dispose: Effect.void }))) as never,
-          },
           permission: {
             hook: (_, callback) => Effect.sync(() => hooks.push(callback)).pipe(Effect.as({ dispose: Effect.void })),
             list: () => Effect.die("unused permission.list"),
@@ -1671,45 +1576,6 @@ describe("Orchestra team", () => {
         Effect.retry(Schedule.spaced("10 millis")),
         Effect.timeout("2 seconds"),
       )
-
-      // A role limited to some tools keeps that limit even where config allows a tool for everyone.
-      const scout = yield* orchestra.saveRole(undefined, {
-        name: "Scout",
-        description: "Looks around",
-        rules: "",
-        category: "Planning",
-        readOnly: false,
-        tools: ["read", "grep", " grep ", "context7_*"],
-        hub: ["git"],
-      })
-      expect(scout.tools).toEqual(["read", "grep", "context7_*"])
-      const scoutAgent = yield* agents.get(scout.agent).pipe(
-        Effect.filterOrFail((item) => item !== undefined),
-        Effect.retry(Schedule.spaced("10 millis")),
-        Effect.timeout("2 seconds"),
-      )
-      expect(scoutAgent.permissions).toContainEqual({ action: "*", resource: "*", effect: "deny" })
-      expect(scoutAgent.permissions).toContainEqual({ action: "grep", resource: "*", effect: "allow" })
-      expect(yield* evaluate(scout.agent, "shell")).toBe("deny")
-      expect(yield* evaluate(scout.agent, "edit")).toBe("deny")
-      expect(yield* evaluate(scout.agent, "read")).toBe("allow")
-      // other actions, such as asking the operator, are not tools and stay untouched
-      expect(yield* evaluate(scout.agent, "question")).toBe("allow")
-      yield* orchestra.removeRole(scout.id)
-
-      // The Orchestrator and its team read the project's shared notes with every request.
-      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-orchestra-notes-")))
-      const project = yield* orchestra.create({ name: "Notes", directory: tmp.path })
-      const context = (agent: Agent.ID) =>
-        Effect.gen(function* () {
-          const event = { sessionID: project.main!, agent, system: [], tools: {} } as unknown as SessionContext
-          yield* Effect.forEach(contexts, (hook) => hook(event), { discard: true })
-          return event.system.map((part) => (part.type === "text" ? part.text : "")).join(" ")
-        })
-      expect(yield* context(Orchestra.agent)).toContain("The team has no notes yet")
-      yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".opencode", "team-notes.md"), "Build: bun run build"))
-      expect(yield* context(Orchestra.agent)).toContain("Build: bun run build")
-      expect(yield* context(Agent.ID.make("build"))).toBe("")
     }).pipe(Effect.scoped),
   )
 })

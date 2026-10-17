@@ -3,7 +3,7 @@ import { batch, createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
-import { useCommand } from "@/shell/commands/command"
+import { sessionHref } from "@/shell/routes/session"
 import { createSettingsPages } from "@/runtime/extension/settings-pages"
 import { useSettingsServers } from "./servers/inventory"
 import {
@@ -36,7 +36,6 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
   init: () => {
     const navigate = useNavigate()
     const layout = useLayout()
-    const command = useCommand()
     const servers = useSettingsServers()
 
     const location = useLocation<{
@@ -46,6 +45,25 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     const extensions = createSettingsPages()
     const open = () => layout.route().type === "settings"
     const source = () => location.state?.settings?.route ?? { type: "home" as const }
+
+    // Where closing settings returns to. Navigated directly instead of via the
+    // titlebar's "common.goBack" command: settings also renders without the
+    // shell (no reachable server), where that command is not registered and
+    // the close was a silent no-op (v13.14: dead "Back to app" on Android).
+    const exitUrl = () => {
+      const route = source()
+
+      if (route.type === "session") return sessionHref(route.server, route.sessionId)
+
+      if (route.type === "draft") return `/new-session?draftId=${encodeURIComponent(route.draftID)}`
+
+      return "/"
+    }
+
+    const closeSurface = () => {
+      if (!open()) return
+      navigate(exitUrl(), { replace: true })
+    }
 
     const view = () =>
       parseSettingsView(location.search, servers().length > 1, location.state?.settings?.view, extensions.tabs())
@@ -176,7 +194,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
         const current = view()
 
         if (current.type === "root") {
-          command.trigger("common.goBack")
+          closeSurface()
 
           return
         }
@@ -188,9 +206,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
 
         show(parent)
       },
-      close() {
-        if (open()) command.trigger("common.goBack")
-      },
+      close: closeSurface,
     }
   },
 })

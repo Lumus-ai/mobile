@@ -5,6 +5,7 @@ import "./mobile-drawer.css"
 
 export function MobileDrawer(
   props: ParentProps<{
+    side?: "bottom" | "left"
     open: boolean
     onOpenChange: (open: boolean) => void
     onContentPresentChange?: (present: boolean) => void
@@ -19,7 +20,7 @@ export function MobileDrawer(
       open={props.open}
       onOpenChange={props.onOpenChange}
       onContentPresentChange={props.onContentPresentChange}
-      side="bottom"
+      side={props.side ?? "bottom"}
       initialFocusEl={props.initialFocus?.()}
       finalFocusEl={props.returnFocus?.()}
       onFinalFocus={props.onFinalFocus}
@@ -32,13 +33,13 @@ export function MobileDrawer(
 
 export const MobileDrawerTrigger = Drawer.Trigger
 
-export function MobileDrawerContent(props: ParentProps) {
+export function MobileDrawerContent(props: ParentProps<{ side?: "bottom" | "left" }>) {
   const language = useLanguage()
 
   return (
     <Drawer.Portal forceMount>
       <Drawer.Overlay data-slot="mobile-drawer-overlay" />
-      <Drawer.Content forceMount data-slot="mobile-drawer-content" dir={language.direction()}>
+      <Drawer.Content forceMount data-slot="mobile-drawer-content" data-side={props.side ?? "bottom"} dir={language.direction()}>
         <div data-slot="mobile-drawer-handle" aria-hidden="true">
           <span />
         </div>

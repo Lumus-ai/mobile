@@ -11,6 +11,13 @@ export function createWebPlatform(version: string) {
       const url = new URL(value)
 
       if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "mailto:") return
+      // Inside the Android WebView window.open is a no-op; route through the
+      // Capacitor Browser plugin so links (device login!) open in the system browser.
+      const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { Browser?: { open: (opts: { url: string }) => Promise<void> } } } }).Capacitor
+      if (cap?.isNativePlatform?.() && cap?.Plugins?.Browser) {
+        void cap.Plugins.Browser.open({ url: url.href })
+        return
+      }
       window.open(url.href, "_blank", "noopener,noreferrer")
     },
     restart: async () => window.location.reload(),
@@ -47,6 +54,13 @@ export function createWebPlatform(version: string) {
 
 function getCurrentServerUrl() {
   if (import.meta.env.VITE_OPENCODE_SERVER_MODE === "none") return undefined
+
+  // Embedded (Capacitor native): the WebView origin is the app's own static
+  // host (http://localhost) — never a real opencode server. Treating it as
+  // one creates a ghost "localhost" server that steals the default "local"
+  // scope (v13.13: two server tabs, dead chat selectors).
+  const capacitor = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+  if (import.meta.env.VITE_OPENCODE_EMBEDDED === "1" && capacitor?.isNativePlatform?.()) return undefined
 
   if (import.meta.env.DEV) {
     const loopback =

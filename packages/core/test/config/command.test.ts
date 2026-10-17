@@ -456,13 +456,7 @@ describeNative("ConfigCommandPlugin native watcher", () => {
                   Location.Service.of(location({ directory: AbsolutePath.make(path.join(tmp, "project")) })),
                 ),
               ),
-              Global.node.replace(
-                Global.layerWith({
-                  config: global,
-                  home: path.join(global, "home"),
-                  state: path.join(global, "state"),
-                }),
-              ),
+              Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
               ShellSelect.node.replace(shellLayer),
               Credential.node.replace(emptyCredentialNode),
               WellKnown.node.replace(emptyWellknownNode),

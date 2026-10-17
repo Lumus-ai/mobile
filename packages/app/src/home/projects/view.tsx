@@ -59,7 +59,7 @@ export type HomeProjectsViewProps = {
   onFocusServer: (server: ServerConnection.Any) => void
   onAuthenticateServer?: (server: ServerConnection.Any) => void
   onToggleCollapsed: (server: ServerConnection.Any) => void
-  onEditServer: (server: ServerConnection.Http) => void
+  onEditServer?: (server: ServerConnection.Http) => void
   canRemoveServer: (server: ServerConnection.Any) => boolean
   onRemoveServer: (server: ServerConnection.Any) => void
   canHideServer: (server: ServerConnection.Any) => boolean
@@ -346,7 +346,7 @@ function HomeServerRow(props: {
   contextMenuOpen: HomeProjectsContextMenuProps["contextMenuOpen"]
   onFocusServer: HomeProjectsViewProps["onFocusServer"]
   onToggleCollapsed: HomeProjectsViewProps["onToggleCollapsed"]
-  onEditServer: HomeProjectsViewProps["onEditServer"]
+  onEditServer?: HomeProjectsViewProps["onEditServer"]
   canRemoveServer: HomeProjectsViewProps["canRemoveServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
   canHideServer: HomeProjectsViewProps["canHideServer"]

@@ -285,10 +285,6 @@ import type {
   ConfigShellsOutput,
   ConfigUpdateInput,
   ConfigUpdateOutput,
-  ConfigCompatibilityGetInput,
-  ConfigCompatibilityGetOutput,
-  ConfigCompatibilityUpdateInput,
-  ConfigCompatibilityUpdateOutput,
   RoomListOutput,
   RoomCreateInput,
   RoomCreateOutput,
@@ -1805,35 +1801,15 @@ const EndpointConfigShells = (raw: RawClient["server.config"]) => () =>
 
 const EndpointConfigUpdate = (raw: RawClient["server.config"]) => (input?: ConfigUpdateInput) =>
   preserveEffect<ConfigUpdateOutput>()(
-    raw["config.update"]({
-      payload: {
-        shell: input?.["shell"],
-        model: input?.["model"],
-        mcpServers: input?.["mcpServers"],
-        compatibilityEnabled: input?.["compatibilityEnabled"],
-      },
-    }).pipe(Effect.mapError(mapClientError)),
+    raw["config.update"]({ payload: { shell: input?.["shell"], model: input?.["model"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
   )
-
-const EndpointConfigCompatibilityGet = (raw: RawClient["server.config"]) => (input?: ConfigCompatibilityGetInput) =>
-  preserveEffect<ConfigCompatibilityGetOutput>()(
-    raw["config.compatibility.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const EndpointConfigCompatibilityUpdate =
-  (raw: RawClient["server.config"]) => (input: ConfigCompatibilityUpdateInput) =>
-    preserveEffect<ConfigCompatibilityUpdateOutput>()(
-      raw["config.compatibility.update"]({
-        query: { location: input["location"] },
-        payload: { ecosystem: input["ecosystem"], enabled: input["enabled"], trusted: input["trusted"] },
-      }).pipe(Effect.mapError(mapClientError)),
-    )
 
 const adaptGroupConfig = (raw: RawClient["server.config"]) => ({
   get: EndpointConfigGet(raw),
   shells: EndpointConfigShells(raw),
   update: EndpointConfigUpdate(raw),
-  compatibility: { get: EndpointConfigCompatibilityGet(raw), update: EndpointConfigCompatibilityUpdate(raw) },
 })
 
 const EndpointRoomList = (raw: RawClient["server.room"]) => () =>
@@ -2024,7 +2000,10 @@ const EndpointRoomGuestLeave = (raw: RawClient["server.room"]) => (input: RoomGu
 
 const EndpointRoomGuestSessionList = (raw: RawClient["server.room"]) => (input: RoomGuestSessionListInput) =>
   preserveEffect<RoomGuestSessionListOutput>()(
-    raw["room.guest.session.list"]({ params: { roomID: input["roomID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["room.guest.session.list"]({ params: { roomID: input["roomID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
   )
 
 const EndpointRoomGuestSessionCreate = (raw: RawClient["server.room"]) => (input: RoomGuestSessionCreateInput) =>
@@ -2249,12 +2228,7 @@ const EndpointOrchestraTemplateList = (raw: RawClient["server.orchestra"]) => ()
 const EndpointOrchestraTemplateCreate = (raw: RawClient["server.orchestra"]) => (input: OrchestraTemplateCreateInput) =>
   preserveEffect<OrchestraTemplateCreateOutput>()(
     raw["orchestra.template.create"]({
-      payload: {
-        name: input["name"],
-        description: input["description"],
-        members: input["members"],
-        playbook: input["playbook"],
-      },
+      payload: { name: input["name"], description: input["description"], members: input["members"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -2262,12 +2236,7 @@ const EndpointOrchestraTemplateUpdate = (raw: RawClient["server.orchestra"]) => 
   preserveEffect<OrchestraTemplateUpdateOutput>()(
     raw["orchestra.template.update"]({
       params: { templateID: input["templateID"] },
-      payload: {
-        name: input["name"],
-        description: input["description"],
-        members: input["members"],
-        playbook: input["playbook"],
-      },
+      payload: { name: input["name"], description: input["description"], members: input["members"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -2291,11 +2260,6 @@ const EndpointOrchestraRoleCreate = (raw: RawClient["server.orchestra"]) => (inp
         category: input["category"],
         readOnly: input["readOnly"],
         model: input["model"],
-        models: input["models"],
-        tools: input["tools"],
-        autoTools: input["autoTools"],
-        hub: input["hub"],
-        registry: input["registry"],
       },
     }).pipe(Effect.mapError(mapClientError)),
   )
@@ -2311,11 +2275,6 @@ const EndpointOrchestraRoleUpdate = (raw: RawClient["server.orchestra"]) => (inp
         category: input["category"],
         readOnly: input["readOnly"],
         model: input["model"],
-        models: input["models"],
-        tools: input["tools"],
-        autoTools: input["autoTools"],
-        hub: input["hub"],
-        registry: input["registry"],
       },
     }).pipe(Effect.mapError(mapClientError)),
   )

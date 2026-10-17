@@ -128,7 +128,7 @@ test("terminal order follows the platform", () => {
   ])
 })
 
-test("tool rows stay unique and lead with the most actionable tool", () => {
+test("tool rows default to off, stay unique and lead with the most actionable tool", () => {
   const status = hubRegistryStatus({ probe: (tool) => tool !== "jq", terminalProbe: () => true })
   const names = status.tools.map((row) => row.tool)
   expect(new Set(names).size).toBe(names.length)
@@ -137,6 +137,18 @@ test("tool rows stay unique and lead with the most actionable tool", () => {
   expect(status.tools[0].installed).toBe(false)
   expect(status.tools[0].entries).toBeGreaterThan(0)
   expect(status.tools.slice(1).every((row) => row.installed)).toBe(true)
+  // opt-in: nothing is advertised until the operator switches it on
+  expect(status.tools.every((row) => !row.enabled)).toBe(true)
+})
+
+test("an enabled map turns rows on and an explicit false keeps everything else off", () => {
+  const probe = (tool: string) => tool !== "jq"
+  const rows = hubRegistryStatus({ probe, enabled: { rg: true, jq: false } }).tools
+  expect(rows.find((row) => row.tool === "rg")!.enabled).toBe(true)
+  expect(rows.find((row) => row.tool === "jq")!.enabled).toBe(false)
+  expect(rows.filter((row) => row.enabled).map((row) => row.tool)).toEqual(["rg"])
+  // rows are the same set and order regardless of the switch state
+  expect(rows.map((row) => row.tool)).toEqual(hubRegistryStatus({ probe }).tools.map((row) => row.tool))
 })
 
 test("tool rows account for every required tool with its blocked entry count", () => {
@@ -171,7 +183,7 @@ test("win32 platform filter stays fully ready and only drops the entries another
   expect(onlyWin32.length).toBeGreaterThan(0)
   expect(onlyLinux.length).toBeGreaterThan(0)
   expect(win32.total - linux.total).toBe(onlyWin32.length - onlyLinux.length)
-  expect(linux.total).toBe(Hub.all.filter((entry) => Hub.supportsPlatform(entry, "linux")).length)
+  expect(linux.total).toBe(Hub.all.length - onlyWin32.length)
 })
 
 test("absent tools with no package manager for the platform leave install undefined", () => {

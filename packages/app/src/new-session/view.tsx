@@ -15,6 +15,7 @@ import {
 } from "@/new-session/project/selector"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { useData, useServer } from "@/runtime/server/current"
 import { useProviders } from "@/providers/catalog/providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -61,7 +62,7 @@ export function NewSessionView(props: {
           active={props.composer.state.drag === "active"}
           input={props.composer.model.selection.current()?.capabilities.input}
         />
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6 max-md:top-1/2 max-md:-translate-y-1/2">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <NewSessionWordmark />
             <div class="mt-8 flex flex-col gap-8">
@@ -101,6 +102,7 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
+        <NewSessionFooter />
         <NewSessionTips
           selection={props.composer.model.selection}
           onDone={props.composer.restoreFocus}
@@ -113,6 +115,28 @@ export function NewSessionView(props: {
           onWorkspace={() => select("create")}
         />
       </div>
+    </div>
+  )
+}
+
+function NewSessionFooter() {
+  const server = useServer()
+  const data = useData()
+  const location = useWorkspaceLocation()
+
+  const mcpCount = createMemo(
+    () =>
+      (data.location.mcp.server.list({ directory: location().directory }) ?? []).filter(
+        (item) => item.status.status === "connected",
+      ).length,
+  )
+
+  return (
+    <div class="pointer-events-none absolute inset-x-0 bottom-6 hidden max-md:flex items-center justify-between px-6 font-mono text-[10.5px] text-v2-text-text-faint">
+      <span>
+        {mcpCount()} MCP&nbsp;&nbsp;/status
+      </span>
+      <Show when={server.health?.version}>{(version) => <span>{version().split("+")[0]}</span>}</Show>
     </div>
   )
 }

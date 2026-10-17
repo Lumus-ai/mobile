@@ -1,10 +1,8 @@
 export * as Passport from "./passport.js"
 
-import { spawnSync } from "node:child_process"
 import { arch, hostname, platform, release } from "node:os"
 import path from "node:path"
 import type { Room } from "@opencode/schema/room"
-import { Child } from "./child.js"
 import { HubHost } from "./hub/host.js"
 import { available } from "./hub/resolve.js"
 
@@ -36,16 +34,20 @@ export async function run(command: string, directory: string, signal?: AbortSign
   const args = backend === "pwsh" ? ["-NoProfile", "-Command", line] : ["-c", line]
   // Tools the Registry installed into its own folders resolve the same as for the AI's commands.
   const searchPath = HubHost.spawnPath()
-  const child = Child.piped([shell, ...args], {
+  const child = Bun.spawn([shell, ...args], {
     cwd: directory,
-    env: { ...guestEnv(), [searchPath.key]: searchPath.value } as NodeJS.ProcessEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...guestEnv(), [searchPath.key]: searchPath.value },
+    // Runs inside the background service, which has no console: unhidden, each run flashes a window.
+    windowsHide: true,
     // Its own process group, so stopping it also stops what it started in the background; a
     // leftover child would keep the output pipes open and the run would never finish.
     detached: process.platform !== "win32",
   })
   const stop = () => {
     if (process.platform === "win32") {
-      spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true })
+      Bun.spawn(["taskkill", "/pid", String(child.pid), "/t", "/f"], { stdout: "ignore", stderr: "ignore", windowsHide: true })
       return
     }
     try {
@@ -57,8 +59,8 @@ export async function run(command: string, directory: string, signal?: AbortSign
   const timer = setTimeout(stop, RUN_TIMEOUT_MS)
   signal?.addEventListener("abort", stop, { once: true })
   const [stdout, stderr, exitCode] = await Promise.all([
-    child.stdout,
-    child.stderr,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
     // A guest's run leaves nothing behind on the host once its shell exits.
     child.exited.finally(stop),
   ]).finally(() => {
@@ -84,8 +86,8 @@ function guestEnv() {
 // Branch, commit and how many files are changed; absent outside a git checkout.
 function git(directory: string) {
   const out = (args: string[]) => {
-    const result = spawnSync("git", args, { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true })
-    return result.status === 0 ? result.stdout.trim() : undefined
+    const result = Bun.spawnSync(["git", ...args], { cwd: directory, stdout: "pipe", stderr: "ignore", windowsHide: true })
+    return result.exitCode === 0 ? result.stdout.toString().trim() : undefined
   }
   const branch = out(["rev-parse", "--abbrev-ref", "HEAD"])
   if (branch === undefined) return {}

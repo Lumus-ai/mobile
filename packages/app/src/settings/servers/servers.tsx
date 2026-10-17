@@ -4,11 +4,9 @@ import { createMemo, Show, type Component } from "solid-js"
 import { ServerRowMenu } from "@/servers/registry/row-menu"
 import { ServerHealthIndicator } from "@/servers/registry/row"
 import { ExtensionServerRow } from "@/servers/registry/extension-row"
-import { AddServerMenu } from "@/servers/registry/add-menu"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { useServerCollectionController } from "@/servers/registry/controller"
-import { DialogServer } from "@/servers/connect/dialog"
 import { SettingsList } from "@/settings/list"
 import { ShellSetting } from "@/settings/general/general"
 import { createServerShellController } from "@/settings/general/controllers"
@@ -26,12 +24,6 @@ export const SettingsServerGeneral: Component<{
   const controller = useServerCollectionController()
   const health = createMemo(() => controller.collection.health()[props.entry.key])
 
-  const edit = (server: ServerConnection.Http) =>
-    void dialog.push(() => <DialogServer mode="edit" server={server} onSave={props.onServerChange} />)
-
-  // An HTTP server that rejects its saved credentials signs in again through the edit dialog.
-  const signedOut = (server: ServerConnection.Any) =>
-    server.type === "http" && health()?.unauthorized ? server : undefined
 
   return (
     <>
@@ -45,9 +37,6 @@ export const SettingsServerGeneral: Component<{
               {language.t(props.nested ? "settings.server.description" : "settings.servers.description")}
             </span>
           </div>
-          <Show when={!props.nested && props.onAddServer}>
-            <AddServerMenu onAddServer={() => props.onAddServer?.()} />
-          </Show>
         </div>
       </div>
 
@@ -74,14 +63,7 @@ export const SettingsServerGeneral: Component<{
                         </div>
                       </div>
                       <div class="settings-servers-actions">
-                        <Show when={signedOut(server())}>
-                          {(http) => (
-                            <Button size="small" variant="neutral" onClick={() => edit(http())}>
-                              {language.t("server.action.authenticate")}
-                            </Button>
-                          )}
-                        </Show>
-                        <ServerRowMenu server={server()} domain={controller} onEdit={edit} />
+                        <ServerRowMenu server={server()} domain={controller} />
                       </div>
                     </div>
                   )}

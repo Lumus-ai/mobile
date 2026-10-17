@@ -190,6 +190,16 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
                   aria-describedby={state.error ? "server-connect-error" : undefined}
                   onInput={(event) => setState({ url: event.currentTarget.value, error: "" })}
                 />
+                <Button
+                  type="button"
+                  variant="ghost-muted"
+                  size="small"
+                  class="mt-1.5 self-start"
+                  disabled={request.isPending}
+                  onClick={() => setState({ url: "http://127.0.0.1:4096", error: "" })}
+                >
+                  {language.t("server.connect.thisDevice")}
+                </Button>
               </div>
               <div class="server-connect-field">
                 <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>

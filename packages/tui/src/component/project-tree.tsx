@@ -695,26 +695,15 @@ function RoomSessions(props: {
   const remote = roomClient(props.room)
   const roomID = props.room.roomID
   const [sessions, setSessions] = createSignal<readonly SessionInfo[]>([])
-  const [category, setCategory] = createSignal<Readonly<Record<string, string>>>({})
   const [project, setProject] = createSignal(false)
   // A gone host or a removed guest just lists nothing; the room view says why.
   const load = () =>
     void Promise.all([remote.room.guest.get({ roomID }), remote.room.guest.session.list({ roomID })])
       .then(([joined, list]) => {
         setProject(joined.room.directory !== undefined)
-        setSessions(list.data)
-        setCategory(list.category ?? {})
+        setSessions(list)
       })
       .catch(() => setSessions([]))
-  // Grouped as the host's tree groups them: categories in first-seen order, then "Other".
-  const groups = createMemo(() => {
-    const names = [...new Set(sessions().flatMap((session) => category()[session.id] ?? []))]
-    const rest = sessions().filter((session) => !category()[session.id])
-    return [
-      ...names.map((name) => ({ name, sessions: sessions().filter((session) => category()[session.id] === name) })),
-      ...(rest.length > 0 ? [{ name: names.length > 0 ? t("Other") : "", sessions: rest }] : []),
-    ]
-  })
   onMount(() => {
     load()
     const timer = setInterval(load, 5000)
@@ -731,37 +720,24 @@ function RoomSessions(props: {
   const key = (id: string) => `room:${props.room.url}#${roomID}:${id}`
   return (
     <Show when={project()}>
-      <For each={groups()}>
-        {(group) => (
-          <>
-            <Show when={group.name}>
-              <box paddingLeft={6}>
-                <text fg={theme.text.muted} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-                  {group.name}
-                </text>
-              </box>
-            </Show>
-            <For each={group.sessions}>
-              {(session) => (
-                <Row
-                  id={key(session.id)}
-                  hover={props.hover}
-                  setHover={props.setHover}
-                  selected={props.current === session.id}
-                  onClick={() => props.onOpen(session.id)}
-                >
-                  <text flexShrink={0} fg={theme.text.muted}>
-                    {"      ○ "}
-                  </text>
-                  <box flexGrow={1} minWidth={0}>
-                    <text fg={theme.text.base} wrapMode="none" truncate>
-                      {session.title || t("Untitled")}
-                    </text>
-                  </box>
-                </Row>
-              )}
-            </For>
-          </>
+      <For each={sessions()}>
+        {(session) => (
+          <Row
+            id={key(session.id)}
+            hover={props.hover}
+            setHover={props.setHover}
+            selected={props.current === session.id}
+            onClick={() => props.onOpen(session.id)}
+          >
+            <text flexShrink={0} fg={theme.text.muted}>
+              {"      ○ "}
+            </text>
+            <box flexGrow={1} minWidth={0}>
+              <text fg={theme.text.base} wrapMode="none" truncate>
+                {session.title || t("Untitled")}
+              </text>
+            </box>
+          </Row>
         )}
       </For>
       <Row id={key("new")} hover={props.hover} setHover={props.setHover} onClick={start}>

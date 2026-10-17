@@ -40,19 +40,11 @@ export function createHomeProjectsController(home: HomeController) {
     { initialValue: _state },
   )
 
-  function edit(conn: ServerConnection.Http, onSave?: (saved: ServerConnection.Http) => void) {
-    void import("@/servers/connect/dialog").then(({ DialogServer }) => {
-      void dialog.show(() => <DialogServer mode="edit" server={conn} onSave={(saved) => onSave?.(saved)} />)
-    })
-  }
-
-  // An expired pairing session or a changed password signs the app out of an HTTP server; signing in again edits it,
-  // and the action that asked for sign-in continues once the dialog saves, as it does for extension servers. It continues
-  // with the saved connection: the one it started with still carries the rejected credentials.
+  // No pairing UI in this build: server edits/sign-in flows are gone, the app uses the
+  // built-in local server only.
   function authenticate(conn: ServerConnection.Any, onConnected?: (conn: ServerConnection.Any) => void) {
     if (conn.type !== "http" || !home.server.health(conn)?.unauthorized)
       return ServerConnection.authenticate(conn, () => onConnected?.(conn))
-    edit(conn, onConnected)
 
     return true
   }
@@ -90,7 +82,6 @@ export function createHomeProjectsController(home: HomeController) {
       remove: (conn: ServerConnection.Any) => serverManagement.connection.remove(ServerConnection.key(conn)),
       canHide: (conn: ServerConnection.Any) => serverManagement.connection.canHide(ServerConnection.key(conn)),
       hide: (conn: ServerConnection.Any) => serverManagement.connection.setHidden(ServerConnection.key(conn), true),
-      edit: (conn: ServerConnection.Http) => edit(conn),
       authenticate: (conn: ServerConnection.Any) => authenticate(conn),
       focus: (conn: ServerConnection.Any) => {
         if (authenticate(conn, (next) => home.selection.focusServer(next))) return

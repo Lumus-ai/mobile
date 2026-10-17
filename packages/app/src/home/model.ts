@@ -8,6 +8,19 @@ import type { SessionInfo } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { addProjects } from "./projects/add"
 
+import { embeddedProjectsDir } from "@/embedded"
+
+const STANDALONE_DEFAULT_DIR = "/projects/default"
+const defaultDir = () => {
+  const embedded = embeddedProjectsDir()
+  return embedded ? `${embedded}/default` : STANDALONE_DEFAULT_DIR
+}
+// First run in the standalone build: the tracked-project list is local and starts
+// empty, which makes "New session" a dead tap. Seed the default project and open
+// the launch (new-session) screen once. Runs once per app launch, only when the
+// user has nothing tracked yet; a deliberate close (recentlyClosed) is respected.
+let autoDraftDone = false
+
 export function createHomeController() {
   const layout = useLayout()
   const global = useGlobal()
@@ -74,6 +87,29 @@ export function createHomeController() {
   function setSelection(next: HomeProjectSelection) {
     layout.home.setSelection(next)
   }
+
+  createEffect(() => {
+    if (import.meta.env.VITE_OPENCODE_SERVER_MODE !== "none") return
+    if (!servers.hydrated()) return
+    const conn = servers.visible[0]
+    if (!conn) return
+    const ctx = global.ensureServerCtx(conn)
+    if (ctx.projects.list().length > 0 || ctx.projects.recentlyClosed().length > 0) return
+    ctx.projects.open(defaultDir())
+    ctx.projects.touch(defaultDir())
+  })
+
+  createEffect(() => {
+    if (import.meta.env.VITE_OPENCODE_SERVER_MODE !== "none") return
+    if (autoDraftDone) return
+    if (!servers.hydrated() || !tabs.ready()) return
+    if (tabs.store.length > 0) return
+    const conn = servers.visible[0]
+    if (!conn) return
+    if (global.servers.health[ServerConnection.key(conn)]?.healthy === false) return
+    autoDraftDone = true
+    openProjectNewSession(conn, defaultDir())
+  })
 
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
     const ctx = global.ensureServerCtx(conn)

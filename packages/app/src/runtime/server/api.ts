@@ -23,13 +23,18 @@ export function createApiForServer(input: {
   server: ServerConnection.HttpBase
   fetch?: typeof globalThis.fetch
 }): OpenCodeClient {
+  // v13.12: the embedded server rotates its password out of band; the live
+  // value on window always beats a persisted store entry for the local URL.
+  const embedded = (window as { __OPENCODE_EMBEDDED__?: { url?: string; password?: string } }).__OPENCODE_EMBEDDED__
+  const password =
+    embedded?.password && embedded.url === input.server.url ? embedded.password : input.server.password
   return OpenCode.make({
     baseUrl: input.server.url,
     fetch: input.fetch,
-    headers: input.server.password
+    headers: password
       ? {
           Authorization: `Basic ${authTokenFromCredentials({
-            password: input.server.password,
+            password,
           })}`,
         }
       : undefined,

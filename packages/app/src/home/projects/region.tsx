@@ -26,7 +26,6 @@ export function HomeProjects(props: {
       onFocusServer={props.projects.server.focus}
       onAuthenticateServer={props.projects.server.authenticate}
       onToggleCollapsed={props.projects.server.toggleCollapsed}
-      onEditServer={props.projects.server.edit}
       canRemoveServer={props.projects.server.canRemove}
       onRemoveServer={props.projects.server.remove}
       canHideServer={props.projects.server.canHide}

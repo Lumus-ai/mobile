@@ -64,6 +64,26 @@ export function normalizeProviderList(
     })
   }
 
+  // v13.12: the embedded server's /api/provider lists only installed
+  // integrations, so the keyless opencode provider never appeared and its
+  // free models were invisible before login. Synthesize the entry from the
+  // model catalog whenever it is missing.
+  const hasOpencodeModels = (models ?? []).some((item) => item.providerID === "opencode" && item.status !== "deprecated")
+  if (hasOpencodeModels && !all.has("opencode")) {
+    all.set("opencode", {
+      id: "opencode",
+      canonical: undefined,
+      integrationID: undefined,
+      name: "OpenCode Zen",
+      source: "custom",
+      env: [],
+      options: {},
+      models: {},
+    })
+  }
+  const providerIDs = providers.map((provider) => provider.id)
+  if (hasOpencodeModels && !providerIDs.includes("opencode")) providerIDs.unshift("opencode")
+
   for (const model of models ?? []) {
     const provider = all.get(model.providerID)
 
@@ -119,7 +139,7 @@ export function normalizeProviderList(
 
   const result = {
     all,
-    connected: providers.map((provider) => provider.id),
+    connected: providerIDs,
     default: Object.fromEntries(
       providers.flatMap((provider) => {
         const model = models?.find((item) => item.providerID === provider.id && item.status !== "deprecated")

@@ -1,5 +1,6 @@
 interface ImportMetaEnv {
   readonly VITE_OPENCODE_SERVER_MODE?: "none" | "origin"
+  readonly VITE_OPENCODE_EMBEDDED?: "1"
   readonly VITE_OPENCODE_SERVER_HOST: string
   readonly VITE_OPENCODE_SERVER_PORT: string
   readonly VITE_OPENCODE_CHANNEL?: "local" | "dev" | "beta" | "prod"

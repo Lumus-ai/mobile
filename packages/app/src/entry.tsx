@@ -12,6 +12,8 @@ import { KeyboardInsets } from "@/runtime/platform/keyboard"
 import en from "@/runtime/i18n/en"
 import zh from "@/runtime/i18n/zh"
 import { authFromToken } from "@/runtime/server/api"
+import { installStandaloneFetch } from "@/standalone/server"
+import { startEmbeddedServer } from "@/embedded"
 import pkg from "../package.json"
 import { ServerConnection } from "@/runtime/server/registry"
 
@@ -74,10 +76,87 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   })
 }
 
+function showEmbeddedStartErrorBanner() {
+  try {
+    const reason = (window as any).__OPENCODE_EMBEDDED_ERROR__ ?? "unknown error"
+    const box = document.createElement("div")
+    box.style.cssText =
+      "position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:#2a1518;border:1px solid #7a3038;color:#f0d8da;padding:12px;border-radius:10px;font-family:monospace;font-size:12px"
+    const text = document.createElement("div")
+    text.textContent =
+      "Сервер не запустился — автономный режим. / Embedded server failed, standalone mode. " + reason
+    box.appendChild(text)
+    const row = document.createElement("div")
+    row.style.cssText = "margin-top:8px;display:flex;gap:12px"
+    const copy = document.createElement("button")
+    copy.textContent = "Скопировать ошибку"
+    copy.style.cssText = "text-decoration:underline;color:#fff"
+    copy.onclick = () => {
+      void navigator.clipboard?.writeText(reason).catch(() => undefined)
+      copy.textContent = "Скопировано"
+    }
+    const hint = document.createElement("span")
+    hint.textContent = "Настройки → О приложении → Самотест"
+    hint.style.cssText = "opacity:0.7;align-self:center"
+    const close = document.createElement("button")
+    close.textContent = "✕"
+    close.style.cssText = "margin-left:auto;color:#fff"
+    close.onclick = () => box.remove()
+    row.appendChild(copy)
+    row.appendChild(hint)
+    row.appendChild(close)
+    box.appendChild(row)
+    document.body.appendChild(box)
+  } catch {}
+}
+
 if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
   // Lazy chunks can import the entry chunk back under a distinct URL, so claim the root before async startup.
   root.dataset.opencodeMounted = ""
-  void loadInitialLocale().then((locale) => {
+  const bootStatus = (t: string) => (window as any).__setBootStatus?.(t)
+  void (async () => {
+    // Never block the UI on the embedded server: give it a short window
+    // (warm launches answer in <2s via the service state file), then boot
+    // standalone and reload once if the server becomes ready late.
+    bootStatus("Запуск сервера… / Starting server…")
+    ;(window as any).__setServerStatus?.("starting")
+    const pending = startEmbeddedServer()
+    const embedded = await Promise.race([
+      pending,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 20000)),
+    ])
+    if (embedded) {
+      window.__OPENCODE_EMBEDDED__ = embedded
+      ;(window as any).__setServerStatus?.("running")
+      try { sessionStorage.removeItem("oc-embedded-reloaded") } catch {}
+    } else {
+      installStandaloneFetch()
+      bootStatus("Сервер недоступен — автономный режим / Standalone mode")
+      void pending
+        .catch(() => undefined)
+        .then((late) => {
+          if (late) {
+            // Server came up after we fell back: reload to boot on it. Slow
+            // devices (and the ARM-translated CI emulator) can need more than
+            // one round, so allow up to 3 reloads per app start, then stay
+            // standalone rather than loop forever.
+            let n = 0
+            try {
+              n = Number(sessionStorage.getItem("oc-embedded-reloaded") ?? "0") || 0
+              sessionStorage.setItem("oc-embedded-reloaded", String(n + 1))
+            } catch {}
+            if (n < 3) {
+              location.reload()
+              return
+            }
+            return
+          }
+          ;(window as any).__setServerStatus?.("error", (window as any).__OPENCODE_EMBEDDED_ERROR__ ?? "unknown")
+          showEmbeddedStartErrorBanner()
+        })
+    }
+    return loadInitialLocale()
+  })().then((locale) => {
     const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
     clearAuthToken()
     const standalone = isStandalone()
@@ -112,5 +191,6 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
       ),
       root,
     )
+    ;(window as any).__removeBootSplash?.()
   })
 }

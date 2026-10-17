@@ -48,7 +48,10 @@ const startEntries = Effect.fnUntraced(function* (
   directory: string,
   home = directory,
   discovery = emptyDiscovery,
-  compatibility: Partial<Config.Compatibility["roots"]> & { readonly order?: Config.Compatibility["order"] } = {},
+  compatibility: { readonly claude: readonly AbsolutePath[]; readonly agents: readonly AbsolutePath[] } = {
+    claude: [],
+    agents: [],
+  },
 ) {
   const service = yield* Skill.Service
   const pluginHost = host({
@@ -60,12 +63,10 @@ const startEntries = Effect.fnUntraced(function* (
   })
   yield* ConfigCompatibilityPlugin.Plugin.effect(pluginHost).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
-    Effect.provideService(
-      Global.Service,
-      Global.Service.of({ ...Global.make(), home, state: path.join(home, ".state") }),
-    ),
   )
-  yield* ConfigSkillPlugin.Plugin.effect(pluginHost).pipe(
+  yield* ConfigSkillPlugin.Plugin.effect(
+    pluginHost,
+  ).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
     Effect.provideService(SkillDiscovery.Service, discovery),
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
@@ -87,10 +88,6 @@ const start = (skills: string[], directory: string, discovery = emptyDiscovery) 
     discovery,
   )
 
-// The compatibility plugin also watches the user's ecosystem choices; skill source tests ignore that watch.
-const skillWatches = <T extends { readonly path: string }>(watches: readonly T[]) =>
-  watches.filter((watch) => path.basename(watch.path) !== "compatibility.json")
-
 const discover = (directory: string, global: string) =>
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -101,9 +98,7 @@ const discover = (directory: string, global: string) =>
         Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
         ),
-        Global.node.replace(
-          Global.layerWith({ config: global, home: path.join(global, "home"), state: path.join(global, "state") }),
-        ),
+        Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
         Credential.node.replace(emptyCredentialNode),
         WellKnown.node.replace(emptyWellknownNode),
         Watcher.node.replace(Watcher.testLayer),
@@ -135,9 +130,9 @@ describe("SkillFile.parse", () => {
     expect(parse("disable-model-invocation: yes")).toMatchObject({ skill: { autoinvoke: false } })
     expect(parse("disable-model-invocation: false")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
     expect(parse("disable-model-invocation: maybe")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
-    expect(parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true")).toMatchObject({
-      skill: { autoinvoke: true },
-    })
+    expect(
+      parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true"),
+    ).toMatchObject({ skill: { autoinvoke: true } })
   })
 
   test("parses root and nested skill ids and metadata flags", () => {
@@ -210,43 +205,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
             { claude: [AbsolutePath.make(claude)], agents: [AbsolutePath.make(agents)] },
           )
           const watcher = yield* Watcher.Test
-          expect(yield* watcher.subscriptions()).toEqual([
-            { path: path.join(home, ".state", "compatibility.json"), type: "file" },
-            ...expected.map((item) => ({ path: item, type: "directory" as const })),
-          ])
-        }),
-      ),
-    ),
-  )
-
-  it.live("merges skills from every ecosystem that is on, earlier ecosystems winning shared names", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          const claude = path.join(tmp.path, ".claude")
-          const codex = path.join(tmp.path, ".codex")
-          yield* Effect.promise(async () => {
-            for (const [root, name, description] of [
-              [claude, "review", "Claude"],
-              [codex, "review", "Codex"],
-              [codex, "deploy", "Codex deploy"],
-            ]) {
-              await fs.mkdir(path.join(root, "skills", name), { recursive: true })
-              await write(path.join(root, "skills"), name, description)
-            }
-          })
-          const roots = { claude: [AbsolutePath.make(claude)], codex: [AbsolutePath.make(codex)] }
-          const describe = (skills: readonly Skill.Info[]) =>
-            Object.fromEntries(skills.map((item) => [item.id, item.description]))
-
-          const merged = yield* startEntries([], tmp.path, tmp.path, emptyDiscovery, roots)
-          expect(describe(yield* merged.list())).toMatchObject({ review: "Claude", deploy: "Codex deploy" })
-
-          const codexFirst = yield* startEntries([], tmp.path, tmp.path, emptyDiscovery, {
-            ...roots,
-            order: ["codex", "claude"],
-          })
-          expect(describe(yield* codexFirst.list())).toMatchObject({ review: "Codex" })
+          expect(yield* watcher.subscriptions()).toEqual(expected.map((item) => ({ path: item, type: "directory" })))
         }),
       ),
     ),
@@ -313,7 +272,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
             worktree,
             worktree,
             emptyDiscovery,
-            discovered.compatibility.roots,
+            discovered.compatibility,
           )
           const review = (yield* skill.list()).find((item) => item.id === "review")
 
@@ -421,7 +380,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([source], tmp.path)
           const watcher = yield* Watcher.Test
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("First")
-          expect(skillWatches(yield* watcher.subscriptions())).toEqual([
+          expect(yield* watcher.subscriptions()).toEqual([
             { path: first, type: "directory" },
             { path: source, type: "file" },
           ])
@@ -433,7 +392,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* emitAndWait({ type: "update", path: source })
 
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Second")
-          expect(skillWatches(yield* watcher.subscriptions())).toEqual([
+          expect(yield* watcher.subscriptions()).toEqual([
             { path: first, type: "directory" },
             { path: source, type: "file" },
             { path: second, type: "directory" },
@@ -452,9 +411,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([source], tmp.path)
           const watcher = yield* Watcher.Test
           expect(yield* skill.list()).toEqual([])
-          expect(skillWatches(yield* watcher.subscriptions())).toEqual([
-            { path: path.join(tmp.path, "generated"), type: "file" },
-          ])
+          expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(tmp.path, "generated"), type: "file" }])
 
           yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "generated")))
           yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })

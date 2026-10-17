@@ -7,6 +7,7 @@ import { showToast } from "@/shell/notifications/toast"
 import legal from "./legal.svg"
 import anomalyBrush from "./anomaly-brush.svg"
 import { AnimatedWordmark } from "./animated-wordmark"
+import { DebugSelfTest } from "./debug-self-test"
 import { FALLBACK_OTHER_CONTRIBUTORS, loadOtherContributorCount } from "./contributors"
 
 const writers = [
@@ -130,6 +131,8 @@ export function SettingsAbout(props: { active: boolean }) {
         <p>{language.t("settings.about.copyright")}</p>
         <img class="settings-about-anomaly-brush" src={anomalyBrush} alt="" />
       </div>
+
+      <DebugSelfTest />
     </div>
   )
 }

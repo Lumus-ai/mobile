@@ -49,25 +49,6 @@ test("a checkout on a branch is a development tree and never updates", async () 
   expect(await SourceRelease.current(repo.install)).toBeUndefined()
 })
 
-test("a branch without an upstream follows the matching origin branch", async () => {
-  await using repo = await setup()
-  await $`git -C ${repo.install} checkout -q main`.quiet()
-  await $`git -C ${repo.install} branch --unset-upstream`.quiet()
-  const identity = {
-    GIT_AUTHOR_NAME: "t",
-    GIT_AUTHOR_EMAIL: "t@t",
-    GIT_COMMITTER_NAME: "t",
-    GIT_COMMITTER_EMAIL: "t@t",
-  }
-  await writeFile(path.join(repo.origin, "notes.txt"), "three")
-  await $`git -C ${repo.origin} add -A`.quiet()
-  await $`git -C ${repo.origin} commit -qm three`.env({ ...process.env, ...identity }).quiet()
-
-  expect(await SourceRelease.branch(repo.install)).toEqual({ type: "behind", name: "main", behind: 1 })
-  await SourceRelease.pull(repo.install)
-  expect(await Bun.file(path.join(repo.install, "notes.txt")).text()).toBe("three")
-  expect(await SourceRelease.branch(repo.install)).toEqual({ type: "current" })
-})
 test("the newest release is chosen by version, not by name order", () => {
   expect(SourceRelease.newest(["1.9.0", "1.10.0", "1.2.3"])).toBe("1.10.0")
 })

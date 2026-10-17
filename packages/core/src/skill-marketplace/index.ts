@@ -225,7 +225,7 @@ export const layerWith = (options: LayerOptions = {}) =>
 
       /** A missing file is the normal case here, so a read that fails answers `undefined`. */
       function localText(target: string) {
-        return Effect.tryPromise({ try: () => readFile(target, "utf8"), catch: () => undefined }).pipe(
+        return Effect.tryPromise({ try: () => Bun.file(target).text(), catch: () => undefined }).pipe(
           Effect.result,
           Effect.map((result) => (result._tag === "Success" ? result.success : undefined)),
         )

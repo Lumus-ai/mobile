@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, For, Match, Show, Switch, untrack } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { Dynamic, Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
@@ -30,6 +30,12 @@ import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsDialog } from "@/settings/command"
+import {
+  ProjectAvatar,
+  displayName as projectDisplayName,
+  getProjectAvatarSource,
+  getProjectAvatarVariant,
+} from "@opencode/ui/project-avatar"
 import { rootSession } from "@/shell/routes/session"
 import { TitlebarItem } from "@opencode/gui-extensions/sdk"
 import { useExtensionHost } from "@/runtime/extension/host"
@@ -489,6 +495,20 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             })
 
             const [mobileTabs, setMobileTabs] = createStore({ open: false, settings: false })
+            const [mobileMenu, setMobileMenu] = createStore({ open: false })
+
+            const menuConn = () => {
+              const tab = currentTab()
+              const key = tab && "server" in tab ? tab.server : undefined
+
+              return global.servers.list().find((item) => ServerConnection.key(item) === key) ?? global.servers.list()[0]
+            }
+
+            const menuProjects = () => {
+              const conn = menuConn()
+              if (!conn) return []
+              return global.ensureServerCtx(conn).projects.list()
+            }
 
             const currentProject = createMemo(() => {
               const tab = currentTab()
@@ -542,6 +562,16 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 <Show
                   when={!mobile()}
                   fallback={
+                    <>
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={<Icon name="menu" />}
+                      aria-label={language.t("home.projects")}
+                      onClick={() => setMobileMenu("open", true)}
+                    />
                     <MobileDrawer
                       open={mobileTabs.open}
                       onOpenChange={(open) => setMobileTabs("open", open)}
@@ -673,6 +703,87 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                         </div>
                       </MobileDrawerContent>
                     </MobileDrawer>
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={<Icon name="plus" />}
+                      aria-label={language.t("command.session.new")}
+                      onClick={() => openNewTab()}
+                    />
+                    <MobileDrawer side="left" open={mobileMenu.open} onOpenChange={(open) => setMobileMenu("open", open)}>
+                      <MobileDrawerContent side="left">
+                        <MobileDrawerLabel class="sr-only">{language.t("home.projects")}</MobileDrawerLabel>
+                        <div data-slot="mobile-menu" data-corvu-no-drag class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+                          <div class="flex h-8 shrink-0 items-center justify-between px-2">
+                            <span class="text-[13px] font-medium leading-4 text-v2-text-text-muted">
+                              {language.t("home.projects")}
+                            </span>
+                            <IconButton
+                              type="button"
+                              variant="ghost-muted"
+                              size="small"
+                              icon={<Icon name="folder-add-left" />}
+                              aria-label={language.t("home.project.add")}
+                              onClick={() => {
+                                setMobileMenu("open", false)
+                                if (layout.route().type !== "home") toggleHome()
+                              }}
+                            />
+                          </div>
+                          <For each={menuProjects()}>
+                            {(project) => (
+                              <button
+                                type="button"
+                                class="flex h-8 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                onClick={() => {
+                                  const conn = menuConn()
+                                  if (!conn) return
+                                  setMobileMenu("open", false)
+                                  void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                                }}
+                              >
+                                <ProjectAvatar
+                                  class="size-4 shrink-0"
+                                  fallback={projectDisplayName(project)}
+                                  src={getProjectAvatarSource(project.id, project.icon)}
+                                  variant={getProjectAvatarVariant(project.icon?.color)}
+                                />
+                                <span class="min-w-0 truncate">{projectDisplayName(project)}</span>
+                              </button>
+                            )}
+                          </For>
+                          <div class="mt-1 flex shrink-0 flex-col gap-1 border-t border-v2-border-border-muted pt-2">
+                            <button
+                              type="button"
+                              data-action="mobile-menu-settings"
+                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                              onClick={() => {
+                                setMobileMenu("open", false)
+                                openSettings()
+                              }}
+                            >
+                              <Icon name="settings-gear" size="small" />
+                              {language.t("sidebar.settings")}
+                            </button>
+                            <button
+                              type="button"
+                              data-action="mobile-menu-help"
+                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                              onClick={() => {
+                                setMobileMenu("open", false)
+                                platform.openExternal("https://opencode.ai/desktop-feedback")
+                              }}
+                            >
+                              <Icon name="help" size="small" />
+                              {language.t("sidebar.help")}
+                            </button>
+                          </div>
+                        </div>
+                      </MobileDrawerContent>
+                    </MobileDrawer>
+                    </>
                   }
                 >
                   <Show
