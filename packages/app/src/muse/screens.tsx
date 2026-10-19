@@ -311,6 +311,7 @@ export function SettingsScreen() {
       <div class="mz-group">
         <Row icon={<IconGrid />} title="Провайдеры" onClick={() => full()} trailing={chevron()} />
         <Row icon={<IconImage />} title="Аватар Фенрира" sub="свои картинки и GIF для состояний" onClick={() => muse.setTab("avatar")} trailing={chevron()} />
+        <Row icon={<IconCode />} title="Терминал" sub="свой Linux для команд ИИ (Alpine или Debian)" onClick={() => muse.setTab("terminal")} trailing={chevron()} />
         <Row icon={<IconServer />} title="Встроенный сервер" sub={muse.connected() ? "работает · 127.0.0.1:4096" : "запускается"} onClick={() => full()} trailing={chevron()} />
         <Row icon={<IconNodes />} title="LAN-комнаты" onClick={() => muse.setTab("rooms")} trailing={chevron()} />
         <Row icon={<IconMoon />} title="Тема и общие" onClick={() => full()} trailing={chevron()} />

@@ -5,7 +5,7 @@ import { useServers } from "@/runtime/server/registry"
 import { embeddedProjectsDir } from "@/embedded"
 import { avatarSettings, type AvatarState } from "./avatar-store"
 
-export type MuseTab = "chat" | "sessions" | "projects" | "tasks" | "rooms" | "settings" | "avatar"
+export type MuseTab = "chat" | "sessions" | "projects" | "tasks" | "rooms" | "settings" | "avatar" | "terminal"
 
 const TAB_KEY = "muse.tab"
 const SESSION_KEY = "muse.session"
@@ -64,7 +64,7 @@ function createMuse() {
 
   const setTab = (next: MuseTab) => {
     setTabSignal(next)
-    if (next !== "settings" && next !== "avatar") write(TAB_KEY, next)
+    if (next !== "settings" && next !== "avatar" && next !== "terminal") write(TAB_KEY, next)
     setMenuOpen(false)
   }
   const setSession = (id: string | undefined) => {

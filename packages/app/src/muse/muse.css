@@ -239,3 +239,14 @@
 .mz-drawer-item { text-align: left; padding: 12px 14px; border-radius: 16px; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mz-root .mz-drawer-item[data-active="1"] { background: var(--mz-card); }
 .mz-root .mz-drawer-foot { padding: 14px; border-radius: 16px; background: var(--mz-card); text-align: left; font-weight: 600; }
+
+/* terminal screen */
+.mz-error { color: var(--mz-red); font-size: 15px; }
+.mz-progress { height: 8px; border-radius: 99px; background: #2c2c2e; overflow: hidden; margin: 10px 0; }
+.mz-progress > div { height: 100%; background: var(--mz-blue); transition: width 0.4s; }
+.mz-seg { display: flex; gap: 10px; margin: 12px 0; }
+.mz-root .mz-seg button { flex: 1; background: #2c2c2e; color: #fff; border-radius: 16px; padding: 14px 10px; font-size: 17px; font-weight: 600; display: flex; flex-direction: column; gap: 4px; border: 2px solid transparent; }
+.mz-root .mz-seg button.on { border-color: var(--mz-blue); }
+.mz-seg small { font-weight: 400; color: #8e8e93; font-size: 12px; }
+.mz-term-input { width: 100%; background: #000; color: #fff; border: 1px solid #3a3a3c; border-radius: 12px; padding: 10px; font-family: ui-monospace, monospace; font-size: 14px; margin-bottom: 10px; resize: none; }
+.mz-term-out { background: #000; color: #d0d0d0; border-radius: 12px; padding: 10px; margin-top: 10px; font-size: 12.5px; white-space: pre-wrap; word-break: break-all; max-height: 40vh; overflow: auto; }

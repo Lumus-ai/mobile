@@ -8,6 +8,7 @@ import { avatarSettings, initAvatar } from "./avatar-store"
 import { ChatScreen } from "./chat"
 import { ProjectsScreen, RoomsScreen, SessionsScreen, SettingsScreen, TasksScreen } from "./screens"
 import { AvatarSettingsScreen } from "./avatar-settings"
+import { TerminalScreen } from "./terminal"
 import { IconBack, IconChat, IconCheck, IconFolder, IconMenu, IconNodes, IconPlus, IconSliders, IconStack } from "./icons"
 import "./muse.css"
 
@@ -98,7 +99,7 @@ function Header() {
   const muse = useMuse()
   const [sheet, setSheet] = createSignal(false)
   const tab = () => muse.tab()
-  const backTitle = () => (tab() === "settings" ? "Настройки" : tab() === "avatar" ? "Аватар" : undefined)
+  const backTitle = () => (tab() === "settings" ? "Настройки" : tab() === "avatar" ? "Аватар" : tab() === "terminal" ? "Терминал" : undefined)
   const state = () => (tab() === "chat" ? muse.activity().state : "idle")
   const caption = () => (tab() === "chat" && avatarSettings().captions ? muse.activity().caption : undefined)
   return (
@@ -106,7 +107,7 @@ function Header() {
       when={!backTitle()}
       fallback={
         <header class="mz-header mz-header-back">
-          <button type="button" class="mz-circle" aria-label="Назад" onClick={() => muse.setTab(tab() === "avatar" ? "settings" : "chat")}>
+          <button type="button" class="mz-circle" aria-label="Назад" onClick={() => muse.setTab(tab() === "avatar" || tab() === "terminal" ? "settings" : "chat")}>
             <IconBack />
           </button>
           <h2>{backTitle()}</h2>
@@ -175,7 +176,7 @@ function TabBar() {
 
 function Frame() {
   const muse = useMuse()
-  const bare = () => muse.tab() === "settings" || muse.tab() === "avatar"
+  const bare = () => muse.tab() === "settings" || muse.tab() === "avatar" || muse.tab() === "terminal"
   return (
     <>
       <Header />
@@ -201,6 +202,9 @@ function Frame() {
           </Match>
           <Match when={muse.tab() === "avatar"}>
             <AvatarSettingsScreen />
+          </Match>
+          <Match when={muse.tab() === "terminal"}>
+            <TerminalScreen />
           </Match>
         </Switch>
       </main>
