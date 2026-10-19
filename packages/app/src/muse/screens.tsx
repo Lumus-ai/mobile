@@ -320,6 +320,7 @@ export function SettingsScreen() {
       <div class="mz-group">
         <Row icon={<IconInfo />} title="О приложении" sub="MIT · на базе opencode" onClick={() => full()} trailing={chevron()} />
         <Row icon={<IconCode />} title="Исходный код" sub="github.com/Lumus-ai/mobile" onClick={() => window.open("https://github.com/Lumus-ai/mobile", "_blank")} trailing={chevron()} />
+        <Row icon={<IconInfo />} title="Лицензии" sub="proot (GPL-2), Alpine и Debian: свои лицензии. Исходники proot открыты" onClick={() => window.open("https://github.com/green-green-avk/proot", "_blank")} trailing={chevron()} />
         <Row icon={<IconFlag />} title="Сообщить о проблеме" onClick={() => window.open("https://github.com/Lumus-ai/mobile/issues", "_blank")} trailing={chevron()} />
       </div>
     </div>

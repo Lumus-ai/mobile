@@ -162,6 +162,9 @@ export function TerminalScreen() {
           Удалить окружение
         </button>
       </Show>
+      <p class="mz-muted mz-licence">
+        Запуск Linux использует proot (GPL-2, исходники: github.com/green-green-avk/proot). Сам Alpine и Debian поставляются под своими лицензиями и скачиваются с их официальных серверов.
+      </p>
       <Show when={error() && status()}>
         <p class="mz-error">{error()}</p>
       </Show>
