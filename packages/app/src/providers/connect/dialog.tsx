@@ -456,7 +456,8 @@ function ProviderConnection(props: {
     keyProvider: () => props.provider,
     directory,
     autoSelect: (methods) => {
-      if (props.provider === "openai" && remoteServer) {
+      // Phones: the loopback callback on a random port is unreliable (browser/VPN/background), so paste-the-link is the default.
+      if (props.provider === "openai" && (remoteServer || import.meta.env.VITE_OPENCODE_EMBEDDED === "1")) {
         const index = methods.findIndex(
           (method) => method.type === "oauth" && method.id === "chatgpt-token-sharing-web",
         )
