@@ -353,6 +353,8 @@ export function DebugSelfTest() {
       } catch (e) {
         promptRows.push(`cannot list integrations: ${e}`)
       }
+      // No account connected: the anonymous free route (Kilo free) must still answer.
+      if (connected.length === 0 && models.some((m) => m.providerID === "kilo-free")) connected = ["kilo-free"]
       if (connected.length === 0) promptRows.push("no connected providers with models — nothing to prompt")
       for (const pid of connected) {
         const model = models.find((m) => m.providerID === pid)
