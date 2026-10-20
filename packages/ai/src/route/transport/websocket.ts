@@ -38,6 +38,10 @@ type WebSocketConstructorWithHeaders = (
   options?: { readonly headers?: Headers.Headers },
 ) => globalThis.WebSocket
 
+// Numeric readyState values: nodejs-mobile has no globalThis.WebSocket, and the `ws` package supplies the socket.
+const WS_OPEN = 1
+const WS_CLOSING = 2
+const WS_CLOSED = 3
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
 const transportError = (
   message: string,
@@ -94,8 +98,8 @@ const binaryMessage = (data: unknown) => {
 }
 
 const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
-  if (ws.readyState === globalThis.WebSocket.OPEN) return Effect.void
-  if (ws.readyState === globalThis.WebSocket.CLOSING || ws.readyState === globalThis.WebSocket.CLOSED) {
+  if (ws.readyState === WS_OPEN) return Effect.void
+  if (ws.readyState === WS_CLOSING || ws.readyState === WS_CLOSED) {
     return Effect.fail(
       transportError(`WebSocket closed before opening (state ${ws.readyState})`, {
         url: input.url,
@@ -115,7 +119,7 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
     }
     const onAbort = () => {
       cleanup()
-      if (ws.readyState === globalThis.WebSocket.CLOSED || ws.readyState === globalThis.WebSocket.CLOSING) return
+      if (ws.readyState === WS_CLOSED || ws.readyState === WS_CLOSING) return
       // Node's ws reports an aborted handshake as an error event on the next tick; with no listener left
       // after cleanup, EventEmitter would throw it as an uncaught exception.
       ws.addEventListener("error", () => {}, { once: true })
@@ -235,7 +239,7 @@ export const fromWebSocket = (
           }),
         ),
       )
-      if (ws.readyState === globalThis.WebSocket.OPEN) ws.close(1009, "Message too large")
+      if (ws.readyState === WS_OPEN) ws.close(1009, "Message too large")
       return true
     }
     const offer = (message: string | Uint8Array) => {
@@ -302,7 +306,7 @@ export const fromWebSocket = (
     return {
       sendText: (message) =>
         Effect.suspend(() => {
-          if (ws.readyState !== globalThis.WebSocket.OPEN)
+          if (ws.readyState !== WS_OPEN)
             return Effect.fail(
               transportError(`WebSocket is not open (state ${ws.readyState})`, {
                 url: input.url,
@@ -327,7 +331,7 @@ export const fromWebSocket = (
       close: cleanup.pipe(
         Effect.andThen(
           Effect.sync(() => {
-            if (ws.readyState === globalThis.WebSocket.CLOSED || ws.readyState === globalThis.WebSocket.CLOSING) return
+            if (ws.readyState === WS_CLOSED || ws.readyState === WS_CLOSING) return
             ws.close(1000)
           }),
         ),
