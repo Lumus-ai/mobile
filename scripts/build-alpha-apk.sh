@@ -13,7 +13,11 @@ W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/stage/assets/nodejs-project" "$W/cls" "$W/jar"
 # Separate alpha app: own package id, label, icon badge, version (apktool on the stable APK).
 ORIG_BASE="$BASE"
-java -jar "$APKTOOL" d -s -f -o "$W/dec" "$BASE" >/dev/null
+java -jar "$APKTOOL" d -f -o "$W/dec" "$BASE" >/dev/null
+# Stable dex keeps EmbeddedServerPlugin (UI-process side): patch its port and data path in smali.
+sed -i "s/127\\.0\\.0\\.1:4096/127.0.0.1:$ALPHA_PORT/g" "$W/dec/smali/com/opencode/plusplus/embedded/EmbeddedServerPlugin.smali"
+sed -i "s#/data/data/com.opencode.plusplus/#/data/data/com.opencode.plusplus.alpha/#g" "$W/dec/smali/com/opencode/plusplus/embedded/EmbeddedServerPlugin.smali"
+! grep -rq "127.0.0.1:4096" "$W/dec/smali/com/opencode/plusplus/embedded/EmbeddedServerPlugin.smali"
 python3 "$ROOT/scripts/alpha-identity.py" "$W/dec" "$ALPHA_BUILD"
 java -jar "$APKTOOL" b -o "$W/identity.apk" "$W/dec" >/dev/null
 BASE="$W/identity.apk"
