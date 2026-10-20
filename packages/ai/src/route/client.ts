@@ -326,7 +326,14 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
 const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
   if (failed instanceof AIError) return failed
-  return ProviderShared.eventError(route, message, undefined, cause)
+  // Surface the real underlying reason (network reset, non-SSE body, HTTP text) instead of a bare label.
+  let detail = ""
+  try {
+    detail = Cause.pretty(cause).replace(/\s+/g, " ").trim().slice(0, 400)
+  } catch {
+    detail = ""
+  }
+  return ProviderShared.eventError(route, detail ? `${message}: ${detail}` : message, undefined, cause)
 }
 
 const incompleteStreamError = (route: string) =>
