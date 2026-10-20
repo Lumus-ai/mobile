@@ -346,10 +346,8 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
           (item.provider.settings?.apiKey && item.provider.settings.apiKey !== "public"),
       )
       if (hasKey) return
-      // Zen answers the anonymous "public" key with 403 FreeTierError for every model when the
-      // caller is not the official client (checked live for all served free models), so without
-      // an account key none of them can work. Hide them instead of offering models that fail.
       for (const model of models.list(item.provider.id)) {
+        if (!model.cost.some((cost) => cost.input > 0)) continue
         models.update(item.provider.id, model.id, (draft) => {
           draft.enabled = false
         })

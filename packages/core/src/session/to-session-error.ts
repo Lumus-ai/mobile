@@ -97,7 +97,7 @@ export function contentFilterError(summary: string, reason: FinishReasonDetails)
 const OPENCODE_FREE_TIER_ERROR = "OpenCode's free tier can only be used from within OpenCode"
 
 const OPENCODE_FREE_TIER_GUIDANCE =
-  "OpenCode Zen rejected this free-tier request: Zen only serves its free models to the official OpenCode client or to a connected OpenCode account. Connect your OpenCode Zen account (API key from opencode.ai) in Providers, or use Kilo free models, which work without an account."
+  "OpenCode rejected this free-tier request. First connect or refresh your account with `opencode auth login opencode` or `/connect` in the TUI. This same 403 can also be caused by dev/branch build metadata or agent/project permissions that remove built-in tools such as `read` or `bash/shell`. Update and rebuild OpenCode++ from the latest branch; if it persists while connected, inspect those permission rules."
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
