@@ -158,6 +158,30 @@ export function parseKiloFreeModelsText(text: string): Record<string, SourceMode
   }
 }
 
+export function parseZenFreeIDs(text: string): ReadonlySet<string> | undefined {
+  try {
+    const data = (JSON.parse(text) as { data?: unknown }).data
+    if (!Array.isArray(data)) return undefined
+    const ids = data.flatMap((item) => (typeof item?.id === "string" ? [item.id as string] : []))
+    return ids.length === 0 ? undefined : new Set(ids)
+  } catch {
+    return undefined
+  }
+}
+
+// OpenCode's own free ("-free") routes come and go. Drop catalog entries that the live public
+// route list no longer serves; paid models and every other provider are left alone.
+function onlyServedFree(provider: SourceProvider, served: ReadonlySet<string> | undefined): SourceProvider {
+  if (!served || provider.id !== "opencode") return provider
+  const models = Object.fromEntries(
+    Object.entries(provider.models).filter(([, model]) => {
+      const free = (model.cost?.input ?? 0) === 0 && (model.cost?.output ?? 0) === 0
+      return !free || served.has(model.id)
+    }),
+  )
+  return { ...provider, models }
+}
+
 const ANONYMOUS_FREE_PROVIDERS: readonly SourceProvider[] = [
   {
     id: "kilo-free",
@@ -188,8 +212,10 @@ function nativePackage(provider: SourceProvider, model?: SourceModel) {
 export function normalize(
   input: Record<string, SourceProvider>,
   kiloFreeModels: Record<string, SourceModel> = {},
+  zenServed?: ReadonlySet<string>,
 ): readonly Snapshot[] {
   const catalog = { ...input }
+  for (const [id, provider] of Object.entries(catalog)) catalog[id] = onlyServedFree(provider, zenServed)
   for (const item of ANONYMOUS_FREE_PROVIDERS) {
     catalog[item.id] = item.id === "kilo-free" ? { ...item, models: { ...item.models, ...kiloFreeModels } } : item
   }
@@ -431,6 +457,19 @@ export const layer = (options?: Options) =>
       const kiloTTL = Duration.minutes(5)
       let kiloFreeModels: Record<string, SourceModel> = {}
       let kiloUpdatedAt = 0
+      let zenServed: ReadonlySet<string> | undefined
+      const zenSource = "https://opencode.ai/zen/v1"
+      const fetchZenServed = Effect.fn("ModelsDev.fetchZenServed")(function* () {
+        return yield* HttpClientRequest.get(`${zenSource}/models`).pipe(
+          HttpClientRequest.setHeader("User-Agent", userAgent),
+          HttpClientRequest.setHeader("Authorization", "Bearer public"),
+          http.execute,
+          Effect.flatMap((res) => res.text),
+          Effect.timeout("5 seconds"),
+          Effect.map((text) => parseZenFreeIDs(text)),
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        )
+      })
 
       const fetchKiloModels = Effect.fn("ModelsDev.fetchKiloFreeModels")(function* () {
         return yield* HttpClientRequest.get(`${kiloSource}/models`).pipe(
@@ -503,11 +542,11 @@ export const layer = (options?: Options) =>
 
       const populate = Effect.gen(function* () {
         const fromFile = yield* loadFromFile
-        if (fromFile) return normalize(fromFile, kiloFreeModels)
+        if (fromFile) return normalize(fromFile, kiloFreeModels, zenServed)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return normalize(cached.catalog, kiloFreeModels)
+        if (cached) return normalize(cached.catalog, kiloFreeModels, zenServed)
         const bundled = yield* loadSnapshot
-        if (bundled) return normalize(bundled, kiloFreeModels)
+        if (bundled) return normalize(bundled, kiloFreeModels, zenServed)
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
           Effect.gen(function* () {
@@ -516,7 +555,7 @@ export const layer = (options?: Options) =>
             return yield* fetchAndWrite()
           }),
         )
-        return normalize(catalog, kiloFreeModels)
+        return normalize(catalog, kiloFreeModels, zenServed)
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
       const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
@@ -564,6 +603,14 @@ export const layer = (options?: Options) =>
                     kiloFreeModels = liveModels
                     kiloChanged = true
                   }
+                }
+              }
+
+              if (shouldRefreshKilo) {
+                const served = yield* fetchZenServed()
+                if (served !== undefined && [...served].sort().join() !== [...(zenServed ?? [])].sort().join()) {
+                  zenServed = served
+                  kiloChanged = true
                 }
               }
 

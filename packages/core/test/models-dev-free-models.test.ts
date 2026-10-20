@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { normalize, parseKiloFreeModels, parseKiloFreeModelsText } from "../src/models-dev"
+import { normalize, parseKiloFreeModels, parseKiloFreeModelsText, parseZenFreeIDs } from "../src/models-dev"
 
 describe("anonymous FREE model routes", () => {
   const providers = normalize({})
@@ -74,5 +74,37 @@ describe("anonymous FREE model routes", () => {
     })
     expect(refreshed.some((provider) => provider.info.id === "existing")).toBe(true)
     expect(refreshed.some((provider) => provider.info.id === "kilo-free")).toBe(true)
+  })
+
+  test("drops OpenCode free routes the live public list no longer serves", () => {
+    const model = (id: string, price: number) => ({
+      id,
+      name: id,
+      cost: { input: price, output: price },
+      limit: { context: 1000, output: 100 },
+    })
+    const input = {
+      opencode: {
+        id: "opencode",
+        name: "OpenCode",
+        env: [],
+        npm: "@ai-sdk/openai-compatible",
+        models: {
+          "beam-free": model("beam-free", 0),
+          "stale-free": model("stale-free", 0),
+          "gpt-x": model("gpt-x", 1),
+        },
+      },
+    } as never
+    const served = parseZenFreeIDs('{"data":[{"id":"beam-free"},{"id":"gpt-x"}]}')
+    expect(served && [...served]).toEqual(["beam-free", "gpt-x"])
+    const ids = (set?: ReadonlySet<string>) =>
+      normalize(input, {}, set)
+        .find((provider) => provider.info.id === "opencode")!
+        .models.map((item) => String(item.id))
+        .sort()
+    expect(ids(served)).toEqual(["beam-free", "gpt-x"])
+    expect(ids(undefined)).toEqual(["beam-free", "gpt-x", "stale-free"])
+    expect(parseZenFreeIDs("nope")).toBeUndefined()
   })
 })
