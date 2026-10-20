@@ -148,11 +148,9 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         const port = yield* listen(server)
         yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
         const redirect = `http://127.0.0.1:${port}/auth/callback`
-        return {
-          mode: "auto" as const,
-          url: authorizeURL(redirect, pkce, state, nonce, savedID, hostID),
-          instructions: "Complete authorization in your browser. This window will close automatically.",
-          callback: Effect.gen(function* () {
+        // The one-time authorization code must be exchanged exactly once, even if the host runs the callback twice.
+        const finish = yield* Effect.cached(
+Effect.gen(function* () {
             const result = yield* Deferred.await(received)
             const respond = (error?: string) =>
               Effect.sync(() =>
@@ -189,6 +187,12 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
               Effect.onInterrupt(() => Effect.sync(() => result.response.destroy())),
             )
           }),
+        )
+        return {
+          mode: "auto" as const,
+          url: authorizeURL(redirect, pkce, state, nonce, savedID, hostID),
+          instructions: "Complete authorization in your browser. This window will close automatically.",
+          callback: finish,
         }
       }),
     refresh: (value) => refresh(value, app),
