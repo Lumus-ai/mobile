@@ -81,6 +81,7 @@ public class NodeServerService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        AlphaUpdater.start(getApplicationContext());
         resetOnVersionChange();
         BootLog.log(getFilesDir(), "=== service onCreate, process=" + processName() + " ===");
         // A leftover "current" variant with no result means the process died
