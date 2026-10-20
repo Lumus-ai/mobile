@@ -53,7 +53,7 @@ export const Input = Schema.Struct({
   }),
   title: Schema.optionalKey(Schema.String).annotate({ description: "Title of the session to create" }),
   role: Schema.optionalKey(Schema.String).annotate({
-    description: "Exact ID of a built-in or saved Orchestra role, required; not the display title. Core specialists include core-maintainer, integration-engineer, api-contract-engineer, security-auditor, performance-engineer, compatibility-engineer, data-migration-engineer, reliability-engineer, dependency-auditor and counterexample-engineer.",
+    description: "Exact ID of a built-in or saved Orchestra role, required; not the display title. Preferred working set: architect, developer, tester, reviewer, debugger, researcher, designer, writer, devops (developer and reviewer absorb the narrower specialist roles).",
   }),
   category: Schema.optionalKey(Schema.String).annotate({
     description: "Category of the session to create, e.g. Planning, Build or Quality",
