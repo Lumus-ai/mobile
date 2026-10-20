@@ -22,7 +22,7 @@ cp -r "$SRC" "$W/java"
 python3 - "$W/java/com/opencode/plusplus/embedded/NodeServerService.java" <<'PY'
 from pathlib import Path
 import sys,re
-p=Path(sys.argv[1]);s=p.read_text();s=s.replace('.extracted-v9','.extracted-alpha-nogate-1');p.write_text(s)
+p=Path(sys.argv[1]);s=p.read_text();s=s.replace('.extracted-v9','.extracted-alpha-nogate-2');p.write_text(s)
 PY
 javac --release 17 -nowarn -cp "$PLAT/android.jar:$W/jar/classes.jar" -sourcepath "$W/java" -d "$W/cls" "$W/java/com/opencode/plusplus/embedded/NodeServerService.java" "$EMB/NodeRuntime.java" "$EMB/BootLog.java" "$EMB/AssetExtractor.java" "$EMB/Redact.java"
 "$BT/d8" --release --min-api 24 --lib "$PLAT/android.jar" --output "$W" $(find "$W/cls" -name '*.class')

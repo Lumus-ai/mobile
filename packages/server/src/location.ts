@@ -1,3 +1,4 @@
+import { existsSync, statSync } from "node:fs"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
@@ -60,8 +61,18 @@ export function requestRef(request: HttpServerRequest.HttpServerRequest): Locati
     query.get("location[directory]") ||
     (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
   return Location.Ref.make({
-    directory: AbsolutePath.make(directory),
+    directory: AbsolutePath.make(usable(directory)),
   })
+}
+
+// Embedded Android only: a client can still hold a project path from another device or install.
+// Answer for the server's own working directory (the projects folder) instead of 404ing every poll.
+function usable(directory: string) {
+  if (process.platform !== "android" && process.env.OPP_ANDROID_LOCATION_FALLBACK !== "1") return directory
+  try {
+    if (statSync(directory).isDirectory()) return directory
+  } catch {}
+  return existsSync(process.cwd()) ? process.cwd() : directory
 }
 
 function decode(input: string) {
