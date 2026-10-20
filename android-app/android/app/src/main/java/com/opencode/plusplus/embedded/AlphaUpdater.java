@@ -81,13 +81,18 @@ final class AlphaUpdater {
     }
 
     static void check(Context c) throws Exception {
+        check(c, false);
+    }
+
+    /** Returns a small JSON status. With install=true the system installer opens right away (user asked via /update). */
+    static String check(Context c, boolean install) throws Exception {
         File dir = c.getFilesDir();
         JSONObject v = new JSONObject(readText(VERSION_URL));
         long build = v.getLong("build");
         long have = installedBuild(c);
         if (build <= have) {
             BootLog.log(dir, "alpha-update: up to date (installed " + have + ", channel " + build + ")");
-            return;
+            return status("up-to-date", have, build);
         }
         String apk = v.getString("apk");
         String sha = v.getString("sha256").toLowerCase();
@@ -123,10 +128,83 @@ final class AlphaUpdater {
         }
         BootLog.log(dir, "alpha-update: downloaded build " + build + ", notifying");
         notifyReady(c, out, build);
+        if (install) openInstaller(c, out);
         // Old downloads are useless once a newer one is ready.
         File[] old = c.getCacheDir().listFiles();
         if (old != null) for (File f : old)
             if (f.getName().startsWith("alpha-update-") && f.getName().endsWith(".apk") && !f.equals(out)) f.delete();
+        return status(install ? "installing" : "ready", have, build);
+    }
+
+    private static String status(String s, long installed, long channel) {
+        return "{\"status\":\"" + s + "\",\"installed\":" + installed + ",\"channel\":" + channel + "}";
+    }
+
+    private static void openInstaller(Context c, File apk) {
+        Uri uri = FileProvider.getUriForFile(c, c.getPackageName() + ".fileprovider", apk);
+        c.startActivity(new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK));
+    }
+
+    /**
+     * Loopback-only trigger for the in-app /update command. It can only run the same checked update
+     * (version.json, fixed URL prefix, sha256, package and version match); installation still needs the
+     * user to confirm in the system installer, and Android enforces the signature.
+     */
+    static final int COMMAND_PORT = 4198;
+    private static boolean listening;
+
+    static synchronized void listen(final Context app) {
+        if (listening || !app.getPackageName().endsWith(".alpha")) return;
+        listening = true;
+        Thread t = new Thread(new Runnable() {
+            @Override public void run() {
+                try (java.net.ServerSocket ss = new java.net.ServerSocket(COMMAND_PORT, 4, java.net.InetAddress.getByName("127.0.0.1"))) {
+                    while (true) {
+                        java.net.Socket sock = ss.accept();
+                        try { handle(app, sock); } catch (Throwable e) {
+                            BootLog.log(app.getFilesDir(), "alpha-update: command failed: " + e);
+                        } finally { try { sock.close(); } catch (Throwable ignored) {} }
+                    }
+                } catch (Throwable e) {
+                    listening = false;
+                    BootLog.log(app.getFilesDir(), "alpha-update: command port unavailable: " + e);
+                }
+            }
+        }, "alpha-update-command");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void handle(Context app, java.net.Socket sock) throws Exception {
+        sock.setSoTimeout(5_000);
+        java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(sock.getInputStream(), "UTF-8"));
+        String line = r.readLine();
+        String h;
+        while ((h = r.readLine()) != null && !h.isEmpty()) { /* drain headers */ }
+        String body;
+        int code = 200;
+        if (line != null && line.startsWith("OPTIONS ")) {
+            body = "";
+        } else if (line != null && line.startsWith("POST /alpha/update ")) {
+            try { body = check(app, true); } catch (Throwable e) {
+                code = 500;
+                body = "{\"status\":\"error\",\"message\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}";
+            }
+        } else {
+            code = 404;
+            body = "{\"status\":\"not-found\"}";
+        }
+        byte[] out = body.getBytes("UTF-8");
+        String head = "HTTP/1.1 " + code + (code == 200 ? " OK" : " Error") + "\r\n"
+                + "Content-Type: application/json\r\nContent-Length: " + out.length + "\r\n"
+                + "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\n"
+                + "Access-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n";
+        java.io.OutputStream o = sock.getOutputStream();
+        o.write(head.getBytes("UTF-8"));
+        o.write(out);
+        o.flush();
     }
 
     private static String sha256(File f) throws Exception {
