@@ -40,3 +40,28 @@ export async function runAlphaUpdate(fetcher: typeof fetch = fetch): Promise<Alp
     return describeAlphaUpdate(undefined, "")
   }
 }
+
+// Step API used by the /update dialog (check, download with progress, install).
+const base = "http://127.0.0.1:4198/alpha"
+
+export type AlphaCheck = { status: "up-to-date" | "available" | "error"; installed?: number; channel?: number; message?: string }
+export type AlphaProgress = { status: "idle" | "downloading" | "ready" | "error"; done: number; total: number; channel?: number; message?: string }
+
+export function progressPercent(p: Pick<AlphaProgress, "done" | "total">) {
+  if (!p.total || p.total <= 0) return undefined
+  return Math.max(0, Math.min(100, Math.floor((p.done / p.total) * 100)))
+}
+
+async function call<T>(path: string, method: "GET" | "POST", fetcher: typeof fetch): Promise<T> {
+  const response = await fetcher(`${base}/${path}`, { method })
+  const body = (await response.json().catch(() => ({}))) as T & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? `Update server answered ${response.status}`)
+  return body
+}
+
+export const alphaStep = {
+  check: (fetcher: typeof fetch = fetch) => call<AlphaCheck>("check", "POST", fetcher),
+  download: (fetcher: typeof fetch = fetch) => call<AlphaProgress>("download", "POST", fetcher),
+  progress: (fetcher: typeof fetch = fetch) => call<AlphaProgress>("progress", "GET", fetcher),
+  install: (fetcher: typeof fetch = fetch) => call<{ status: string; message?: string }>("install", "POST", fetcher),
+}

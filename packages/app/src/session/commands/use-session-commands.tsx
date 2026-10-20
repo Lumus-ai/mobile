@@ -10,7 +10,6 @@ import { useData } from "@/runtime/server/current"
 import { formatServerError } from "@/runtime/server/errors"
 import { useSettings } from "@/settings/model"
 import { showToast } from "@/shell/notifications/toast"
-import { runAlphaUpdate } from "@/shell/alpha-update"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
@@ -304,10 +303,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: "Check for alpha update",
       description: "Download the newest OpenCode++ alpha build and open the installer",
       slash: "update",
-      onSelect: async () => {
-        const notice = await runAlphaUpdate()
-        showToast({ variant: notice.variant, title: notice.title, description: notice.description })
-      },
+      onSelect: () =>
+        void openDialog(
+          () => import("@/shell/alpha-update-dialog"),
+          (x) => dialog.show(() => <x.DialogAlphaUpdate />),
+        ),
     }),
     sessionCommand({
       id: "session.compact",

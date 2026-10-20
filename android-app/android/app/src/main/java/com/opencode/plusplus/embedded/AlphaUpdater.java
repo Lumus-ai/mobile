@@ -152,6 +152,84 @@ final class AlphaUpdater {
      * (version.json, fixed URL prefix, sha256, package and version match); installation still needs the
      * user to confirm in the system installer, and Android enforces the signature.
      */
+    // Step-by-step update for the in-app /update dialog: check, download (with progress), install.
+    private static volatile String dlState = "idle"; // idle | downloading | ready | error
+    private static volatile long dlDone, dlTotal, dlBuild;
+    private static volatile String dlMessage = "", dlApk = "", dlSha = "";
+    private static volatile File dlFile;
+
+    private static String json(String state, long installed, long channel) {
+        return "{\"status\":\"" + state + "\",\"installed\":" + installed + ",\"channel\":" + channel + "}";
+    }
+
+    static String checkOnly(Context c) throws Exception {
+        JSONObject v = new JSONObject(readText(VERSION_URL));
+        long build = v.getLong("build");
+        long have = installedBuild(c);
+        if (build <= have) return json("up-to-date", have, build);
+        String apk = v.getString("apk");
+        if (!apk.startsWith(APK_PREFIX)) throw new IllegalStateException("unexpected apk url");
+        dlApk = apk;
+        dlSha = v.getString("sha256").toLowerCase();
+        dlBuild = build;
+        return json("available", have, build);
+    }
+
+    static synchronized String startDownload(final Context c) throws Exception {
+        if ("downloading".equals(dlState)) return progress();
+        if (dlApk.isEmpty()) checkOnly(c);
+        if (dlApk.isEmpty()) return json("up-to-date", installedBuild(c), installedBuild(c));
+        dlState = "downloading";
+        dlDone = 0;
+        dlTotal = 0;
+        dlMessage = "";
+        Thread t = new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    File out = new File(c.getCacheDir(), "alpha-update-" + dlBuild + ".apk");
+                    File tmp = new File(c.getCacheDir(), "alpha-update.part");
+                    HttpURLConnection h = (HttpURLConnection) new URL(dlApk).openConnection();
+                    h.setConnectTimeout(15_000);
+                    h.setReadTimeout(30_000);
+                    dlTotal = h.getContentLengthLong();
+                    try (InputStream in = h.getInputStream(); FileOutputStream fo = new FileOutputStream(tmp)) {
+                        byte[] b = new byte[65536];
+                        int n;
+                        while ((n = in.read(b)) > 0) { fo.write(b, 0, n); dlDone += n; }
+                    } finally { h.disconnect(); }
+                    if (!dlSha.equals(sha256(tmp))) { tmp.delete(); throw new IllegalStateException("sha256 mismatch"); }
+                    if (out.exists()) out.delete();
+                    if (!tmp.renameTo(out)) throw new IllegalStateException("cannot move update");
+                    PackageInfo info = c.getPackageManager().getPackageArchiveInfo(out.getAbsolutePath(), 0);
+                    if (info == null || !c.getPackageName().equals(info.packageName)) { out.delete(); throw new IllegalStateException("update is not this app"); }
+                    long got = Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
+                    if (got != dlBuild) { out.delete(); throw new IllegalStateException("update version mismatch " + got + " != " + dlBuild); }
+                    dlFile = out;
+                    dlState = "ready";
+                    BootLog.log(c.getFilesDir(), "alpha-update: downloaded build " + dlBuild + " on request");
+                } catch (Throwable e) {
+                    dlMessage = String.valueOf(e.getMessage());
+                    dlState = "error";
+                    BootLog.log(c.getFilesDir(), "alpha-update: download failed: " + e);
+                }
+            }
+        }, "alpha-update-download");
+        t.setDaemon(true);
+        t.start();
+        return progress();
+    }
+
+    static String progress() {
+        return "{\"status\":\"" + dlState + "\",\"done\":" + dlDone + ",\"total\":" + dlTotal
+                + ",\"channel\":" + dlBuild + ",\"message\":" + JSONObject.quote(dlMessage) + "}";
+    }
+
+    static String install(Context c) {
+        if (!"ready".equals(dlState) || dlFile == null) return "{\"status\":\"error\",\"message\":\"nothing downloaded\"}";
+        openInstaller(c, dlFile);
+        return "{\"status\":\"installing\"}";
+    }
+
     static final int COMMAND_PORT = 4198;
     private static boolean listening;
 
@@ -177,6 +255,10 @@ final class AlphaUpdater {
         t.start();
     }
 
+    private static String errJson(Throwable e) {
+        return "{\"status\":\"error\",\"message\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}";
+    }
+
     private static void handle(Context app, java.net.Socket sock) throws Exception {
         sock.setSoTimeout(5_000);
         java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(sock.getInputStream(), "UTF-8"));
@@ -187,6 +269,14 @@ final class AlphaUpdater {
         int code = 200;
         if (line != null && line.startsWith("OPTIONS ")) {
             body = "";
+        } else if (line != null && line.startsWith("POST /alpha/check ")) {
+            try { body = checkOnly(app); } catch (Throwable e) { code = 500; body = errJson(e); }
+        } else if (line != null && line.startsWith("POST /alpha/download ")) {
+            try { body = startDownload(app); } catch (Throwable e) { code = 500; body = errJson(e); }
+        } else if (line != null && line.startsWith("GET /alpha/progress ")) {
+            body = progress();
+        } else if (line != null && line.startsWith("POST /alpha/install ")) {
+            body = install(app);
         } else if (line != null && line.startsWith("POST /alpha/update ")) {
             try { body = check(app, true); } catch (Throwable e) {
                 code = 500;
@@ -199,7 +289,7 @@ final class AlphaUpdater {
         byte[] out = body.getBytes("UTF-8");
         String head = "HTTP/1.1 " + code + (code == 200 ? " OK" : " Error") + "\r\n"
                 + "Content-Type: application/json\r\nContent-Length: " + out.length + "\r\n"
-                + "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\n"
+                + "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
                 + "Access-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n";
         java.io.OutputStream o = sock.getOutputStream();
         o.write(head.getBytes("UTF-8"));

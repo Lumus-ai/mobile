@@ -36,3 +36,34 @@ describe("alpha /update command", () => {
     expect(seen).toEqual({ url: "http://127.0.0.1:4198/alpha/update", method: "POST" })
   })
 })
+
+import { alphaStep, progressPercent } from "../../app/src/shell/alpha-update"
+
+describe("alpha /update dialog steps", () => {
+  test("progress percent is clamped and unknown without a total", () => {
+    expect(progressPercent({ done: 50, total: 200 })).toBe(25)
+    expect(progressPercent({ done: 500, total: 200 })).toBe(100)
+    expect(progressPercent({ done: 5, total: 0 })).toBeUndefined()
+  })
+  test("check, download, progress and install hit the loopback updater with the right methods", async () => {
+    const seen: string[] = []
+    const fake = (async (url: string, init?: RequestInit) => {
+      seen.push(`${init?.method} ${url}`)
+      return new Response('{"status":"ok","done":1,"total":2}', { status: 200 })
+    }) as unknown as typeof fetch
+    await alphaStep.check(fake)
+    await alphaStep.download(fake)
+    await alphaStep.progress(fake)
+    await alphaStep.install(fake)
+    expect(seen).toEqual([
+      "POST http://127.0.0.1:4198/alpha/check",
+      "POST http://127.0.0.1:4198/alpha/download",
+      "GET http://127.0.0.1:4198/alpha/progress",
+      "POST http://127.0.0.1:4198/alpha/install",
+    ])
+  })
+  test("an updater error becomes a thrown message", async () => {
+    const fake = (async () => new Response('{"status":"error","message":"sha256 mismatch"}', { status: 500 })) as unknown as typeof fetch
+    await expect(alphaStep.download(fake)).rejects.toThrow("sha256 mismatch")
+  })
+})
