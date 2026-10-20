@@ -61,6 +61,8 @@ export const Plugin = define({
           item.description = role.description
           item.system = role.rules ? `${TEAM}\n\n${role.rules}` : TEAM
           item.mode = "primary"
+          // One entry in the agent picker: the Orchestrator. Roles stay usable as workers it creates.
+          item.hidden = true
           if (role.model) item.model = Model.Ref.parse(role.model)
           item.permissions.push(
             { action: "question", resource: "*", effect: "allow" },

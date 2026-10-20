@@ -170,8 +170,9 @@ export const Plugin = define({
         item.description = "Leads a project's AI team. Runs only in a project's main session."
         item.system = PROMPT_ORCHESTRATOR
         item.mode = "primary"
-        // Only a project's main session runs it; it is never offered in agent pickers.
-        item.hidden = true
+        // Alpha: the one team entry in the agent picker. Choosing it opens a project main session,
+        // where it creates the team roles it needs for the prompt.
+        item.hidden = false
         item.permissions.push(
           { action: "question", resource: "*", effect: "allow" },
           { action: "edit", resource: "*", effect: "deny" },

@@ -10,12 +10,41 @@ import { useModels } from "@/providers/models/models"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/providers/models/variant"
 import { useComposerState } from "./persistence"
 import { useConfiguredModel } from "@/providers/models/configured"
+import { useNavigate } from "@solidjs/router"
+import { useServerSDK } from "@/runtime/server/client"
+import { useServer } from "@/runtime/server/current"
+import { sessionHref } from "@/shell/routes/session"
+import { showToast } from "@/shell/notifications/toast"
 
 export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const local = useLocal()
   const sdk = useWorkspaceLocation()
   const data = useData()
   const providers = useProviders(() => sdk().directory)
+  const navigate = useNavigate()
+  const serverSDK = useServerSDK()
+  const server = useServer()
+
+  // The Orchestrator runs only in a project's main session, so picking it opens one for this folder.
+  // It has no fixed template: it creates the roles it needs for each prompt.
+  const openOrchestrator = () => {
+    const directory = sdk().directory
+    const base = directory.split("/").filter(Boolean).pop() ?? "project"
+    serverSDK.api.orchestra.project
+      .create({ name: base, directory })
+      .then((project) => serverSDK.api.orchestra.project.main({ projectID: project.id }))
+      .then((main) => {
+        data.session.remember(main)
+        navigate(sessionHref(server.key, main.id))
+      })
+      .catch((cause: unknown) =>
+        showToast({
+          variant: "error",
+          title: "Could not open the Orchestrator",
+          description: cause instanceof Error ? cause.message : String(cause),
+        }),
+      )
+  }
 
   return createMemo<ComposerControls>(() => {
     return {
@@ -24,7 +53,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
         options: local.agent.list().map((agent) => agent.name),
         current: local.agent.current()?.name ?? "",
         visible: local.agent.visible(),
-        select: local.agent.set,
+        select: (name: string | undefined) => (name === "Orchestrator" ? (local.agent.current()?.name === "Orchestrator" ? undefined : openOrchestrator()) : local.agent.set(name)),
       },
       model: {
         selection: input.model ?? local.model,
