@@ -11,7 +11,6 @@ for p in root.glob('*.js'):
  s=s.replace(r'\p{Cc}\p{Cf}',r'\x00-\x1F\x7F-\x9F\u00AD\u200B-\u200F\u2028-\u202E\u2060-\u2064\uFEFF')
  # String constructors have double-escaped property names.
  s=s.replace(r'^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$',emoji.replace('\\','\\\\'))
- s=s.replace(r'^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$',emoji.replace('\\','\\\\'))
  s=s.replace(r'\p{Script=Latin}',r'\u0000-\u024F')
  # Direct named os imports snapshot native paths before the bootstrap monkey patch.
  s=re.sub(r'import \{ tmpdir \} from "node:os";', 'const tmpdir = () => process.env.TMPDIR || "/tmp";',s)

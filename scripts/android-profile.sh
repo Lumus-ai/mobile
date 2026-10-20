@@ -13,3 +13,5 @@ PROFILE=android bun poc/build.ts
 bun poc/stage.ts
 
 python3 scripts/android-noicu.py poc/stage/server
+
+find poc/stage/server -type f -name "*.map" -delete
