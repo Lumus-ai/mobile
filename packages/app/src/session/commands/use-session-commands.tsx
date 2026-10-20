@@ -289,6 +289,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       onSelect: redo,
     }),
     sessionCommand({
+      id: "alpha.team",
+      title: "Create team (Orchestrator)",
+      description: "Open an Orchestrator project that builds and runs a team of Team-* agents",
+      slash: "team",
+      onSelect: () =>
+        void openDialog(
+          () => import("@/session/commands/team-dialog"),
+          (x) => dialog.show(() => <x.DialogTeam />),
+        ),
+    }),
+    sessionCommand({
       id: "alpha.update",
       title: "Check for alpha update",
       description: "Download the newest OpenCode++ alpha build and open the installer",
