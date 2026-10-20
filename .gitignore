@@ -38,3 +38,5 @@ logs/
 *.bun-build
 tsconfig.tsbuildinfo
 /artifacts/
+
+/poc/

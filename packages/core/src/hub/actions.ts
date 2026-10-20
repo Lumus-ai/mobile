@@ -1,6 +1,7 @@
 export * as HubActions from "./actions.js"
 
 import { all } from "./catalog/index.js"
+import { Child } from "../child.js"
 import { HubHost } from "./host.js"
 import { detectManager, planFor, removeCommand, updateCommand, type Elevation } from "./install.js"
 
@@ -131,7 +132,7 @@ function withoutManager(tool: string, platform: NodeJS.Platform): ActionResult {
 function spawnRunner(platform: NodeJS.Platform): Runner {
   return async (command) => {
     // stdin stays closed so an action started from the panel never blocks on input.
-    // Without an explicit env Bun.spawn reuses the environment captured at process
+    // Without an explicit env the child reuses the environment captured at process
     // startup, so runtime PATH changes (opencode adjusting it, the test harness
     // steering detection) would silently not reach the child.
     const { key, value } = HubHost.spawnPath(process.env, platform)
@@ -139,19 +140,10 @@ function spawnRunner(platform: NodeJS.Platform): Runner {
       platform === "win32"
         ? [process.env.ComSpec ?? process.env.COMSPEC ?? "cmd.exe", "/d", "/s", "/c", command]
         : ["sh", "-c", command]
-    const child = Bun.spawn(argv, {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
+    const child = Child.piped(argv, {
       env: { ...process.env, [key]: value },
-      // Runs inside the background service, which has no console: unhidden, each run flashes a window.
-      windowsHide: true,
     })
-    const [exit, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ])
+    const [exit, stdout, stderr] = await Promise.all([child.exited, child.stdout, child.stderr])
     return { exit, stdout, stderr }
   }
 }

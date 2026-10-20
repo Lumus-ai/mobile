@@ -186,6 +186,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const defaultModel = () => {
+      // Only a fallback: saved session, configured and recent models still win.
+      if (import.meta.env.VITE_OPENCODE_EMBEDDED === "1") {
+        const free = { providerID: "kilo-free", modelID: "kilo-auto/free" }
+        if (validModel(free)) return free
+      }
       for (const provider of providers.connected()) {
         const first = Object.values(provider.models)[0]
 

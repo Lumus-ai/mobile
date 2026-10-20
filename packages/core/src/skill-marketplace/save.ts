@@ -41,7 +41,7 @@ export const save = (root: string, name: string, content: string): Effect.Effect
     // `exists` can throw on an unreadable parent; treat that as "not there yet" so the write
     // below produces the real error rather than a guess about the filesystem.
     const existed = yield* Effect.tryPromise({
-      try: async () => await Bun.file(target).exists(),
+      try: async () => await access(target).then(() => true, () => false),
       catch: () => false,
     }).pipe(Effect.result)
     if (existed._tag === "Success" && existed.success) return { path: target, existed: true }

@@ -585,12 +585,12 @@ public class NodeServerService extends Service {
         // Bump the marker when the shipped project changes, or stale assets
         // from a previous APK keep running forever (v13.5 shipped a new
         // bootstrap.js without a bump — devices kept running v13.4 code).
-        File marker = new File(dir, ".extracted-v10");
+        File marker = new File(dir, ".extracted-v9");
         if (marker.exists()) {
-            BootLog.log(getFilesDir(), "extraction: marker .extracted-v10 present, reusing project");
+            BootLog.log(getFilesDir(), "extraction: marker .extracted-v9 present, reusing project");
             return dir;
         }
-        BootLog.log(getFilesDir(), "extraction: no current marker (.extracted-v10) — re-extracting assets/nodejs-project");
+        BootLog.log(getFilesDir(), "extraction: no current marker (.extracted-v9) — re-extracting assets/nodejs-project");
         long t0 = System.currentTimeMillis();
         deleteRecursive(dir);
         AssetExtractor.extract(getAssets(), "nodejs-project", dir);

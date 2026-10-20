@@ -7,11 +7,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
-import ClassicShell from "@/shell/shell"
-import MuseShell from "@/muse/shell"
-
-// Phone shell (Muse-style layout). VITE_OPENCODE_MUSE=0 brings the classic shell back.
-const Shell = import.meta.env.VITE_OPENCODE_MUSE === "0" ? ClassicShell : MuseShell
+import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 import { ExtensionAttachment } from "@/runtime/extension/root"
 

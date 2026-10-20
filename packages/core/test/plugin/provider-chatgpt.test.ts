@@ -20,7 +20,15 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, canUseHostedImageGeneration, describeRequestFailure, fetchModels, isAvailableModel, parseRemoteCallback, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import {
+  ChatGPTPlugin,
+  canUseHostedImageGeneration,
+  describeRequestFailure,
+  fetchModels,
+  isAvailableModel,
+  parseRemoteCallback,
+  verifyIDToken,
+} from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -294,7 +302,7 @@ describe("ChatGPTPlugin", () => {
           },
         }),
       )
-      expect(regionError).toContain("country or region is not supported")
+      expect(regionError).toContain("unsupported_country_region_territory")
       expect(regionError).toContain("req_region_test")
 
       const challengeHTML = "<html><body>Just a moment. challenge-token=secret-value</body></html>"
@@ -309,7 +317,7 @@ describe("ChatGPTPlugin", () => {
         }),
         challengeHTML,
       )
-      expect(challengeError).toContain("Cloudflare blocked the token request")
+      expect(challengeError).toContain("HTML page instead of an OAuth response")
       expect(challengeError).toContain("ray_test")
       expect(challengeError).not.toContain("secret-value")
 
@@ -354,9 +362,9 @@ describe("ChatGPTPlugin", () => {
       expect(() =>
         parseRemoteCallback("https://example.com/auth/callback?code=auth-code&state=expected", redirect, "expected"),
       ).toThrow("does not match")
-      expect(() =>
-        parseRemoteCallback(`${redirect}?error=access_denied&state=expected`, redirect, "expected"),
-      ).toThrow("access_denied")
+      expect(() => parseRemoteCallback(`${redirect}?error=access_denied&state=expected`, redirect, "expected")).toThrow(
+        "access_denied",
+      )
       expect(() => parseRemoteCallback(`${redirect}?state=expected`, redirect, "expected")).toThrow(
         "does not contain an authorization code",
       )
@@ -368,7 +376,11 @@ describe("ChatGPTPlugin", () => {
       yield* addPlugin()
       yield* addLegacyPlugin()
       const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("openai")))?.methods.map((method) => method.type === "oauth" && method.id)).toEqual([
+      expect(
+        (yield* integrations.get(Integration.ID.make("openai")))?.methods.map(
+          (method) => method.type === "oauth" && method.id,
+        ),
+      ).toEqual([
         Integration.MethodID.make("chatgpt-token-sharing"),
         Integration.MethodID.make("chatgpt-token-sharing-web"),
         Integration.MethodID.make("chatgpt-browser"),
@@ -378,7 +390,7 @@ describe("ChatGPTPlugin", () => {
   )
 
   for (const source of ["http", "stream"] as const) {
-    it.effect(`stops retries for ChatGPT usage limits from ${source} failures`, () =>
+    it.effect(`keeps existing retries for ChatGPT usage limits from ${source} failures`, () =>
       Effect.gen(function* () {
         const credentials = yield* Credential.Service
         yield* credentials.create({
@@ -422,7 +434,7 @@ describe("ChatGPTPlugin", () => {
         }
         expect(input.error.response?.body).toBe(body)
         expect(input.retry).toBe(true)
-        expect(yield* decide(input)).toEqual({ retry: false })
+        expect(yield* decide(input)).toMatchObject({ retry: true })
 
         const other = new AIError({ reason: new RateLimitError({ message: "Rate limit exceeded", body: "{}" }) })
         expect(yield* decide({ ...input, cause: other, error: toSessionError(other) })).toMatchObject({ retry: true })
@@ -512,7 +524,7 @@ describe("ChatGPTPlugin", () => {
       expect(`${url.origin}${url.pathname}`).toBe("https://auth.openai.com/api/accounts/authorize")
       expect(Object.fromEntries(url.searchParams)).toMatchObject({
         client_id: "dynamic_agent_client",
-        agent_name_hint: "OpenCode",
+        agent_name_hint: "OpenCode++",
         response_type: "code",
         scope: "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct",
         resource: "https://api.openai.com/v1",
@@ -921,7 +933,12 @@ describe("ChatGPTPlugin", () => {
         "gpt-4.99",
       ])
         expect(yield* models.get(Provider.ID.openai, Model.ID.make(id))).toBeUndefined()
-      expect((yield* models.available()).filter((model) => model.providerID === Provider.ID.openai).map((model) => model.id).sort()).toEqual(
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual(
         [
           "gpt-5.5",
           "gpt-5.5-fast",

@@ -49,7 +49,6 @@ const fallbackModels = new Set([
   "gpt-6.1-sol-fast",
 ])
 const nonRetryableSharingCodes = [
-  "subscription_sharing_usage_limit_exceeded",
   "subscription_sharing_user_not_eligible",
   "subscription_sharing_unsupported_capability",
   "subscription_sharing_route_not_supported",
@@ -223,8 +222,7 @@ const signInWeb = (app: App.Info, savedClientID: () => string | undefined, stora
             Effect.gen(function* () {
               const result = yield* Effect.try({
                 try: () => parseRemoteCallback(callbackURL, webRedirect, state),
-                catch: (cause) =>
-                  cause instanceof Error ? cause : new Error("Invalid ChatGPT callback URL."),
+                catch: (cause) => (cause instanceof Error ? cause : new Error("Invalid ChatGPT callback URL.")),
               })
               if (savedID && result.clientID && result.clientID !== savedID)
                 return yield* Effect.fail(
@@ -267,8 +265,7 @@ export function parseRemoteCallback(input: string, redirect: string, state: stri
     throw new Error("The callback URL does not match this sign-in attempt.")
   const error = callback.searchParams.get("error_description") ?? callback.searchParams.get("error")
   if (error) throw new Error(error)
-  if (callback.searchParams.get("state") !== state)
-    throw new Error("Invalid OAuth state. Restart ChatGPT sign-in.")
+  if (callback.searchParams.get("state") !== state) throw new Error("Invalid OAuth state. Restart ChatGPT sign-in.")
   const code = callback.searchParams.get("code")
   if (!code) throw new Error("The callback URL does not contain an authorization code.")
   return { code, clientID: callback.searchParams.get("client_id") ?? undefined }
@@ -373,15 +370,13 @@ export const ChatGPTPlugin = define({
           ),
       })
     })
-    yield* ctx.session.hook(
-      "context",
-      (event) =>
-        Effect.sync(() => {
-          // ChatGPT token sharing does not allow hosted image generation. It must not be
-          // advertised on every text request or the entire request can be rejected.
-          if (canUseHostedImageGeneration(event.model.providerID, event.model.id, !!chatgpt)) return
-          delete event.tools.image_generation
-        }),
+    yield* ctx.session.hook("context", (event) =>
+      Effect.sync(() => {
+        // ChatGPT token sharing does not allow hosted image generation. It must not be
+        // advertised on every text request or the entire request can be rejected.
+        if (canUseHostedImageGeneration(event.model.providerID, event.model.id, !!chatgpt)) return
+        delete event.tools.image_generation
+      }),
     )
     yield* load()
     yield* ctx.session.hook(
@@ -616,8 +611,6 @@ export function verifyIDToken(
 export function describeRequestFailure(url: string, status: number, headers: Headers, body: string) {
   const target = new URL(url)
   const contentType = headers.get("content-type")?.split(";")[0]?.trim().toLowerCase()
-  const server = headers.get("server")?.toLowerCase() ?? ""
-  const mitigated = headers.get("cf-mitigated")?.toLowerCase()
   const requestID = headers.get("x-request-id") ?? headers.get("cf-ray")
   let code: string | undefined
   let message: string | undefined
@@ -651,15 +644,10 @@ export function describeRequestFailure(url: string, status: number, headers: Hea
     .trim()
     .slice(0, 240)
   const isHTML = contentType === "text/html" || /^<!doctype html|<html\b/i.test(body.trim())
-  const combined = `${code ?? ""} ${message ?? ""} ${plainText}`.toLowerCase()
   let reason: string
 
-  if (/unsupported_country_region_territory|country,? region,? or territory (is )?not supported|region is not supported/.test(combined)) {
-    reason = "OpenAI says this country or region is not supported. The OAuth client cannot override that restriction."
-  } else if (mitigated === "challenge" || (server.includes("cloudflare") && isHTML)) {
-    reason = "Cloudflare blocked the token request with a security challenge. Check the network or proxy used by OpenCode++."
-  } else if (isHTML) {
-    reason = "The server returned an HTML block page instead of an OAuth response. This can be caused by a network proxy or security challenge."
+  if (isHTML) {
+    reason = "The server returned an HTML page instead of an OAuth response."
   } else if (code || message) {
     reason = [code, message].filter(Boolean).join(": ").slice(0, 400)
   } else if (contentType?.startsWith("text/") && plainText) {
