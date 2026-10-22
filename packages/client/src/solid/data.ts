@@ -1330,6 +1330,49 @@ export function createData(config: CreateDataInput) {
     }
   })
 
+  const modelResource = locationResource("model", (location) => api().model.list({ location }), { alias: true })
+  const providerResource = locationResource("provider", (location) => api().provider.list({ location }), { alias: true })
+
+  // Embedded servers activate some provider plugins asynchronously after boot, so a
+  // cold /model answer can miss the keyless OpenCode catalog for the first minute.
+  // Refetch provider+model a few times until the opencode section shows up.
+  const providerWarmup = {
+    attempts: new Map<string, number>(),
+    timers: new Map<string, ReturnType<typeof setTimeout>>(),
+  }
+  const providerWarmupReady = (location?: LocationRef) =>
+    (modelResource.list(location) ?? []).some((model) => model.providerID === "opencode")
+  const scheduleProviderWarmup = (ref?: LocationRef) => {
+    const location = ref ?? defaultLocation()
+    const key = locationKey(location)
+    if (providerWarmupReady(location)) {
+      providerWarmup.attempts.delete(key)
+      const pending = providerWarmup.timers.get(key)
+      if (pending) clearTimeout(pending)
+      providerWarmup.timers.delete(key)
+      return
+    }
+    const attempt = providerWarmup.attempts.get(key) ?? 0
+    if (attempt >= 5) return
+    providerWarmup.attempts.set(key, attempt + 1)
+    const pending = providerWarmup.timers.get(key)
+    if (pending) clearTimeout(pending)
+    providerWarmup.timers.set(
+      key,
+      setTimeout(() => {
+        providerWarmup.timers.delete(key)
+        void Promise.all([modelResource.sync(location), providerSync(location)])
+          .catch(() => undefined)
+          .then(() => scheduleProviderWarmup(location))
+      }, 20000),
+    )
+  }
+  const providerSync = providerResource.sync
+  providerResource.sync = (ref?: LocationRef) =>
+    providerSync(ref).finally(() => {
+      if (!providerWarmupReady(ref ?? defaultLocation())) scheduleProviderWarmup(ref)
+    })
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
@@ -1919,8 +1962,8 @@ export function createData(config: CreateDataInput) {
           return { location: response.location, data: response.data.resources }
         }),
       },
-      model: locationResource("model", (location) => api().model.list({ location }), { alias: true }),
-      provider: locationResource("provider", (location) => api().provider.list({ location }), { alias: true }),
+      model: modelResource,
+      provider: providerResource,
       reference: locationResource("reference", (location) => api().reference.list({ location })),
       websearch: {
         list(location?: LocationRef) {
